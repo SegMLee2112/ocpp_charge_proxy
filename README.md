@@ -103,7 +103,7 @@ power entity setup, charger migration, and getting your OCPP credentials.
 
 [aarch64-shield]: https://img.shields.io/badge/aarch64-yes-green.svg
 [amd64-shield]: https://img.shields.io/badge/amd64-yes-green.svg
-[license-shield]: https://img.shields.io/github/license/abedegno/ocpp_charge_proxy.svg
+[license-shield]: https://img.shields.io/badge/license-MIT-blue.svg
 [hacs-shield]: https://img.shields.io/badge/HACS-Custom-41BDF5.svg
 [hacs-url]: https://github.com/hacs/integration
 [hacs-badge]: https://my.home-assistant.io/badges/hacs_repository.svg
