@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "OCPP Charge Proxy",
+        "description": "Connect to the OCPP Charge Proxy add-on API.",
+        "data": {
+          "api_url": "API URL",
+          "power_entity": "Power sensor (optional)"
+        }
+      },
+      "hassio_confirm": {
+        "title": "OCPP Charge Proxy Discovered",
+        "description": "The OCPP Charge Proxy add-on was discovered at {url}.",
+        "data": {
+          "power_entity": "Power sensor (optional)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to the add-on API. Check the URL and ensure the add-on is running.",
+      "unknown": "An unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "Already configured.",
+      "cannot_connect": "Cannot connect to the discovered add-on."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "OCPP Charge Proxy Options",
+        "data": {
+          "power_entity": "Power sensor (optional)"
+        }
+      }
+    }
+  }
+}

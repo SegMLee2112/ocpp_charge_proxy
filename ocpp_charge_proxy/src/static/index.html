@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OCPP Charge Proxy</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1c1c1c;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      text-align: center;
+      padding: 32px;
+    }
+    h1 {
+      font-size: 24px;
+      font-weight: 500;
+      color: #fff;
+      margin-bottom: 48px;
+    }
+    .status-row {
+      display: flex;
+      justify-content: center;
+      gap: 64px;
+    }
+    .status-item { text-align: center; }
+    .status-label {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #888;
+      margin-bottom: 12px;
+    }
+    .status-value {
+      font-size: 20px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .dot.connected {
+      background: #4caf50;
+      box-shadow: 0 0 8px rgba(76,175,80,0.5);
+    }
+    .dot.disconnected {
+      background: #ef5350;
+      box-shadow: 0 0 8px rgba(239,83,80,0.5);
+    }
+    .state-available { color: #42a5f5; }
+    .state-preparing { color: #ffa726; }
+    .state-charging { color: #4caf50; }
+    .state-suspended { color: #ffa726; }
+    .state-finishing { color: #ab47bc; }
+    .state-unavailable { color: #ef5350; }
+    .state-unknown { color: #888; }
+    .footer {
+      margin-top: 48px;
+      color: #555;
+      font-size: 12px;
+    }
+    .error {
+      color: #ef5350;
+      margin-top: 16px;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>OCPP Charge Proxy</h1>
+    <div class="status-row">
+      <div class="status-item">
+        <div class="status-label">Server Connection</div>
+        <div class="status-value">
+          <span class="dot" id="conn-dot"></span>
+          <span id="conn-text">—</span>
+        </div>
+      </div>
+      <div class="status-item">
+        <div class="status-label">Charger State</div>
+        <div class="status-value">
+          <span id="state-text">—</span>
+        </div>
+      </div>
+    </div>
+    <div class="footer">Auto-refreshes every 10 seconds</div>
+    <div class="error" id="error" style="display:none"></div>
+  </div>
+
+  <script>
+    const STATE_CLASSES = {
+      'Available': 'state-available',
+      'Preparing': 'state-preparing',
+      'Charging': 'state-charging',
+      'SuspendedEV': 'state-suspended',
+      'SuspendedEVSE': 'state-suspended',
+      'Finishing': 'state-finishing',
+      'Unavailable': 'state-unavailable',
+    };
+
+    async function refresh() {
+      try {
+        const resp = await fetch('./api/state');
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+
+        const connected = data.connected_to_server;
+        const dot = document.getElementById('conn-dot');
+        const connText = document.getElementById('conn-text');
+        dot.className = 'dot ' + (connected ? 'connected' : 'disconnected');
+        connText.textContent = connected ? 'Connected' : 'Disconnected';
+        connText.style.color = connected ? '#fff' : '#ef5350';
+
+        const state = data.state || 'Unknown';
+        const stateEl = document.getElementById('state-text');
+        stateEl.textContent = state;
+        stateEl.className = STATE_CLASSES[state] || 'state-unknown';
+
+        document.getElementById('error').style.display = 'none';
+      } catch (e) {
+        document.getElementById('error').textContent = 'Cannot reach add-on API';
+        document.getElementById('error').style.display = 'block';
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 10000);
+  </script>
+</body>
+</html>
