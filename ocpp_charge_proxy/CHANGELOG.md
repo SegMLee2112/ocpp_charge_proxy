@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.3
+
+- Release to trigger the first add-on image build on this repository
+  (GitHub Actions were disabled on the fork). No code changes.
+
 ## 0.5.2
 
 - Fix: repository owner typo (`thewhalw21` -> `thewhale21`) in the add-on image name,
