@@ -156,3 +156,111 @@ def test_heartbeat_loop_picks_up_new_interval(mock_connection, mock_persistence)
     loop.run_until_complete(scenario())
     loop.close()
     assert cp.call.await_count >= 2
+
+
+# --- Clock-aligned meter values ---
+
+import datetime as _dt
+from src.client import _next_aligned
+
+
+def _utc(h, m, sec=0):
+    return _dt.datetime(2026, 10, 1, h, m, sec, tzinfo=_dt.timezone.utc)
+
+
+def test_next_aligned_mid_slot():
+    delay, boundary = _next_aligned(_utc(15, 7, 30), 900)
+    assert delay == 450
+    assert boundary == _utc(15, 15)
+
+
+def test_next_aligned_exactly_on_boundary_is_full_interval():
+    delay, boundary = _next_aligned(_utc(15, 15), 900)
+    assert delay == 900
+    assert boundary == _utc(15, 30)
+
+
+def test_next_aligned_rolls_to_midnight():
+    delay, boundary = _next_aligned(_utc(23, 50), 900)
+    assert delay == 600
+    assert boundary == _dt.datetime(2026, 10, 2, tzinfo=_dt.timezone.utc)
+
+
+def test_next_aligned_uneven_interval_caps_at_midnight():
+    # 700s doesn't divide 86400; last slot of the day ends at midnight
+    delay, boundary = _next_aligned(_utc(23, 59, 50), 700)
+    assert delay == 10
+    assert boundary == _dt.datetime(2026, 10, 2, tzinfo=_dt.timezone.utc)
+
+
+def test_change_configuration_clock_aligned(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    assert _config_value(cp, "ClockAlignedDataInterval") == "0"
+    loop = asyncio.new_event_loop()
+    r1 = loop.run_until_complete(
+        cp.on_change_configuration(key="ClockAlignedDataInterval", value="900"))
+    r2 = loop.run_until_complete(cp.on_change_configuration(
+        key="MeterValuesAlignedData",
+        value="Energy.Active.Import.Register, Power.Active.Import"))
+    r3 = loop.run_until_complete(
+        cp.on_change_configuration(key="ClockAlignedDataInterval", value="-1"))
+    loop.close()
+    assert r1.status == "Accepted" and r2.status == "Accepted"
+    assert r3.status == "Rejected"
+    assert cp._clock_aligned_interval == 900
+    assert _config_value(cp, "ClockAlignedDataInterval") == "900"
+    assert cp._aligned_measurands == [
+        "Energy.Active.Import.Register", "Power.Active.Import",
+    ]
+
+
+def _sent_payload(cp):
+    return cp.call.await_args.args[0]
+
+
+def test_clock_aligned_idle_payload(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call = AsyncMock()
+    cp._aligned_measurands = ["Energy.Active.Import.Register", "Power.Active.Import"]
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(cp.send_clock_aligned_meter_values(_utc(15, 15)))
+    loop.close()
+    payload = _sent_payload(cp)
+    assert payload.transaction_id is None
+    mv = payload.meter_value[0]
+    assert mv["timestamp"] == "2026-10-01T15:15:00Z"
+    assert {sv["measurand"]: sv["value"] for sv in mv["sampledValue"]} == {
+        "Energy.Active.Import.Register": "5000.0",
+        "Power.Active.Import": "0.0",
+    }
+    assert all(sv["context"] == "Sample.Clock" for sv in mv["sampledValue"])
+
+
+def test_clock_aligned_charging_includes_transaction(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call = AsyncMock()
+    cp._aligned_measurands = ["Energy.Active.Import.Register", "Power.Active.Import"]
+    cp._transaction_id = 1790866844
+    cp.state = ChargePointStatus.charging
+    cp._charger_sim.start_charging()
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(cp.send_clock_aligned_meter_values(_utc(15, 15)))
+    loop.close()
+    payload = _sent_payload(cp)
+    assert payload.transaction_id == 1790866844
+    values = {sv["measurand"]: float(sv["value"]) for sv in payload.meter_value[0]["sampledValue"]}
+    assert values["Power.Active.Import"] > 0
+
+
+def test_aligned_and_periodic_share_energy_register(mock_connection, mock_persistence):
+    """Two readings over the same span add the same energy as one."""
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.state = ChargePointStatus.charging
+    cp._charger_sim.start_charging()
+    cp._power_override = 7.0  # fixed power for a deterministic result
+    cp._last_meter_time -= 3600  # one hour ago
+    cp._take_reading()
+    after_one = cp._energy_register_wh
+    cp._take_reading()  # immediately again: ~no extra time elapsed
+    assert after_one - 5000 > 0
+    assert cp._energy_register_wh - after_one <= 1

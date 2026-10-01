@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0
+
+- New: clock-aligned meter values. When the server sets `ClockAlignedDataInterval`
+  (Octopus uses 900s), a `MeterValues` with context `Sample.Clock` is sent on each
+  boundary from UTC midnight (:00, :15, :30, :45), containing the measurands listed
+  in `MeterValuesAlignedData`. Includes the transactionId during a transaction.
+- `ClockAlignedDataInterval` is now reported by GetConfiguration; `0` disables.
+  Invalid values are rejected.
+- Refactor: energy accumulation is shared between periodic and clock-aligned
+  readings so energy is never double-counted. Periodic meter values are unchanged.
+
 ## 0.4.0
 
 - Fix: `HeartbeatInterval` now reflects the interval actually in use. The value from

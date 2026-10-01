@@ -31,7 +31,11 @@ from ocpp.v16.enums import (
 
 from src.charger_sim import ChargerReading, ChargerSimulator
 from src.charging_profile import ChargingProfileScheduler
-from src.meter_values import build_charging_meter_values, build_idle_meter_values
+from src.meter_values import (
+    build_charging_meter_values,
+    build_idle_meter_values,
+    build_meter_values,
+)
 from src.persistence import Persistence
 from src.shared_state import SharedState
 
@@ -40,6 +44,23 @@ logger = logging.getLogger(__name__)
 
 def _now_iso() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _next_aligned(
+    now: datetime.datetime, interval: int,
+) -> tuple[float, datetime.datetime]:
+    """Seconds until the next clock-aligned boundary, and that boundary.
+
+    Boundaries are multiples of `interval` seconds from UTC midnight. A day
+    that doesn't divide evenly gets a short last slot ending at midnight.
+    Exactly on a boundary returns the *next* one (never 0).
+    """
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elapsed = (now - midnight).total_seconds()
+    next_offset = (int(elapsed // interval) + 1) * interval
+    next_offset = min(next_offset, 86400)
+    boundary = midnight + datetime.timedelta(seconds=next_offset)
+    return next_offset - elapsed, boundary
 
 
 class ChargePoint(BaseChargePoint):
@@ -64,6 +85,10 @@ class ChargePoint(BaseChargePoint):
         self._meter_value_interval: int = 60  # default, updated by ChangeConfiguration
         self._heartbeat_interval: int = 30  # default, set by BootNotification / ChangeConfiguration
         self._heartbeat_interval_changed = asyncio.Event()
+        self._clock_aligned_interval: int = 0  # 0 = disabled; set by ChangeConfiguration
+        self._aligned_measurands: list[str] = []
+        self._clock_aligned_changed = asyncio.Event()
+        self._last_aligned_boundary: Optional[datetime.datetime] = None
         self._server_config: dict[str, str] = {}  # stores config sent by server
         self._local_list_version: int = 0
         self._local_auth_list: dict[str, dict] = {}
@@ -88,6 +113,7 @@ class ChargePoint(BaseChargePoint):
             "UnlockConnectorOnEVSideDisconnect": ("true", True),
             "WebSocketPingInterval": ("30", True),
             "MeterValuesAlignedData": ("", False),
+            "ClockAlignedDataInterval": ("0", False),
             "MeterValuesSampledData": (
                 "Energy.Active.Import.Register,Power.Active.Import", False
             ),
@@ -212,12 +238,8 @@ class ChargePoint(BaseChargePoint):
             self.connector_id, ChargePointStatus.unavailable,
         )
 
-    async def send_meter_values(self) -> None:
-        now = time.monotonic()
-        elapsed_hours = (now - self._last_meter_time) / 3600.0
-        self._last_meter_time = now
-
-        # Check charging profile to see if we should be charging or paused
+    async def _apply_profile_state(self) -> None:
+        """Pause/resume charging according to the active charging profile."""
         if self._transaction_id is not None and self._profile_scheduler.has_profile:
             limit_kw = self._profile_scheduler.get_current_limit_kw()
             if limit_kw is not None:
@@ -235,34 +257,65 @@ class ChargePoint(BaseChargePoint):
                     self._shared_state.state = self.state
                     await self.send_status()
 
-        if self.state == ChargePointStatus.charging:
-            sim_reading = self._charger_sim.sample()
+    def _take_reading(self) -> Optional[ChargerReading]:
+        """Sample the charger and add energy delivered since the last reading.
 
-            # Use power override from integration if available
-            real_power = self._power_override
-            if real_power is not None:
-                # Clamp negatives to 0 (e.g. solar export), cap at charger max
-                capped_power = max(0.0, min(real_power, sim_reading.power_kw))
-                current_a = round((capped_power * 1000) / sim_reading.voltage, 2) if capped_power > 0 else 0.0
-                reading = ChargerReading(
-                    power_kw=capped_power,
-                    voltage=sim_reading.voltage,
-                    current_a=current_a,
-                    frequency_hz=sim_reading.frequency_hz,
-                    power_offered_kw=sim_reading.power_offered_kw,
-                    current_offered_a=sim_reading.current_offered_a,
-                )
-                self._shared_state.power_source = "entity"
-                self._shared_state.power_entity_value = real_power
-            else:
-                reading = sim_reading
-                self._shared_state.power_source = "simulated"
-                self._shared_state.power_entity_value = None
+        Shared by periodic and clock-aligned meter values, so energy is only
+        ever counted once: each call integrates just the time since the
+        previous call. Returns None when not delivering power.
+        """
+        now = time.monotonic()
+        elapsed_hours = (now - self._last_meter_time) / 3600.0
+        self._last_meter_time = now
 
-            energy_added_kwh = reading.power_kw * elapsed_hours
-            self._energy_register_wh += round(energy_added_kwh * 1000)
-            self._persistence.save_energy_register_wh(self._energy_register_wh)
+        if self.state != ChargePointStatus.charging:
+            self._shared_state.energy_kwh = self.energy_register_kwh
+            # Bug 7 fix: zero out power values when idle
+            self._zero_power_state()
+            return None
 
+        sim_reading = self._charger_sim.sample()
+
+        # Use power override from integration if available
+        real_power = self._power_override
+        if real_power is not None:
+            # Clamp negatives to 0 (e.g. solar export), cap at charger max
+            capped_power = max(0.0, min(real_power, sim_reading.power_kw))
+            current_a = round((capped_power * 1000) / sim_reading.voltage, 2) if capped_power > 0 else 0.0
+            reading = ChargerReading(
+                power_kw=capped_power,
+                voltage=sim_reading.voltage,
+                current_a=current_a,
+                frequency_hz=sim_reading.frequency_hz,
+                power_offered_kw=sim_reading.power_offered_kw,
+                current_offered_a=sim_reading.current_offered_a,
+            )
+            self._shared_state.power_source = "entity"
+            self._shared_state.power_entity_value = real_power
+        else:
+            reading = sim_reading
+            self._shared_state.power_source = "simulated"
+            self._shared_state.power_entity_value = None
+
+        energy_added_kwh = reading.power_kw * elapsed_hours
+        self._energy_register_wh += round(energy_added_kwh * 1000)
+        self._persistence.save_energy_register_wh(self._energy_register_wh)
+
+        # Update shared state with charging values
+        self._shared_state.power_kw = reading.power_kw
+        self._shared_state.voltage = reading.voltage
+        self._shared_state.current_a = reading.current_a
+        self._shared_state.frequency_hz = reading.frequency_hz
+        self._shared_state.power_offered_kw = reading.power_offered_kw
+        self._shared_state.energy_kwh = self.energy_register_kwh
+        return reading
+
+    async def send_meter_values(self) -> None:
+        """Periodic (Sample.Periodic) meter values — unchanged payload."""
+        await self._apply_profile_state()
+        reading = self._take_reading()
+
+        if reading is not None:
             meter_value = build_charging_meter_values(
                 reading=reading,
                 energy_register_wh=self._energy_register_wh,
@@ -272,14 +325,6 @@ class ChargePoint(BaseChargePoint):
                 transaction_id=self._transaction_id,
                 meter_value=meter_value,
             )
-
-            # Update shared state with charging values
-            self._shared_state.power_kw = reading.power_kw
-            self._shared_state.voltage = reading.voltage
-            self._shared_state.current_a = reading.current_a
-            self._shared_state.frequency_hz = reading.frequency_hz
-            self._shared_state.power_offered_kw = reading.power_offered_kw
-            self._shared_state.energy_kwh = self.energy_register_kwh
         else:
             meter_value = build_idle_meter_values(
                 energy_register_wh=self._energy_register_wh,
@@ -288,11 +333,73 @@ class ChargePoint(BaseChargePoint):
                 connector_id=self.connector_id,
                 meter_value=meter_value,
             )
-            self._shared_state.energy_kwh = self.energy_register_kwh
-            # Bug 7 fix: zero out power values when idle
-            self._zero_power_state()
 
         await self.call(request)
+
+    async def send_clock_aligned_meter_values(
+        self, boundary: Optional[datetime.datetime] = None,
+    ) -> None:
+        """Clock-aligned (Sample.Clock) meter values, per MeterValuesAlignedData."""
+        reading = self._take_reading()
+        timestamp = (
+            boundary.strftime("%Y-%m-%dT%H:%M:%SZ") if boundary is not None else None
+        )
+        meter_value = build_meter_values(
+            reading=reading,
+            energy_register_wh=self._energy_register_wh,
+            context="Sample.Clock",
+            measurands=self._aligned_measurands,
+            timestamp=timestamp,
+        )
+        kwargs = {}
+        if self._transaction_id is not None:
+            kwargs["transaction_id"] = self._transaction_id
+        await self.call(call.MeterValuesPayload(
+            connector_id=self.connector_id,
+            meter_value=meter_value,
+            **kwargs,
+        ))
+
+    def _set_clock_aligned_interval(self, seconds: int) -> None:
+        self._clock_aligned_interval = seconds
+        self._config_store["ClockAlignedDataInterval"] = (str(seconds), False)
+        self._clock_aligned_changed.set()
+        if seconds > 0:
+            logger.info("Clock-aligned meter values every %ds", seconds)
+        else:
+            logger.info("Clock-aligned meter values disabled")
+
+    async def clock_aligned_loop(self) -> None:
+        """Send Sample.Clock meter values on ClockAlignedDataInterval boundaries."""
+        while True:
+            interval = self._clock_aligned_interval
+            if interval <= 0:
+                await self._clock_aligned_changed.wait()
+                self._clock_aligned_changed.clear()
+                continue
+
+            now = datetime.datetime.now(datetime.timezone.utc)
+            delay, boundary = _next_aligned(now, interval)
+            # Guard against waking a hair early and resending the same boundary
+            if self._last_aligned_boundary is not None and boundary <= self._last_aligned_boundary:
+                _, boundary = _next_aligned(self._last_aligned_boundary, interval)
+                delay = (boundary - now).total_seconds()
+
+            try:
+                await asyncio.wait_for(self._clock_aligned_changed.wait(), delay)
+                self._clock_aligned_changed.clear()
+                continue  # interval changed — recompute
+            except asyncio.TimeoutError:
+                pass
+
+            self._last_aligned_boundary = boundary
+            try:
+                await self.send_clock_aligned_meter_values(boundary)
+            except websockets.exceptions.ConnectionClosed:
+                logger.info("Clock-aligned loop stopping: connection closed")
+                raise
+            except Exception:
+                logger.warning("Clock-aligned meter values failed", exc_info=True)
 
     async def _do_start_transaction(self) -> None:
         """Start a charging transaction."""
@@ -441,6 +548,17 @@ class ChargePoint(BaseChargePoint):
         """Handle configuration changes from the server."""
         logger.info("Server set config: %s = %s", key, value)
 
+        if key == "ClockAlignedDataInterval":
+            try:
+                aligned_s = int(value)
+                if aligned_s < 0:
+                    raise ValueError
+            except ValueError:
+                logger.warning("Invalid ClockAlignedDataInterval: %s, rejecting", value)
+                return call_result.ChangeConfigurationPayload(
+                    status=ConfigurationStatus.rejected
+                )
+
         if key == "HeartbeatInterval":
             try:
                 heartbeat_s = int(value)
@@ -466,6 +584,11 @@ class ChargePoint(BaseChargePoint):
 
         if key == "HeartbeatInterval":
             self._set_heartbeat_interval(heartbeat_s)
+        elif key == "ClockAlignedDataInterval":
+            self._set_clock_aligned_interval(aligned_s)
+        elif key == "MeterValuesAlignedData":
+            self._aligned_measurands = [m.strip() for m in value.split(",") if m.strip()]
+            logger.info("Clock-aligned measurands: %s", self._aligned_measurands or "(default)")
         elif key == "MeterValueSampleInterval":
             try:
                 interval = int(value)

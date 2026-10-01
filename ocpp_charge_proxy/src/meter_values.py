@@ -23,6 +23,56 @@ def _sv(value: str, measurand: str, context: str, unit: str | None = None) -> di
     return entry
 
 
+# Measurand used when MeterValuesAlignedData is empty (OCPP 1.6 default measurand)
+DEFAULT_MEASURAND = "Energy.Active.Import.Register"
+
+
+def _available_values(
+    reading: ChargerReading | None, energy_register_wh: int,
+) -> dict[str, tuple[str, str | None]]:
+    """Every measurand we can report right now -> (value, unit).
+
+    reading=None means idle (not delivering power).
+    """
+    values: dict[str, tuple[str, str | None]] = {
+        "Energy.Active.Import.Register": (str(float(energy_register_wh)), "Wh"),
+        "Energy.Active.Export.Register": ("0", "Wh"),
+        "Power.Active.Export": ("0", "W"),
+    }
+    if reading is None:
+        values["Power.Active.Import"] = ("0.0", "W")
+    else:
+        values["Power.Active.Import"] = (str(round(reading.power_kw * 1000, 1)), "W")
+        values["Frequency"] = (str(reading.frequency_hz), None)
+        values["Power.Offered"] = (str(round(reading.power_offered_kw * 1000)), "W")
+        values["Current.Offered"] = (str(reading.current_offered_a), "A")
+    return values
+
+
+def build_meter_values(
+    reading: ChargerReading | None,
+    energy_register_wh: int,
+    context: str,
+    measurands: list[str] | None = None,
+    timestamp: str | None = None,
+) -> list[dict]:
+    """Meter values containing only the requested measurands, in request order.
+
+    Measurands we can't supply (e.g. SoC, or Frequency while idle) are skipped.
+    An empty/None list falls back to Energy.Active.Import.Register.
+    """
+    available = _available_values(reading, energy_register_wh)
+    wanted = measurands or [DEFAULT_MEASURAND]
+    sampled = []
+    seen = set()
+    for m in wanted:
+        if m in available and m not in seen:
+            value, unit = available[m]
+            sampled.append(_sv(value, m, context, unit))
+            seen.add(m)
+    return [{"timestamp": timestamp or _now_iso(), "sampledValue": sampled}]
+
+
 def build_idle_meter_values(energy_register_wh: int) -> list[dict]:
     """Periodic meter values when idle (not charging)."""
     ctx = "Sample.Periodic"

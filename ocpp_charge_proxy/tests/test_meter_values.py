@@ -138,3 +138,49 @@ def test_charger_sim_idle():
     assert reading.power_kw == 0.0
     assert reading.current_a == 0.0
     assert reading.power_offered_kw == 0.0
+
+
+# --- Clock-aligned / filtered meter values ---
+
+from src.meter_values import build_meter_values
+
+
+def test_build_meter_values_filters_and_orders():
+    mv = build_meter_values(
+        reading=_make_reading(), energy_register_wh=10500, context="Sample.Clock",
+        measurands=["Power.Active.Import", "Energy.Active.Import.Register"],
+    )
+    svs = mv[0]["sampledValue"]
+    assert [sv["measurand"] for sv in svs] == [
+        "Power.Active.Import", "Energy.Active.Import.Register",
+    ]
+    assert all(sv["context"] == "Sample.Clock" for sv in svs)
+
+
+def test_build_meter_values_skips_unavailable():
+    """SoC has no source; Frequency isn't available while idle."""
+    mv = build_meter_values(
+        reading=None, energy_register_wh=10500, context="Sample.Clock",
+        measurands=["Energy.Active.Import.Register", "SoC", "Frequency"],
+    )
+    assert [sv["measurand"] for sv in mv[0]["sampledValue"]] == [
+        "Energy.Active.Import.Register",
+    ]
+
+
+def test_build_meter_values_default_measurand():
+    mv = build_meter_values(
+        reading=None, energy_register_wh=10500, context="Sample.Clock", measurands=[],
+    )
+    svs = mv[0]["sampledValue"]
+    assert len(svs) == 1
+    assert svs[0]["measurand"] == "Energy.Active.Import.Register"
+    assert svs[0]["value"] == "10500.0"
+
+
+def test_build_meter_values_uses_given_timestamp():
+    mv = build_meter_values(
+        reading=None, energy_register_wh=1, context="Sample.Clock",
+        timestamp="2026-10-01T15:15:00Z",
+    )
+    assert mv[0]["timestamp"] == "2026-10-01T15:15:00Z"

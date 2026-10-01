@@ -197,6 +197,7 @@ async def run() -> None:
                     start_task,
                     asyncio.create_task(cp.heartbeat_loop(interval)),
                     asyncio.create_task(cp.meter_values_loop()),
+                    asyncio.create_task(cp.clock_aligned_loop()),
                 ]
 
                 # Run interactive console when stdin is a terminal
