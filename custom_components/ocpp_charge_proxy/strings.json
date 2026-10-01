@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "OCPP Charge Proxy",
-        "description": "Connect to the OCPP Charge Proxy add-on API.",
+        "description": "Connect to the OCPP Charge Proxy add-on API. The URL is detected automatically when the add-on is running; otherwise use the Hostname shown on the add-on's Info page, e.g. http://<hostname>:8099.",
         "data": {
           "api_url": "API URL",
           "power_entity": "Power sensor (optional)"
@@ -18,7 +18,7 @@
       }
     },
     "error": {
-      "cannot_connect": "Cannot connect to the add-on API. Check the URL and ensure the add-on is running.",
+      "cannot_connect": "Cannot connect to the add-on API. Ensure the add-on is running and the URL uses the Hostname from the add-on's Info page (e.g. http://e504bcf9-ocpp-charge-proxy:8099).",
       "unknown": "An unexpected error occurred."
     },
     "abort": {

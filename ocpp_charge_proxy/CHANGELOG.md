@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.4
+
+- Fix: integration setup now finds the add-on automatically. Add-ons installed from
+  a repository get a hostname with a repository prefix (e.g.
+  `e504bcf9-ocpp-charge-proxy`), so the previous guesses (`ocpp-charge-proxy`,
+  `localhost`) failed with "Cannot connect". The installed add-on's slug is now
+  looked up from the Supervisor and the URL pre-filled.
+- Clearer setup text and error message pointing at the Hostname on the add-on's
+  Info page.
+
 ## 0.5.3
 
 - Release to trigger the first add-on image build on this repository
