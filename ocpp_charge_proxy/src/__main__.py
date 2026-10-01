@@ -131,15 +131,38 @@ async def run() -> None:
 
                 tasks = [
                     start_task,
-                    cp.heartbeat_loop(interval),
-                    cp.meter_values_loop(),
+                    asyncio.create_task(cp.heartbeat_loop(interval)),
+                    asyncio.create_task(cp.meter_values_loop()),
                 ]
 
                 # Run interactive console when stdin is a terminal
                 if sys.stdin.isatty():
-                    tasks.append(console_loop(cp, do_plug, do_unplug, do_set_current))
+                    tasks.append(asyncio.create_task(
+                        console_loop(cp, do_plug, do_unplug, do_set_current)
+                    ))
 
-                await asyncio.gather(*tasks)
+                # Wait until ANY task ends (normally the message loop when the
+                # socket closes), then cancel the rest. asyncio.gather() does
+                # not cancel siblings on failure, which left the old
+                # connection's heartbeat/meter loops running forever after a
+                # reconnect ("Heartbeat cycle failed ... ConnectionClosedOK").
+                try:
+                    done, _ = await asyncio.wait(
+                        tasks, return_when=asyncio.FIRST_COMPLETED,
+                    )
+                finally:
+                    for t in tasks:
+                        t.cancel()
+                    await asyncio.gather(*tasks, return_exceptions=True)
+
+                for t in done:
+                    exc = t.exception()
+                    if exc is not None:
+                        raise exc
+
+                # Message loop returned cleanly — server closed with 1000 (OK).
+                # Treat as a lost connection and reconnect.
+                raise websockets.exceptions.ConnectionClosedOK(None, None)
 
         except (
             websockets.exceptions.ConnectionClosed,

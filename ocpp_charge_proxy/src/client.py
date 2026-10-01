@@ -6,6 +6,7 @@ import logging
 import time
 from typing import Optional
 
+import websockets
 from ocpp.routing import on
 from ocpp.v16 import ChargePoint as BaseChargePoint
 from ocpp.v16 import call, call_result
@@ -146,6 +147,11 @@ class ChargePoint(BaseChargePoint):
             await asyncio.sleep(interval)
             try:
                 await self.call(call.HeartbeatPayload())
+            except websockets.exceptions.ConnectionClosed:
+                # Socket is gone — exit so the supervisor reconnects instead of
+                # leaving a zombie loop spamming a dead connection.
+                logger.info("Heartbeat loop stopping: connection closed")
+                raise
             except Exception:
                 logger.warning("Heartbeat cycle failed", exc_info=True)
 
@@ -154,6 +160,9 @@ class ChargePoint(BaseChargePoint):
             await asyncio.sleep(self._meter_value_interval)
             try:
                 await self.send_meter_values()
+            except websockets.exceptions.ConnectionClosed:
+                logger.info("Meter values loop stopping: connection closed")
+                raise
             except Exception:
                 logger.warning("Meter values cycle failed", exc_info=True)
 
@@ -360,12 +369,16 @@ class ChargePoint(BaseChargePoint):
                 status=RemoteStartStopStatus.rejected
             )
         if transaction_id != self._transaction_id:
+            # Workaround: some CSMS backends (seen with Octopus) send a
+            # RemoteStop with a transactionId that doesn't match the one they
+            # issued in the StartTransaction response (e.g. 1 vs 1790607644).
+            # We only have one connector and one active transaction, so the
+            # server can only mean that one — accept and stop it, otherwise
+            # the car never stops charging.
             logger.warning(
-                "RemoteStop rejected: transaction_id %s != current %s",
+                "RemoteStop transaction_id mismatch (%s != current %s) — "
+                "accepting anyway, single active transaction",
                 transaction_id, self._transaction_id,
-            )
-            return call_result.RemoteStopTransactionPayload(
-                status=RemoteStartStopStatus.rejected
             )
         asyncio.create_task(self._do_stop_transaction())
         return call_result.RemoteStopTransactionPayload(

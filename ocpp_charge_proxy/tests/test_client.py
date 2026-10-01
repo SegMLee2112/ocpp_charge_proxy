@@ -73,3 +73,26 @@ def test_remote_start_when_already_charging(mock_connection, mock_persistence):
     )
     loop.close()
     assert result.status == RemoteStartStopStatus.rejected
+
+
+def test_remote_stop_mismatched_transaction_id_accepted(mock_connection, mock_persistence):
+    """Octopus workaround: RemoteStop with a different tx id still stops the only active tx."""
+    cp = make_cp(mock_connection, mock_persistence)
+    cp._transaction_id = 1790607644
+    cp.state = ChargePointStatus.charging
+    loop = asyncio.new_event_loop()
+    result = loop.run_until_complete(
+        cp.on_remote_stop_transaction(transaction_id=1)
+    )
+    loop.close()
+    assert result.status == RemoteStartStopStatus.accepted
+
+
+def test_remote_stop_no_transaction_rejected(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    loop = asyncio.new_event_loop()
+    result = loop.run_until_complete(
+        cp.on_remote_stop_transaction(transaction_id=1)
+    )
+    loop.close()
+    assert result.status == RemoteStartStopStatus.rejected

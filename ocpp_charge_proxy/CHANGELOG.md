@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0
+
+- Fix: stale heartbeat/meter-value loops kept running after a reconnect, spamming
+  `ConnectionClosedOK` warnings. All per-connection tasks are now cancelled when the
+  connection drops, and a clean server close (1000) triggers a reconnect.
+- Workaround: accept RemoteStopTransaction when the server's transactionId doesn't
+  match the active transaction (seen with Octopus sending `1` instead of the issued id).
+
 ## 0.1.0
 
 - Initial release

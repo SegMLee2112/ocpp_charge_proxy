@@ -1,8 +1,8 @@
 name: "OCPP Charge Proxy"
-description: "Virtual OCPP 1.6 chargepoint for smart tariff providers"
-version: "0.1.0"
+description: "Virtual OCPP 1.7 chargepoint for smart tariff providers"
+version: "0.2.0"
 slug: "ocpp_charge_proxy"
-url: "https://github.com/abedegno/ocpp_charge_proxy"
+url: "https://github.com/thewhalw21/ocpp_charge_proxy"
 arch:
   - aarch64
   - amd64
@@ -18,7 +18,7 @@ ports_description:
   "8099/tcp": "Companion integration API"
 discovery:
   - ocpp_charge_proxy
-image: "ghcr.io/abedegno/{arch}-addon-ocpp-charge-proxy"
+image: "ghcr.io/thewhalw21/{arch}-addon-ocpp-charge-proxy"
 options:
   server_hostname: ""
   chargepoint_id: ""
