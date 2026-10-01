@@ -110,4 +110,4 @@ power entity setup, charger migration, and getting your OCPP credentials.
 [hacs-add-url]: https://my.home-assistant.io/redirect/hacs_repository/?owner=abedegno&repository=ocpp_charge_proxy&category=integration
 [docs]: ocpp_charge_proxy/DOCS.md
 [repository-badge]: https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg
-[repository-url]: https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fabedegno%2Focpp_charge_proxy
+[repository-url]: https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fthewhalw21%2Focpp_charge_proxy

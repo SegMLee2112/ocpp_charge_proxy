@@ -9,4 +9,4 @@ provider schedules charging.
 
 See the [full documentation][docs] for setup instructions.
 
-[docs]: https://github.com/abedegno/ocpp_charge_proxy
+[docs]: https://github.com/thewhalw21/ocpp_charge_proxy
