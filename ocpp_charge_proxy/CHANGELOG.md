@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2
+
+- Fix: repository owner typo (`thewhalw21` -> `thewhale21`) in the add-on image name,
+  repository URLs, integration manifest and README links. With the wrong owner the
+  add-on image could not be pulled, so the add-on could not update.
+
 ## 0.5.0
 
 - New: clock-aligned meter values. When the server sets `ClockAlignedDataInterval`
