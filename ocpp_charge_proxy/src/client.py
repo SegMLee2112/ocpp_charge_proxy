@@ -62,6 +62,8 @@ class ChargePoint(BaseChargePoint):
         self._transaction_start_energy_wh: int = 0
         self._last_meter_time: float = time.monotonic()
         self._meter_value_interval: int = 60  # default, updated by ChangeConfiguration
+        self._heartbeat_interval: int = 30  # default, set by BootNotification / ChangeConfiguration
+        self._heartbeat_interval_changed = asyncio.Event()
         self._server_config: dict[str, str] = {}  # stores config sent by server
         self._local_list_version: int = 0
         self._local_auth_list: dict[str, dict] = {}
@@ -109,6 +111,14 @@ class ChargePoint(BaseChargePoint):
         self._shared_state.power_source = "simulated"
         self._shared_state.power_entity_value = None
 
+    def _set_heartbeat_interval(self, seconds: int) -> None:
+        """Apply a new heartbeat interval and keep the reported config in sync."""
+        self._heartbeat_interval = seconds
+        _, readonly = self._config_store["HeartbeatInterval"]
+        self._config_store["HeartbeatInterval"] = (str(seconds), readonly)
+        self._heartbeat_interval_changed.set()  # wake the loop to use it now
+        logger.info("Heartbeat interval set to %ds", seconds)
+
     async def send_boot_notification(
         self, model: str, vendor: str,
         serial_number: str = "", firmware_version: str = "",
@@ -132,8 +142,11 @@ class ChargePoint(BaseChargePoint):
                 self._shared_state.connected_to_server = True
                 await self._send_status_for_connector(0)
                 await self.send_status()
-                interval = response.interval
-                return interval if interval and interval > 0 else 30
+                interval = response.interval if response.interval and response.interval > 0 else 30
+                # OCPP 1.6: the interval in an accepted BootNotification is the
+                # heartbeat interval the CP must use (and report).
+                self._set_heartbeat_interval(interval)
+                return interval
             elif response.status == RegistrationStatus.pending:
                 wait = response.interval if response.interval and response.interval > 0 else 30
                 logger.info("BootNotification pending, retrying in %ds", wait)
@@ -142,9 +155,21 @@ class ChargePoint(BaseChargePoint):
                 logger.error("BootNotification rejected")
                 raise SystemExit("BootNotification rejected by server")
 
-    async def heartbeat_loop(self, interval: int) -> None:
+    async def heartbeat_loop(self, interval: int | None = None) -> None:
+        if interval is not None and interval > 0 and interval != self._heartbeat_interval:
+            self._set_heartbeat_interval(interval)
+        self._heartbeat_interval_changed.clear()
         while True:
-            await asyncio.sleep(interval)
+            # Sleep for the current interval; restart the wait early if the
+            # server changes HeartbeatInterval so the new value applies now.
+            try:
+                await asyncio.wait_for(
+                    self._heartbeat_interval_changed.wait(), self._heartbeat_interval,
+                )
+                self._heartbeat_interval_changed.clear()
+                continue
+            except asyncio.TimeoutError:
+                pass
             try:
                 await self.call(call.HeartbeatPayload())
             except websockets.exceptions.ConnectionClosed:
@@ -416,6 +441,17 @@ class ChargePoint(BaseChargePoint):
         """Handle configuration changes from the server."""
         logger.info("Server set config: %s = %s", key, value)
 
+        if key == "HeartbeatInterval":
+            try:
+                heartbeat_s = int(value)
+                if heartbeat_s < 1:
+                    raise ValueError
+            except ValueError:
+                logger.warning("Invalid HeartbeatInterval: %s, rejecting", value)
+                return call_result.ChangeConfigurationPayload(
+                    status=ConfigurationStatus.rejected
+                )
+
         if key in self._config_store:
             _, readonly = self._config_store[key]
             if readonly:
@@ -428,7 +464,9 @@ class ChargePoint(BaseChargePoint):
         self._server_config[key] = value
         self._shared_state.server_config = dict(self._server_config)
 
-        if key == "MeterValueSampleInterval":
+        if key == "HeartbeatInterval":
+            self._set_heartbeat_interval(heartbeat_s)
+        elif key == "MeterValueSampleInterval":
             try:
                 interval = int(value)
                 if interval < 1:

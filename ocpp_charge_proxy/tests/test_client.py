@@ -96,3 +96,63 @@ def test_remote_stop_no_transaction_rejected(mock_connection, mock_persistence):
     )
     loop.close()
     assert result.status == RemoteStartStopStatus.rejected
+
+
+def _config_value(cp, key):
+    loop = asyncio.new_event_loop()
+    result = loop.run_until_complete(cp.on_get_configuration(key=[key]))
+    loop.close()
+    return result.configuration_key[0]["value"]
+
+
+def test_heartbeat_interval_reported_after_set(mock_connection, mock_persistence):
+    """Interval from BootNotification is what GetConfiguration reports."""
+    cp = make_cp(mock_connection, mock_persistence)
+    assert _config_value(cp, "HeartbeatInterval") == "30"
+    cp._set_heartbeat_interval(10)
+    assert cp._heartbeat_interval == 10
+    assert _config_value(cp, "HeartbeatInterval") == "10"
+
+
+def test_change_configuration_heartbeat_interval(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    loop = asyncio.new_event_loop()
+    result = loop.run_until_complete(
+        cp.on_change_configuration(key="HeartbeatInterval", value="120")
+    )
+    loop.close()
+    assert result.status == "Accepted"
+    assert cp._heartbeat_interval == 120
+    assert _config_value(cp, "HeartbeatInterval") == "120"
+
+
+def test_change_configuration_heartbeat_interval_invalid(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    loop = asyncio.new_event_loop()
+    for bad in ("0", "-5", "abc"):
+        result = loop.run_until_complete(
+            cp.on_change_configuration(key="HeartbeatInterval", value=bad)
+        )
+        assert result.status == "Rejected"
+    loop.close()
+    assert cp._heartbeat_interval == 30
+    assert _config_value(cp, "HeartbeatInterval") == "30"
+
+
+def test_heartbeat_loop_picks_up_new_interval(mock_connection, mock_persistence):
+    """Changing the interval mid-sleep takes effect without waiting out the old one."""
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call = AsyncMock()
+
+    async def scenario():
+        task = asyncio.create_task(cp.heartbeat_loop(300))
+        await asyncio.sleep(0.05)
+        cp._set_heartbeat_interval(0.1)
+        await asyncio.sleep(0.35)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(scenario())
+    loop.close()
+    assert cp.call.await_count >= 2

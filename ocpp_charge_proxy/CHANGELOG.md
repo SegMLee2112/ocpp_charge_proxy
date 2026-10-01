@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0
+
+- Fix: `HeartbeatInterval` now reflects the interval actually in use. The value from
+  an accepted BootNotification is applied and reported by GetConfiguration
+  (previously it always reported the hard-coded `30`).
+- `ChangeConfiguration HeartbeatInterval` now takes effect immediately, interrupting
+  the current wait. Invalid values (non-numeric or < 1) are rejected.
+
 ## 0.3.0
 
 - Fix: graceful shutdown on add-on stop/restart. SIGTERM is now handled inside the
