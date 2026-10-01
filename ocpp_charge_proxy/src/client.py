@@ -245,6 +245,7 @@ class ChargePoint(BaseChargePoint):
             if limit_kw is not None:
                 if limit_kw <= 0 and self._charger_sim.is_charging:
                     logger.info("Profile says pause — suspending charge")
+                    self._checkpoint_energy()  # count energy up to the pause
                     self._charger_sim.stop_charging()
                     self.state = ChargePointStatus.suspended_evse
                     self._shared_state.state = self.state
@@ -252,10 +253,23 @@ class ChargePoint(BaseChargePoint):
                     await self.send_status()
                 elif limit_kw > 0 and not self._charger_sim.is_charging:
                     logger.info("Profile says charge at %.1f kW — resuming", limit_kw)
+                    self._checkpoint_energy()  # don't bill the paused time
                     self._charger_sim.start_charging()
                     self.state = ChargePointStatus.charging
                     self._shared_state.state = self.state
                     await self.send_status()
+
+    def _checkpoint_energy(self) -> None:
+        """Close the current energy interval at a charging state change.
+
+        Call this *before* changing state. While charging it counts the
+        energy delivered up to this exact moment; while not charging it just
+        restarts the interval. Without it, the first reading after a start
+        multiplied the preceding idle time by the new charging power
+        (phantom energy), and a stop dropped the energy since the last
+        reading from meterStop.
+        """
+        self._take_reading()
 
     def _take_reading(self) -> Optional[ChargerReading]:
         """Sample the charger and add energy delivered since the last reading.
@@ -414,6 +428,9 @@ class ChargePoint(BaseChargePoint):
             self.state = ChargePointStatus.suspended_ev
             await self.send_status()
 
+            # Not charging yet: restart the energy interval so idle time
+            # before the start isn't counted at charging power.
+            self._checkpoint_energy()
             self._charger_sim.start_charging()
             self._transaction_start_energy_wh = self._energy_register_wh
             request = call.StartTransactionPayload(
@@ -448,6 +465,8 @@ class ChargePoint(BaseChargePoint):
     ) -> None:
         """Stop the active transaction. final_state controls where we end up."""
         try:
+            # Still Charging here: count energy up to now so meterStop is complete
+            self._checkpoint_energy()
             transaction_id = self._transaction_id
             energy_delivered_kwh = (self._energy_register_wh - self._transaction_start_energy_wh) / 1000.0
             self._charger_sim.stop_charging()
@@ -736,6 +755,9 @@ class ChargePoint(BaseChargePoint):
             )
 
         if self._transaction_id is not None:
+            # State changes to Available below, before the stop task runs,
+            # so capture the energy delivered so far now.
+            self._checkpoint_energy()
             asyncio.create_task(self._do_stop_transaction(
                 final_state=ChargePointStatus.available
             ))

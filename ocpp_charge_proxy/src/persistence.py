@@ -38,6 +38,18 @@ class Persistence:
     def save_energy_register_wh(self, value: int) -> None:
         self._write(_ENERGY_FILE, "energy_wh", value)
 
+    def seed_energy_register_wh(self, value: int) -> bool:
+        """Set the register to `value` only if that's higher than what's stored.
+
+        A lifetime meter must never go backwards, so a seed value left in the
+        add-on options (or entered too low) is ignored. Returns True if applied.
+        """
+        current = self.load_energy_register_wh()
+        if value <= current:
+            return False
+        self.save_energy_register_wh(value)
+        return True
+
     def load_serial_number(self) -> str:
         serial = self._read(_SERIAL_FILE, "serial", "")
         if not serial:

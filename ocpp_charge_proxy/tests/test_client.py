@@ -264,3 +264,81 @@ def test_aligned_and_periodic_share_energy_register(mock_connection, mock_persis
     cp._take_reading()  # immediately again: ~no extra time elapsed
     assert after_one - 5000 > 0
     assert cp._energy_register_wh - after_one <= 1
+
+
+# --- Energy accounting at charging state changes ---
+
+from ocpp.v16 import call as _call
+
+
+def _call_recorder(transaction_id=4242):
+    """AsyncMock for cp.call that records requests and answers StartTransaction."""
+    sent = []
+
+    async def fake_call(request):
+        sent.append(request)
+        if isinstance(request, _call.StartTransactionPayload):
+            return MagicMock(transaction_id=transaction_id)
+        return MagicMock()
+
+    return AsyncMock(side_effect=fake_call), sent
+
+
+def test_start_transaction_does_not_add_phantom_energy(mock_connection, mock_persistence):
+    """Idle time before a start must not be billed at charging power."""
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _call_recorder()
+    cp.state = ChargePointStatus.preparing
+    cp._power_override = 5.0
+    cp._last_meter_time -= 3600  # last reading was an hour ago, while idle
+
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(cp._do_start_transaction())
+    start = [r for r in sent if isinstance(r, _call.StartTransactionPayload)][0]
+    assert start.meter_start == 5000
+    loop.run_until_complete(cp.send_meter_values())  # immediately after start
+    loop.close()
+
+    assert cp.state == ChargePointStatus.charging
+    assert cp._energy_register_wh - 5000 <= 1  # previously ~+5000 Wh phantom
+
+
+def test_stop_transaction_counts_energy_since_last_reading(mock_connection, mock_persistence):
+    """meterStop includes energy delivered after the last periodic reading."""
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _call_recorder()
+    cp.state = ChargePointStatus.charging
+    cp._charger_sim.start_charging()
+    cp._transaction_id = 4242
+    cp._transaction_start_energy_wh = 5000
+    cp._power_override = 5.0
+    cp._last_meter_time -= 1800  # 30 min charging since the last reading
+
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(cp._do_stop_transaction())
+    loop.close()
+
+    stop = [r for r in sent if isinstance(r, _call.StopTransactionPayload)][0]
+    assert 7400 <= stop.meter_stop <= 7600  # 5000 + 5 kW x 0.5 h = 7500
+
+
+def test_unlock_connector_captures_energy_before_state_change(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _call_recorder()
+    cp.state = ChargePointStatus.charging
+    cp._charger_sim.start_charging()
+    cp._transaction_id = 4242
+    cp._power_override = 5.0
+    cp._last_meter_time -= 1800
+
+    async def scenario():
+        await cp.on_unlock_connector(connector_id=1)
+        await asyncio.sleep(0)  # let the stop task run
+        await asyncio.sleep(0)
+
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(scenario())
+    loop.close()
+
+    stop = [r for r in sent if isinstance(r, _call.StopTransactionPayload)][0]
+    assert 7400 <= stop.meter_stop <= 7600

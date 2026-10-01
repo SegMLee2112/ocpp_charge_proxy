@@ -32,7 +32,7 @@ updates its state so Home Assistant automations can respond.
 | `charger_serial` | Auto-generated | Charger serial number (generated on first boot if empty) |
 | `firmware_version` | `6.11.16` | Firmware version reported in BootNotification |
 | `current_amps` | `32` | Maximum charging current in amps (6/10/13/16/20/25/32) |
-| `initial_energy_wh` | `0` | Seed the energy register (Wh). Set to your old charger's meter reading when migrating. Cleared after first boot. |
+| `initial_energy_wh` | `0` | Seed the energy register (Wh). Set to your old charger's meter reading when migrating. Only applied if higher than the stored register (the meter never goes backwards); cleared after first boot. |
 | `log_level` | `info` | Logging level (debug/info/warning/error) |
 
 ### Controlling your charger

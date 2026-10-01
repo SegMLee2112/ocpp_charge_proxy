@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.0
+
+- Fix: phantom energy at the start of every charge. The first reading after a
+  start multiplied the idle time since the previous reading (up to 60s) by the
+  new charging power, adding ~120 Wh before any charging happened. Energy is now
+  checkpointed at every charging state change (start, stop, profile pause/resume,
+  UnlockConnector).
+- Fix: `meterStop` now includes the energy delivered since the last periodic
+  reading (previously up to 60s of charging was dropped).
+- Safeguard: `initial_energy_wh` is only applied if it's higher than the stored
+  energy register, so a value left in the options can never move the meter
+  backwards. A warning is logged when it's ignored.
+
 ## 0.5.4
 
 - Fix: integration setup now finds the add-on automatically. Add-ons installed from

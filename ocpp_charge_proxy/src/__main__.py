@@ -75,8 +75,14 @@ async def run() -> None:
 
     # Seed energy register if initial_energy_wh is set (cleared by s6 run script)
     if config.initial_energy_wh > 0:
-        persistence.save_energy_register_wh(config.initial_energy_wh)
-        logger.info("Energy register set to %d Wh from config", config.initial_energy_wh)
+        if persistence.seed_energy_register_wh(config.initial_energy_wh):
+            logger.info("Energy register set to %d Wh from config", config.initial_energy_wh)
+        else:
+            logger.warning(
+                "initial_energy_wh=%d ignored: stored energy register is already "
+                "%d Wh and the meter must never go backwards. Set the option to 0.",
+                config.initial_energy_wh, persistence.load_energy_register_wh(),
+            )
 
     shared_state = SharedState()
 
