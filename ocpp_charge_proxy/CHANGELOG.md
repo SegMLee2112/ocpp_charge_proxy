@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+- Fix: graceful shutdown on add-on stop/restart. SIGTERM is now handled inside the
+  event loop, so the proxy stops any active transaction (reason `Reboot`) and sends
+  a `StatusNotification: Unavailable` to the server before the socket closes.
+  Previously the process was killed before either message was sent.
+- Shutdown also interrupts the reconnect backoff and an in-progress BootNotification
+  instead of waiting them out.
+
 ## 0.2.0
 
 - Fix: stale heartbeat/meter-value loops kept running after a reconnect, spamming

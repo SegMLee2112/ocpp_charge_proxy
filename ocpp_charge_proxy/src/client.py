@@ -310,7 +310,9 @@ class ChargePoint(BaseChargePoint):
             self._zero_power_state()
 
     async def _do_stop_transaction(
-        self, final_state: ChargePointStatus = ChargePointStatus.preparing,
+        self,
+        final_state: ChargePointStatus = ChargePointStatus.preparing,
+        reason: Reason = Reason.remote,
     ) -> None:
         """Stop the active transaction. final_state controls where we end up."""
         try:
@@ -328,7 +330,7 @@ class ChargePoint(BaseChargePoint):
                 id_tag="ffffffffffffff7f",
                 meter_stop=self._energy_register_wh,
                 timestamp=_now_iso(),
-                reason=Reason.remote,
+                reason=reason,
                 transaction_data=[],
             )
             response: call_result.StopTransactionPayload = await self.call(request)
