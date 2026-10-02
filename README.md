@@ -108,8 +108,8 @@ Both are installed from this repository.
   response time and the last 10 commands each way.
 - **Last Heartbeat** sensor: when your provider last answered, the round
   trip time and how far its clock is from yours.
-- **Power Source**, **SoC Source** and **Monitored SoC** sensors showing
-  where each value comes from.
+- **Power Source**, **Reporting SoC** and **Monitored SoC** sensors showing
+  where each value comes from, and the SoC values in use.
 - A **status page** in the Home Assistant sidebar (the add-on's Web UI):
   connection, state, power, energy, current, SoC, transaction, held messages,
   last heartbeat and last commands.
@@ -179,8 +179,8 @@ All options are optional. Clear a field to stop using that sensor.
 | Current | Sensor | Current draw (A) |
 | Connected to Server | Binary Sensor | Connected to your provider's OCPP server |
 | Power Source | Sensor (diagnostic) | `entity` (your power sensor is in use) or `simulated` |
-| SoC Source | Sensor (diagnostic) | `entity` (reporting your SoC sensor), `no reading` (sensor set but no value, nothing sent) or `not set` (no SoC reported, car full off) |
-| Monitored SoC | Sensor (diagnostic) | Where auto plug-in's SoC comes from: `entity`, `no reading` or `not set` (like SoC Source). Attributes: `soc_percent`, `entity_id`, `source`, `auto_plug`, `threshold`, `armed` |
+| Reporting SoC | Sensor (diagnostic) | The SoC being reported to your provider (e.g. `64%`), `no reading` (sensor set but no value, nothing sent) or `not set` (no SoC reported, car full off). Attribute `soc_percent` has the number |
+| Monitored SoC | Sensor (diagnostic) | The SoC auto plug-in watches (e.g. `64%`), `no reading` or `not set`. Attributes: `soc_percent`, `entity_id`, `source`, `auto_plug`, `threshold`, `armed` |
 | Last Heartbeat | Sensor (diagnostic) | When your provider last answered a Heartbeat. Attributes: `round_trip_ms`, `interval_s`, `server_time`, `clock_offset_s` |
 | Last Command Received | Sensor (diagnostic) | Last OCPP command from your provider (e.g. `RemoteStartTransaction`). Attributes: `timestamp`, `summary`, `status`, `round_trip_ms`, `message_id`, `payload`, `response`, `recent` (last 10) |
 | Last Command Sent | Sensor (diagnostic) | Last message sent to your provider, excluding Heartbeat and MeterValues. Same attributes, with your provider's response |

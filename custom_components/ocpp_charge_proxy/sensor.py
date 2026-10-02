@@ -52,21 +52,27 @@ SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
     ),
 )
 
+# key stays "soc_source" so the entity keeps its ID (sensor.ocpp_charge_proxy_soc_source)
 SOC_SOURCE_DESCRIPTION = SensorEntityDescription(
     key="soc_source",
-    name="SoC Source",
+    name="Reporting SoC",
     icon="mdi:battery-sync",
-    device_class=SensorDeviceClass.ENUM,
-    options=["entity", "no reading", "not set"],
     entity_category=EntityCategory.DIAGNOSTIC,
 )
+
+
+def soc_state(entity_id: str, soc) -> str:
+    """'64%' when a sensor is set and has a value, else 'no reading' / 'not set'."""
+    if not entity_id:
+        return "not set"
+    if soc is None:
+        return "no reading"
+    return f"{round(float(soc), 1):g}%"
 
 MONITORED_SOC_DESCRIPTION = SensorEntityDescription(
     key="monitored_soc",
     name="Monitored SoC",
     icon="mdi:battery-sync",
-    device_class=SensorDeviceClass.ENUM,
-    options=["entity", "no reading", "not set"],  # same states as SoC Source
     entity_category=EntityCategory.DIAGNOSTIC,
 )
 
@@ -172,20 +178,17 @@ class OCPPChargeProxyCommandSensor(OCPPChargeProxySensor):
 
 
 class OCPPChargeProxySocSourceSensor(OCPPChargeProxySensor):
-    """Where the SoC reported to the provider comes from, like Power Source.
+    """The SoC being reported to the provider ("Reporting SoC").
 
-    entity:      a SoC sensor is set and has a value, which is being reported
+    "64%":       a SoC sensor is set and its value is being reported
     no reading:  a SoC sensor is set but has no usable value, so none is sent
     not set:     no SoC sensor; SoC is never reported and car-full is off
+    The number is also the soc_percent attribute, for automations.
     """
 
     @property
     def native_value(self) -> str:
-        if not self.coordinator.soc_entity:
-            return "not set"
-        if self.coordinator.data.get("soc_percent") is None:
-            return "no reading"
-        return "entity"
+        return soc_state(self.coordinator.soc_entity, self.coordinator.data.get("soc_percent"))
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -233,11 +236,12 @@ class OCPPChargeProxyStateSensor(OCPPChargeProxySensor):
 
 
 class OCPPChargeProxyMonitoredSocSensor(OCPPChargeProxySensor):
-    """Where auto plug-in's SoC comes from, like SoC Source does for the reported one.
+    """The SoC auto plug-in watches (the monitor sensor, else the reporting one).
 
-    entity:      a sensor is being watched and has a value (in soc_percent)
+    "64%":       a sensor is being watched and has a value
     no reading:  a sensor is set but has no usable value right now
-    not set:     no sensor to watch (no monitor sensor and no reported SoC sensor)
+    not set:     no sensor to watch (no monitor sensor and no reporting SoC sensor)
+    The number is also the soc_percent attribute, for automations.
     """
 
     async def async_added_to_hass(self) -> None:
@@ -255,11 +259,7 @@ class OCPPChargeProxyMonitoredSocSensor(OCPPChargeProxySensor):
 
     @property
     def native_value(self) -> str:
-        if not self.coordinator.monitored_soc_entity:
-            return "not set"
-        if self.coordinator.monitored_soc() is None:
-            return "no reading"
-        return "entity"
+        return soc_state(self.coordinator.monitored_soc_entity, self.coordinator.monitored_soc())
 
     @property
     def extra_state_attributes(self) -> dict:

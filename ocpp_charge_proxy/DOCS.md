@@ -137,11 +137,11 @@ Install the companion integration via HACS to get proper HA entities:
 | Energy | Sensor | Cumulative energy (kWh, works with energy dashboard) |
 | Current | Sensor | Current draw (A) |
 | Power Source | Sensor (diagnostic) | Whether using real entity or simulated values |
-| SoC Source | Sensor (diagnostic) | `entity` (reporting your SoC sensor), `no reading` (sensor set but no value, nothing sent) or `not set` (no SoC reported, car full off) |
+| Reporting SoC | Sensor (diagnostic) | The SoC being reported to your provider (e.g. `64%`), `no reading` (sensor set but no value, nothing sent) or `not set` (no SoC reported, car full off). Attribute `soc_percent` has the number |
 | Connected to Server | Binary Sensor | Connected to OCPP server |
 | Last Command Received | Sensor (diagnostic) | Last OCPP command from your provider (e.g. `RemoteStartTransaction`). Attributes: `timestamp`, `summary`, `status`, `round_trip_ms`, `message_id`, `payload`, `response`, `recent` (last 10) |
 | Last Command Sent | Sensor (diagnostic) | Last message sent to your provider, excluding Heartbeat and MeterValues. Same attributes, with the server's response |
-| Monitored SoC | Sensor (diagnostic) | Where auto plug-in's SoC comes from: `entity`, `no reading` or `not set` (like SoC Source). Attributes: `soc_percent`, `entity_id`, `source`, `auto_plug`, `threshold`, `armed` |
+| Monitored SoC | Sensor (diagnostic) | The SoC auto plug-in watches (e.g. `64%`), `no reading` or `not set`. Attributes: `soc_percent`, `entity_id`, `source`, `auto_plug`, `threshold`, `armed` |
 | Last Heartbeat | Sensor (diagnostic) | When your provider last answered a Heartbeat. Attributes: `round_trip_ms`, `interval_s`, `server_time`, `clock_offset_s` |
 
 ### Integration options

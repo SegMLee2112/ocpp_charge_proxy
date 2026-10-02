@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.3
+
+- **SoC Source** is renamed **Reporting SoC** (matching "SoC sensor for
+  reporting"). Its entity ID stays `sensor.ocpp_charge_proxy_soc_source`.
+- **Reporting SoC** and **Monitored SoC** now show the SoC itself when a
+  sensor is set (e.g. `64%`), or `no reading` / `not set`, instead of
+  `entity`. The number is also the `soc_percent` attribute, for automations.
+  Monitored SoC's `source` attribute now says `reporting SoC sensor` when it
+  watches the reporting sensor.
+
 ## 1.0.2
 
 - **Monitored SoC** now shows where auto plug-in's SoC comes from, with the

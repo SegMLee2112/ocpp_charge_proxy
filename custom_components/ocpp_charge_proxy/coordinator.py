@@ -93,7 +93,7 @@ class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
     def monitored_soc_source(self) -> str | None:
         if not self._auto_plug_entity:
             return None
-        return "reported SoC sensor" if self._auto_plug_entity == self._soc_entity else "monitor sensor"
+        return "reporting SoC sensor" if self._auto_plug_entity == self._soc_entity else "monitor sensor"
 
     @property
     def auto_plug(self) -> AutoPlug:
