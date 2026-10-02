@@ -43,3 +43,33 @@ def test_unparseable_lines_untouched(monkeypatch):
     f = DemoteRoutineMessages()
     rec = logging.LogRecord("ocpp", logging.INFO, __file__, 1, "something else", (), None)
     assert f.filter(rec) is True
+
+
+def _reading(uid, context="Sample.Periodic", transaction_id=None):
+    payload = {"connectorId": 1, "meterValue": [{"timestamp": "t", "sampledValue": [
+        {"measurand": "Energy.Active.Import.Register", "value": "1", "context": context},
+    ]}]}
+    if transaction_id is not None:
+        payload["transactionId"] = transaction_id
+    return [2, uid, "MeterValues", payload]
+
+
+def test_idle_periodic_meter_values_hidden_at_info(monkeypatch):
+    monkeypatch.setattr(logging.getLogger(), "level", logging.INFO)
+    f = DemoteRoutineMessages()
+    assert f.filter(_record("send", _reading("mv1"))) is False
+    assert f.filter(_record("receive", [3, "mv1", {}])) is False
+
+
+def test_clock_aligned_and_session_meter_values_still_shown(monkeypatch):
+    monkeypatch.setattr(logging.getLogger(), "level", logging.INFO)
+    f = DemoteRoutineMessages()
+    for uid, frame in (
+        ("clk", _reading("clk", context="Sample.Clock")),  # every 15 min
+        ("tx", _reading("tx", transaction_id=1)),  # during a session
+        ("txclk", _reading("txclk", context="Sample.Clock", transaction_id=1)),
+    ):
+        rec = _record("send", frame)
+        assert f.filter(rec) is True and rec.levelname == "INFO"
+        reply = _record("receive", [3, uid, {}])
+        assert f.filter(reply) is True and reply.levelname == "INFO"

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.1
+
+- Quieter logs: idle meter readings (the periodic one every 60s with Octopus
+  while no session is running) and the server's replies to them are now
+  logged at DEBUG instead of INFO, like Heartbeats. They show with
+  `log_level: debug`. Clock-aligned readings (every 15 min with Octopus),
+  readings during a charging session, and all other OCPP messages
+  (Start/StopTransaction, StatusNotification, the provider's commands...)
+  are still logged at INFO.
+
 ## 1.0.0
 
 First stable release. Also includes the changes planned as 0.9.9, which

@@ -5,17 +5,35 @@ from __future__ import annotations
 import json
 import logging
 
-# OCPP actions whose send/receive lines are routine noise at INFO
-DEBUG_ONLY_ACTIONS = frozenset({"Heartbeat"})
+# OCPP actions whose send/receive lines are routine noise at INFO (shown with
+# log_level: debug). MeterValues only counts when it's an idle periodic
+# reading; see _routine_meter_values.
+DEBUG_ONLY_ACTIONS = frozenset({"Heartbeat", "MeterValues"})
+
+
+def _routine_meter_values(payload) -> bool:
+    """An idle periodic reading: no transaction, every value Sample.Periodic.
+
+    Readings during a session (with a transactionId) and clock-aligned ones
+    (Sample.Clock, every ClockAlignedDataInterval) stay at INFO.
+    """
+    if not isinstance(payload, dict) or payload.get("transactionId") is not None:
+        return False
+    contexts = {
+        sv.get("context", "Sample.Periodic")  # OCPP default context
+        for mv in payload.get("meterValue") or []
+        for sv in (mv.get("sampledValue") or [])
+    }
+    return contexts == {"Sample.Periodic"}
 
 
 class DemoteRoutineMessages(logging.Filter):
-    """Show the ocpp library's Heartbeat lines at DEBUG instead of INFO.
+    """Show the ocpp library's Heartbeat and idle MeterValues lines at DEBUG, not INFO.
 
     The library logs every frame at INFO ("send [...]" / "receive message
-    [...]"). This catches Heartbeat calls and the server's reply to them
-    (matched by message id) and re-labels them DEBUG: they're dropped unless
-    log_level is debug. Every other message is untouched.
+    [...]"). This catches those calls and the server's reply to them (matched
+    by message id) and re-labels them DEBUG: they're dropped unless log_level
+    is debug. Every other message is untouched.
     """
 
     def __init__(self, actions=DEBUG_ONLY_ACTIONS) -> None:
@@ -32,7 +50,10 @@ class DemoteRoutineMessages(logging.Filter):
             kind, uid = frame[0], frame[1]
         except (ValueError, TypeError, IndexError, KeyError):
             return False
-        if kind == 2 and len(frame) > 2 and frame[2] in self._actions:
+        if (
+            kind == 2 and len(frame) > 2 and frame[2] in self._actions
+            and (frame[2] != "MeterValues" or _routine_meter_values(frame[3] if len(frame) > 3 else None))
+        ):
             if len(self._pending) > 100:  # replies that never came
                 self._pending.clear()
             self._pending.add(uid)

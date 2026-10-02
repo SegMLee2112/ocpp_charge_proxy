@@ -74,7 +74,7 @@ async def run() -> None:
         format=log_format,
         stream=sys.stdout,
     )
-    log_filters.install()  # Heartbeat lines at DEBUG, not INFO
+    log_filters.install()  # Heartbeat and idle MeterValues lines at DEBUG, not INFO
 
     data_dir = os.environ.get("IO_DATA_DIR", "/data")
     os.makedirs(data_dir, exist_ok=True)
