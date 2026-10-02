@@ -117,8 +117,8 @@ sensors live through Home Assistant's API.
 
 - A **web GUI** in the Home Assistant sidebar (the add-on's Web UI), live
   over push updates and styled to match your HA theme, light or dark:
-  - **Header:** a status button showing "All good" or the issues that need
-    attention, linking to the Health tab.
+  - **Header:** a health dot left of the title, green when healthy and amber/red
+    when not (hover for the issues), linking to the Health tab.
   - **Overview:** state, power, current, SoC and energy; the current
     session; and a chart (shaded by state, with session start/end marked,
     kept across restarts) of power, current (with your max and the provider limit) or

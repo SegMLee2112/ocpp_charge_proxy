@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.1.4
+
+- On the Sessions tab the current session can be clicked for its details
+  too: start time, meter reading now, energy so far, average and peak power,
+  and its power curve so far.
+
+## 2.1.3
+
+- The health status is now a larger coloured dot to the left of the title
+  (green: healthy, amber/red: unhealthy), without words. Hover over it to see
+  any issues; click it to open the Health tab.
+
+## 2.1.2
+
+- The status button in the header says **Healthy** or **Unhealthy** (hover
+  over it to see the issues). It still opens the Health tab.
+
 ## 2.1.1
 
 - **Energy per day** fills in days from the kept sessions (each session's

@@ -58,10 +58,15 @@
     nav .ti { display: block; }
     .bar { padding-bottom: 4px; }
   }
-  .status-btn { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12px; cursor: pointer;
-    border: 1px solid var(--divider); border-radius: 999px; padding: 3px 10px; background: var(--card); color: var(--text2); }
-  .status-btn.warn { color: var(--warn); border-color: var(--warn); }
-  .status-btn.err { color: var(--err); border-color: var(--err); }
+  /* Health status: a dot the size of the title, left of it */
+  .status-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; cursor: pointer;
+    width: 28px; height: 28px; padding: 0; margin-right: -4px; border: 0; border-radius: 50%; background: none; }
+  .status-btn:hover { background: var(--hover); }
+  .status-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .status-btn .dot { width: 16px; height: 16px; }
+  .status-btn .dot.ok { box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 22%, transparent); }
+  .status-btn .dot.warn { box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 25%, transparent); }
+  .status-btn .dot.err { box-shadow: 0 0 0 4px color-mix(in srgb, var(--err) 25%, transparent); }
   .issues { margin: 0; padding-left: 18px; } .issues li { margin: 4px 0; }
   main { max-width: 1100px; margin: 0 auto; padding: 16px; }
   section[hidden] { display: none; }
@@ -210,8 +215,8 @@
 <div class="error-banner" id="error">Can't reach the add-on</div>
 <header>
   <div class="bar">
+    <button class="status-btn" id="status-btn" title="Checking…" aria-label="Health: checking"><span class="dot" id="status-dot"></span></button>
     <h1>OCPP Charge Proxy</h1>
-    <button class="status-btn" id="status-btn" title="Open the Health tab"><span class="dot" id="status-dot"></span><span id="status-text">Checking…</span></button>
     <span class="live" id="live"><span class="dot" id="live-dot"></span><span id="live-text">Connecting…</span></span>
   </div>
   <nav role="tablist" id="tabs">
@@ -615,7 +620,9 @@ function updateStatus() {
   const level = issues.some((i) => i[0] === 'err') ? 'err' : issues.length ? 'warn' : 'ok';
   $('status-btn').className = 'status-btn ' + (level === 'ok' ? '' : level);
   $('status-dot').className = 'dot ' + level;
-  $('status-text').textContent = level === 'ok' ? 'All good' : `${issues.length} issue${issues.length === 1 ? '' : 's'}`;
+  $('status-btn').title = level === 'ok' ? 'Healthy: everything is working. Open the Health tab'
+    : `Unhealthy: ${issues.map((i) => i[1]).join('; ')}. Open the Health tab`;
+  $('status-btn').setAttribute('aria-label', level === 'ok' ? 'Healthy. Open the Health tab' : `Unhealthy, ${issues.length} issue${issues.length === 1 ? '' : 's'}. Open the Health tab`);
   $('h-issues-card').hidden = !issues.length;
   $('h-issues').innerHTML = issues.map(([lvl, t]) => `<li><span class="chip ${lvl}">${lvl === 'err' ? 'Problem' : 'Check'}</span> ${esc(t)}</li>`).join('');
 }
@@ -950,7 +957,8 @@ async function refreshSessions() {
   const by = (src) => src ? ` <span class="muted">· plugged in by ${esc(src)}</span>` : '';
   if (sessionsData.current) {
     const c = sessionsData.current;
-    rows.push(`<tr><td>${dateTime(c.start)} <span class="chip ok">charging now</span></td><td class="num">${dur(c.duration_s)}</td><td class="num">${num(c.energy_kwh, 2)} kWh</td><td class="num">${num(c.peak_power_kw, 1)} kW</td><td class="muted">—</td><td class="num">${esc(c.transaction_id)}</td><td><code>${esc(c.id_tag || '—')}</code></td></tr>`);
+    rows.push(`<tr class="srow" data-key="${esc(c.start)}"><td>${dateTime(c.start)} <span class="chip ok">charging now</span></td><td class="num">${dur(c.duration_s)}</td><td class="num">${num(c.energy_kwh, 2)} kWh</td><td class="num">${num(c.peak_power_kw, 1)} kW</td><td class="muted">—</td><td class="num">${esc(c.transaction_id)}</td><td><code>${esc(c.id_tag || '—')}</code></td></tr>`);
+    if (sessionsOpen.has(c.start)) rows.push(`<tr class="detail"><td colspan="7">${sessionDetail({...c, current: true})}</td></tr>`);
   } else if (sessionsData.waiting) {
     const w = sessionsData.waiting;
     rows.push(`<tr><td>${dateTime(w.plugged_at)} <span class="chip warn">waiting for a session</span></td><td class="num">${dur(w.duration_s)}</td><td class="num muted">—</td><td class="num muted">—</td><td class="muted">Plugged in${w.plugged_by ? ' by ' + esc(w.plugged_by) : ''}, no session yet</td><td class="num muted">—</td><td class="muted">—</td></tr>`);
@@ -1017,10 +1025,13 @@ function sessionDetail(s) {
     ['Started', s.start ? new Date(s.start).toLocaleString() : '—'],
     ['Ended', s.stop ? new Date(s.stop).toLocaleString() : 'Still charging'],
     ['Meter start', s.meter_start_wh != null ? Number(s.meter_start_wh).toLocaleString() + ' Wh' : '—'],
-    ['Meter stop', s.meter_stop_wh != null ? Number(s.meter_stop_wh).toLocaleString() + ' Wh' : '—'],
+    s.current
+      ? ['Meter now', s.meter_start_wh != null && s.energy_kwh != null ? Math.round(s.meter_start_wh + s.energy_kwh * 1000).toLocaleString() + ' Wh' : '—']
+      : ['Meter stop', s.meter_stop_wh != null ? Number(s.meter_stop_wh).toLocaleString() + ' Wh' : '—'],
+    ['Energy so far', s.current ? num(s.energy_kwh, 2) + ' kWh' : null],
     ['Average', s.duration_s > 0 && s.energy_kwh != null ? num(s.energy_kwh / (s.duration_s / 3600), 2) + ' kW' : '—'],
-    ['Stop reason', esc(s.reason || '—')],
-  ])}</dl><div>${start ? sparkline(start, stop) : ''}</div></div>`;
+    s.current ? ['Peak', num(s.peak_power_kw, 2) + ' kW'] : ['Stop reason', esc(s.reason || '—')],
+  ].filter((r) => r[1] !== null))}</dl><div>${start ? sparkline(start, stop) : ''}</div></div>`;
 }
 function drawDayBars(days) {
   const max = Math.max(0.5, ...days.map((d) => d.kwh));
