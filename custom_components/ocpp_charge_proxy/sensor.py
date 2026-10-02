@@ -9,6 +9,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -48,6 +49,22 @@ SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
     ),
 )
 
+# OCPP traffic: state is the action name, details are attributes
+COMMAND_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
+    SensorEntityDescription(
+        key="last_command_received",
+        name="Last Command Received",
+        icon="mdi:message-arrow-left",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="last_command_sent",
+        name="Last Command Sent",
+        icon="mdi:message-arrow-right",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -57,7 +74,11 @@ async def async_setup_entry(
     """Set up sensor entities."""
     coordinator: OCPPChargeProxyCoordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
-        OCPPChargeProxySensor(coordinator, entry, desc) for desc in SENSOR_DESCRIPTIONS
+        [
+            *(OCPPChargeProxySensor(coordinator, entry, desc) for desc in SENSOR_DESCRIPTIONS),
+            *(OCPPChargeProxyCommandSensor(coordinator, entry, desc)
+              for desc in COMMAND_SENSOR_DESCRIPTIONS),
+        ]
     )
 
 
@@ -81,3 +102,29 @@ class OCPPChargeProxySensor(CoordinatorEntity[OCPPChargeProxyCoordinator], Senso
     def native_value(self):
         """Return the sensor value."""
         return self.coordinator.data.get(self.entity_description.key)
+
+
+class OCPPChargeProxyCommandSensor(OCPPChargeProxySensor):
+    """Last OCPP command received from / sent to the server."""
+
+    def _record(self) -> dict | None:
+        record = self.coordinator.data.get(self.entity_description.key)
+        return record if isinstance(record, dict) else None
+
+    @property
+    def native_value(self):
+        """The OCPP action, e.g. RemoteStartTransaction."""
+        record = self._record()
+        return record.get("action") if record else None
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        record = self._record()
+        if not record:
+            return None
+        return {
+            "timestamp": record.get("timestamp"),
+            "status": record.get("status"),
+            "payload": record.get("payload"),
+            "response": record.get("response"),
+        }

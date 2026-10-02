@@ -121,6 +121,8 @@ Install the companion integration via HACS to get proper HA entities:
 | Current | Sensor | Current draw (A) |
 | Power Source | Sensor | Whether using real entity or simulated values |
 | Connected to Server | Binary Sensor | Connected to OCPP server |
+| Last Command Received | Sensor (diagnostic) | Last OCPP command from your provider (e.g. `RemoteStartTransaction`). Attributes: `timestamp`, `payload`, `response`, `status` |
+| Last Command Sent | Sensor (diagnostic) | Last message sent to your provider, excluding Heartbeat and MeterValues. Same attributes, with the server's response |
 
 ### Integration options
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.2
+
+- New integration sensors **Last Command Received** and **Last Command Sent**
+  (diagnostic). The state is the OCPP action (e.g. `RemoteStartTransaction`,
+  `StatusNotification`). Attributes hold the `timestamp`, the `payload`, the
+  `response`, and its `status` (e.g. `Accepted`, `Rejected`, or
+  `Error: <code>`; `OK` for replies without a status). Bulky lists such as
+  transactionData are shown as a count.
+- Received covers every command from the server. Sent leaves out the routine
+  Heartbeat and MeterValues. Held messages appear once they're actually sent
+  after reconnecting.
+- The add-on API `/api/state` now includes `last_command_received` and
+  `last_command_sent`.
+
 ## 0.9.1
 
 - New: transactions interrupted by a power cut or crash are now closed. While

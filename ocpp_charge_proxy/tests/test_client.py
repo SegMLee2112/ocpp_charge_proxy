@@ -929,3 +929,54 @@ def test_stop_cut_off_before_queued_is_recovered(mock_connection, tmp_path):
     assert persistence.load_active_transaction()["transaction_id"] == 4242
     cp2 = make_cp(None, persistence)
     assert [e["payload"]["reason"] for e in cp2._offline_queue] == ["PowerLoss"]
+
+
+# --- 0.9.2: last command received / sent sensors ---
+
+import json as _json
+
+
+def test_last_command_received_with_our_reply(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp._record_traffic(_json.dumps(
+        [2, "abc", "RemoteStartTransaction", {"idTag": OCTOPUS_TAG, "connectorId": 1}]
+    ), incoming=True)
+    rec = cp._shared_state.last_command_received
+    assert rec["action"] == "RemoteStartTransaction"
+    assert rec["payload"] == {"idTag": OCTOPUS_TAG, "connectorId": 1}
+    assert rec["status"] is None and rec["timestamp"].endswith("Z")
+
+    cp._record_traffic(_json.dumps([3, "abc", {"status": "Accepted"}]), incoming=False)
+    assert cp._shared_state.last_command_received["status"] == "Accepted"
+    # A reply to some other id doesn't touch it
+    cp._record_traffic(_json.dumps([3, "zzz", {"status": "Rejected"}]), incoming=False)
+    assert cp._shared_state.last_command_received["status"] == "Accepted"
+
+
+def test_last_command_sent_skips_heartbeat_and_meter_values(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp._record_traffic(_json.dumps(
+        [2, "s1", "StartTransaction", {"connectorId": 1, "idTag": "x", "meterStart": 5}]
+    ), incoming=False)
+    cp._record_traffic(_json.dumps([2, "s2", "Heartbeat", {}]), incoming=False)
+    cp._record_traffic(_json.dumps([2, "s3", "MeterValues", {"connectorId": 1, "meterValue": []}]), incoming=False)
+    assert cp._shared_state.last_command_sent["action"] == "StartTransaction"
+    # Server's answer to StartTransaction: status from idTagInfo
+    cp._record_traffic(_json.dumps(
+        [3, "s1", {"transactionId": 4242, "idTagInfo": {"status": "Accepted"}}]
+    ), incoming=True)
+    rec = cp._shared_state.last_command_sent
+    assert rec["status"] == "Accepted"
+    assert rec["response"]["transactionId"] == 4242
+
+
+def test_last_command_error_and_bulky_payloads(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp._record_traffic(_json.dumps([2, "s9", "StopTransaction", {
+        "transactionId": 1, "meterStop": 9, "timestamp": "t",
+        "transactionData": [{"timestamp": "t", "sampledValue": []}] * 3,
+    }]), incoming=False)
+    assert cp._shared_state.last_command_sent["payload"]["transactionData"] == "3 item(s)"
+    cp._record_traffic(_json.dumps([4, "s9", "FormationViolation", "bad", {}]), incoming=True)
+    assert cp._shared_state.last_command_sent["status"] == "Error: FormationViolation"
+    cp._record_traffic("not json", incoming=True)  # never raises

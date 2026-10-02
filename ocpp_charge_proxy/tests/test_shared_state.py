@@ -31,6 +31,6 @@ def test_to_dict_includes_all_fields():
         "frequency_hz", "power_offered_kw", "energy_kwh",
         "current_amps_setting", "transaction_id", "connected_to_server",
         "meter_interval", "power_source", "power_entity_value",
-        "server_config",
+        "server_config", "last_command_received", "last_command_sent",
     }
     assert set(d.keys()) == expected_keys

@@ -7,6 +7,7 @@ import signal
 import sys
 
 import websockets
+import websockets.exceptions
 from aiohttp import web
 
 from src.api import create_api_app

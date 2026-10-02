@@ -23,6 +23,10 @@ class SharedState:
     power_source: str = "simulated"
     power_entity_value: Optional[float] = None
     server_config: dict[str, str] = field(default_factory=dict)
+    # Last OCPP command from the server, and last message we sent (Heartbeat
+    # and MeterValues excluded): {action, timestamp, payload, status, response}
+    last_command_received: Optional[dict] = None
+    last_command_sent: Optional[dict] = None
 
     def to_dict(self) -> dict:
         return asdict(self)

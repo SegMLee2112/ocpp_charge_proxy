@@ -9,6 +9,7 @@ import time
 from typing import Optional
 
 import websockets
+import websockets.exceptions  # submodule is lazy-loaded; needed at import time below
 from ocpp.routing import on
 from ocpp.v16 import ChargePoint as BaseChargePoint
 from ocpp.v16 import call, call_result
@@ -62,6 +63,31 @@ _CONNECTION_ERRORS = (
     OSError,
     asyncio.TimeoutError,
 )
+
+
+# Routine traffic left out of the "last command sent" sensor
+UNTRACKED_SENT_ACTIONS = {"Heartbeat", "MeterValues"}
+# Bulky list fields summarised (as a count) in the sensor attributes
+_SUMMARISED_FIELDS = {"transactionData", "meterValue", "configurationKey", "localAuthorizationList"}
+
+
+def _summarise_payload(payload) -> dict:
+    if not isinstance(payload, dict):
+        return {}
+    return {
+        k: (f"{len(v)} item(s)" if k in _SUMMARISED_FIELDS and isinstance(v, list) else v)
+        for k, v in payload.items()
+    }
+
+
+def _response_status(payload) -> Optional[str]:
+    """'status' (or idTagInfo.status) from a response payload, if any."""
+    if not isinstance(payload, dict):
+        return None
+    status = payload.get("status")
+    if status is None and isinstance(payload.get("idTagInfo"), dict):
+        status = payload["idTagInfo"].get("status")
+    return None if status is None else str(status)
 
 
 def _payload_to_dict(payload) -> dict:
@@ -174,6 +200,8 @@ class ChargePoint(BaseChargePoint):
         # __main__ builds it with connection=None and calls attach() per socket;
         # it only counts as online once BootNotification is accepted.
         self._registered: bool = connection is not None
+        self._last_received_uid: Optional[str] = None
+        self._last_sent_uid: Optional[str] = None
         self._inflight_calls: set[asyncio.Future] = set()
         self._drain_lock = asyncio.Lock()
         loaded = persistence.load_offline_queue()
@@ -231,6 +259,69 @@ class ChargePoint(BaseChargePoint):
                 "Offline mid-transaction: still charging, holding transaction "
                 "messages until reconnected",
             )
+
+    # --- Last command received / sent (for the HA sensors) -------------
+
+    async def route_message(self, raw_msg):
+        """Every message from the server passes through here."""
+        self._record_traffic(raw_msg, incoming=True)
+        return await super().route_message(raw_msg)
+
+    async def _send(self, message):
+        """Every message to the server (calls and our replies) passes through here."""
+        self._record_traffic(message, incoming=False)
+        return await super()._send(message)
+
+    def _record_traffic(self, raw, incoming: bool) -> None:
+        """Track the last server command and our last sent message.
+
+        OCPP-J frames: [2, id, action, payload] call, [3, id, payload] result,
+        [4, id, code, description, details] error. A result/error is matched
+        by id to the call it answers. Never raises: it's only for display.
+        """
+        try:
+            msg = json.loads(raw) if isinstance(raw, (str, bytes)) else raw
+            kind, uid = msg[0], msg[1]
+            if kind == 2:  # a call
+                action, payload = msg[2], msg[3] if len(msg) > 3 else {}
+                if not incoming and action in UNTRACKED_SENT_ACTIONS:
+                    return
+                record = {
+                    "action": action,
+                    "timestamp": _now_iso(),
+                    "payload": _summarise_payload(payload),
+                    "status": None,
+                    "response": None,
+                }
+                if incoming:
+                    self._last_received_uid = uid
+                    self._shared_state.last_command_received = record
+                else:
+                    self._last_sent_uid = uid
+                    self._shared_state.last_command_sent = record
+                return
+            # A reply: incoming replies answer what we sent, outgoing ones
+            # answer what the server sent us.
+            if incoming:
+                record, expected = self._shared_state.last_command_sent, self._last_sent_uid
+            else:
+                record, expected = self._shared_state.last_command_received, self._last_received_uid
+            if record is None or uid != expected:
+                return
+            record = dict(record)
+            if kind == 3:
+                payload = msg[2] if len(msg) > 2 else {}
+                record["status"] = _response_status(payload) or "OK"  # reply without a status
+                record["response"] = _summarise_payload(payload)
+            elif kind == 4:
+                record["status"] = f"Error: {msg[2]}"
+                record["response"] = {"errorCode": msg[2], "errorDescription": msg[3] if len(msg) > 3 else ""}
+            if incoming:
+                self._shared_state.last_command_sent = record
+            else:
+                self._shared_state.last_command_received = record
+        except Exception:
+            logger.debug("Could not record OCPP traffic", exc_info=True)
 
     async def call(self, payload, *args, **kwargs):
         """BaseChargePoint.call that fails fast when the connection drops.
