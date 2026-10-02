@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.1
+
+- **New Settings tab** on the web page: the controls (Plugged In, max
+  current, power override, test SoC) moved there from the Overview tab, and
+  the auto re-plug settings from the Automation tab. Overview now shows the
+  charger's status, the current session and the chart; Automation is the
+  plug-in schedule.
+- **The Simulation tab is now part of Settings:** your power, SoC and car
+  plugged in sensors, auto plug-in and the Home Assistant entities status are
+  in the lower half of the Settings tab.
+
 ## 2.0.0
 
 > **Upgrading from 1.x? After updating, do these steps:**

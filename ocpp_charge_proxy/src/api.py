@@ -65,7 +65,7 @@ def create_api_app(
     app.router.add_get("/api/automation", handle_automation)
     app.router.add_post("/api/automation/schedule", handle_schedule)
     app.router.add_post("/api/automation/replug", handle_replug)
-    # Your HA sensors (Simulation tab)
+    # Your HA sensors (Settings tab)
     app.router.add_get("/api/sensors", handle_get_sensors)
     app.router.add_post("/api/sensors", handle_set_sensors)
     app.router.add_get("/api/sensors/entities", handle_sensor_entities)

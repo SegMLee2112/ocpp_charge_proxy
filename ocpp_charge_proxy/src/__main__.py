@@ -196,7 +196,7 @@ async def run() -> None:
         attempts=config.replug_attempts,
     ))
     automation.publish(shared_state)
-    # Your HA sensors (power, SoC, car plugged in, auto plug-in: Simulation
+    # Your HA sensors (power, SoC, car plugged in, auto plug-in: Settings
     # tab) and the add-on's own HA entities (Plugged In helper, Power, Energy,
     # Current)
     ha_link = HaLink(

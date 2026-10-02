@@ -85,7 +85,7 @@ In, Power, Energy and Current). No integration or HACS needed.
 
 ### Works with your car in Home Assistant
 
-Set these up on the add-on's **Simulation** tab. The add-on follows your
+Set these up on the add-on's **Settings** tab. The add-on follows your
 sensors live through Home Assistant's API.
 
 - **Power sensor (optional).** Report real power (e.g. from a smart plug or
@@ -112,15 +112,14 @@ sensors live through Home Assistant's API.
 - **Auto re-plug.** If your provider hasn't started a session 10 minutes
   after plugging in, the add-on unplugs for 30 seconds and plugs back in, up
   to 3 times. Minutes and tries are add-on options and can be changed on the
-  Automation tab.
+  Settings tab.
 
 ### Diagnostics
 
 - A **web GUI** in the Home Assistant sidebar (the add-on's Web UI), live
   over push updates and styled to match your HA theme, light or dark:
-  - **Overview:** state, power, current, SoC and energy; controls for Plugged
-    In, max current, a power override and a test SoC; the current session;
-    and a chart of power, current (with your max and the provider limit) or
+  - **Overview:** state, power, current, SoC and energy; the current
+    session; and a chart of power, current (with your max and the provider limit) or
     SoC over the last 30 minutes to 6 hours.
   - **Sessions:** the last 20 charging sessions (energy, duration, peak
     power, what ended them), kept across restarts.
@@ -129,10 +128,11 @@ sensors live through Home Assistant's API.
   - **Provider:** what your provider has set: charging limits, charging
     profiles drawn as a timeline, the local authorisation list and every
     configuration key.
-  - **Simulation:** pick your power, SoC and car plugged in sensors and set
-    up auto plug-in, with live values: power source, reporting SoC and
-    monitored SoC.
-  - **Automation:** a plug-in schedule and auto re-plug (below).
+  - **Automation:** the plug-in schedule (below).
+  - **Settings:** controls for Plugged In, max current, a power override and
+    a test SoC; auto re-plug; and your power, SoC and car plugged in sensors
+    and auto plug-in, with live values (power source, reporting SoC,
+    monitored SoC) and the add-on's Home Assistant entities.
   - **Health:** version, uptime, reconnects and the last drop's reason,
     heartbeat and clock offset, the Home Assistant link, and any held messages.
 - **Quieter logs.** OCPP messages are logged at `info`, except Heartbeats
@@ -158,7 +158,7 @@ register when migrating from a real charger.
 
 ## Step 2: Pick your sensors (optional)
 
-On the add-on's web page (sidebar), open the **Simulation** tab to pick your
+On the add-on's web page (sidebar), open the **Settings** tab to pick your
 power, SoC and car plugged in sensors and set up auto plug-in.
 
 ### Upgrading from 1.x (with the integration)
@@ -167,15 +167,15 @@ power, SoC and car plugged in sensors and set up auto plug-in.
    Proxy > Delete**, then remove it from HACS
 2. Restart the add-on. It creates its own entities. `sensor.ocpp_charge_proxy_energy`
    keeps the same entity ID, so its Energy dashboard history carries on
-3. Pick your sensors again on the **Simulation** tab
+3. Pick your sensors again on the **Settings** tab
 4. Update automations that used `switch.ocpp_charge_proxy_plugged_in` to use
    `input_boolean.ocpp_charge_proxy_plugged_in`. The charger state and other
    details are now on the add-on's web page
 
 Until the integration is removed, the add-on leaves the sensors alone (its
-Simulation tab says so).
+Settings tab says so).
 
-### Simulation tab options
+### Settings tab options
 
 All optional. Choose "None" to stop using a sensor.
 

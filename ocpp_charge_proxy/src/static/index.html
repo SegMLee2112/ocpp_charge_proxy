@@ -99,6 +99,7 @@
   .seg button { font: inherit; border: 0; background: none; color: var(--text); padding: 6px 11px; cursor: pointer; }
   .seg button + button { border-left: 1px solid var(--divider); }
   .seg button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
+  .section-title { font-size: 13px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 -4px; }
   .picker { display: block; width: 100%; min-width: 0; }
   .picker select, .picker input { width: 100%; max-width: 100%; }
   .seg.days button { padding: 6px 9px; min-width: 30px; }
@@ -172,8 +173,8 @@
     <button role="tab" data-tab="sessions">Sessions</button>
     <button role="tab" data-tab="messages">Messages</button>
     <button role="tab" data-tab="provider">Provider</button>
-    <button role="tab" data-tab="simulation">Simulation</button>
     <button role="tab" data-tab="automation">Automation</button>
+    <button role="tab" data-tab="settings">Settings</button>
     <button role="tab" data-tab="health">Health</button>
   </nav>
 </header>
@@ -207,30 +208,6 @@
     </div>
 
     <div class="grid">
-      <div class="card">
-        <h2>Controls</h2>
-        <div class="row">
-          <div class="grow"><div>Plugged In</div><div class="note" style="margin:0">Simulate the car's cable</div></div>
-          <label class="switch"><input type="checkbox" id="c-plug" aria-label="Plugged In"><span></span></label>
-        </div>
-        <div class="row">
-          <div class="grow"><div>Max current</div><div class="note" style="margin:0">Your provider can lower it, not raise it</div></div>
-        </div>
-        <div class="row" style="margin-top:6px"><div class="seg" id="c-amps" role="group" aria-label="Max current"></div></div>
-        <div class="row">
-          <div class="grow"><div>Power override</div><div class="note" style="margin:0" id="c-power-note">Report this power instead of the simulation</div></div>
-          <span class="ctl"><input type="number" id="c-power" min="0" max="22" step="0.1" placeholder="kW" aria-label="Power override in kW">
-          <button class="btn small" id="c-power-set">Set</button>
-          <button class="btn small" id="c-power-clear">Clear</button></span>
-        </div>
-        <div class="row">
-          <div class="grow"><div>SoC</div><div class="note" style="margin:0" id="c-soc-note">Test value reported to your provider</div></div>
-          <span class="ctl"><input type="number" id="c-soc" min="0" max="100" step="1" placeholder="%" aria-label="SoC in percent">
-          <button class="btn small" id="c-soc-set">Set</button>
-          <button class="btn small" id="c-soc-clear">Clear</button></span>
-        </div>
-      </div>
-
       <div class="card">
         <h2>Current session</h2>
         <div id="o-session"><div class="empty">No session</div></div>
@@ -318,8 +295,71 @@
     </div>
   </section>
 
-  <!-- ============ Simulation ============ -->
-  <section id="tab-simulation" class="stack" hidden>
+  <!-- ============ Automation ============ -->
+  <section id="tab-automation" class="stack" hidden>
+    <div class="card">
+      <h2>Schedule<span class="spacer"></span>
+        <span class="muted" style="font-size:13px;font-weight:400">On</span>
+        <label class="switch"><input type="checkbox" id="a-sched-on" aria-label="Schedule on"><span></span></label>
+      </h2>
+      <div class="sub" id="a-next" style="margin-bottom:12px"></div>
+      <div id="a-entries"></div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn small" id="a-add">+ Add a time</button>
+        <span class="grow"></span>
+        <span class="muted" id="a-dirty" style="font-size:12px"></span>
+        <button class="btn small" id="a-discard" disabled>Discard</button>
+        <button class="btn small primary" id="a-save" disabled>Save</button>
+      </div>
+      <div class="note" id="a-tz"></div>
+    </div>
+  </section>
+
+  <!-- ============ Settings ============ -->
+  <section id="tab-settings" class="stack" hidden>
+    <div class="grid">
+      <div class="card">
+        <h2>Controls</h2>
+        <div class="row">
+          <div class="grow"><div>Plugged In</div><div class="note" style="margin:0">Simulate the car's cable</div></div>
+          <label class="switch"><input type="checkbox" id="c-plug" aria-label="Plugged In"><span></span></label>
+        </div>
+        <div class="row">
+          <div class="grow"><div>Max current</div><div class="note" style="margin:0">Your provider can lower it, not raise it</div></div>
+        </div>
+        <div class="row" style="margin-top:6px"><div class="seg" id="c-amps" role="group" aria-label="Max current"></div></div>
+        <div class="row">
+          <div class="grow"><div>Power override</div><div class="note" style="margin:0" id="c-power-note">Report this power instead of the simulation</div></div>
+          <span class="ctl"><input type="number" id="c-power" min="0" max="22" step="0.1" placeholder="kW" aria-label="Power override in kW">
+          <button class="btn small" id="c-power-set">Set</button>
+          <button class="btn small" id="c-power-clear">Clear</button></span>
+        </div>
+        <div class="row">
+          <div class="grow"><div>SoC</div><div class="note" style="margin:0" id="c-soc-note">Test value reported to your provider</div></div>
+          <span class="ctl"><input type="number" id="c-soc" min="0" max="100" step="1" placeholder="%" aria-label="SoC in percent">
+          <button class="btn small" id="c-soc-set">Set</button>
+          <button class="btn small" id="c-soc-clear">Clear</button></span>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Auto re-plug<span class="spacer"></span>
+          <label class="switch"><input type="checkbox" id="a-rp-on" aria-label="Auto re-plug on"><span></span></label>
+        </h2>
+        <div id="a-rp-status" style="margin-bottom:12px"></div>
+        <div class="row">
+          <div class="grow">Re-plug after<div class="note" style="margin:0">Minutes plugged in with no session</div></div>
+          <span class="ctl"><input type="number" id="a-rp-after" min="1" max="240" step="1" aria-label="Re-plug after minutes"> min</span>
+        </div>
+        <div class="row">
+          <div class="grow">Tries<div class="note" style="margin:0">Before giving up until the car is next unplugged</div></div>
+          <span class="ctl"><input type="number" id="a-rp-tries" min="0" max="20" step="1" aria-label="Re-plug tries"></span>
+        </div>
+        <div class="row" style="justify-content:flex-end"><button class="btn small primary" id="a-rp-save">Save</button></div>
+        <div class="note">If your provider hasn't started a session this long after Plugged In turns on, the add-on unplugs for 30 seconds and plugs back in.
+          <span id="a-rp-option"></span></div>
+      </div>
+    </div>
+    <div class="section-title">Home Assistant and your sensors</div>
     <div class="card" id="sim-link"></div>
     <div class="card">
       <h2>Home Assistant entities</h2>
@@ -365,43 +405,6 @@
         <button class="btn small" id="sim-discard" disabled>Discard</button>
         <button class="btn small primary" id="sim-save" disabled>Save</button>
       </div>
-    </div>
-  </section>
-
-  <!-- ============ Automation ============ -->
-  <section id="tab-automation" class="stack" hidden>
-    <div class="card">
-      <h2>Schedule<span class="spacer"></span>
-        <span class="muted" style="font-size:13px;font-weight:400">On</span>
-        <label class="switch"><input type="checkbox" id="a-sched-on" aria-label="Schedule on"><span></span></label>
-      </h2>
-      <div class="sub" id="a-next" style="margin-bottom:12px"></div>
-      <div id="a-entries"></div>
-      <div class="row" style="margin-top:12px">
-        <button class="btn small" id="a-add">+ Add a time</button>
-        <span class="grow"></span>
-        <span class="muted" id="a-dirty" style="font-size:12px"></span>
-        <button class="btn small" id="a-discard" disabled>Discard</button>
-        <button class="btn small primary" id="a-save" disabled>Save</button>
-      </div>
-      <div class="note" id="a-tz"></div>
-    </div>
-    <div class="card">
-      <h2>Auto re-plug<span class="spacer"></span>
-        <label class="switch"><input type="checkbox" id="a-rp-on" aria-label="Auto re-plug on"><span></span></label>
-      </h2>
-      <div id="a-rp-status" style="margin-bottom:12px"></div>
-      <div class="row">
-        <div class="grow">Re-plug after<div class="note" style="margin:0">Minutes plugged in with no session</div></div>
-        <span class="ctl"><input type="number" id="a-rp-after" min="1" max="240" step="1" aria-label="Re-plug after minutes"> min</span>
-      </div>
-      <div class="row">
-        <div class="grow">Tries<div class="note" style="margin:0">Before giving up until the car is next unplugged</div></div>
-        <span class="ctl"><input type="number" id="a-rp-tries" min="0" max="20" step="1" aria-label="Re-plug tries"></span>
-      </div>
-      <div class="row" style="justify-content:flex-end"><button class="btn small primary" id="a-rp-save">Save</button></div>
-      <div class="note">If your provider hasn't started a session this long after Plugged In turns on, the add-on unplugs for 30 seconds and plugs back in.
-        <span id="a-rp-option"></span></div>
     </div>
   </section>
 
@@ -510,6 +513,7 @@ async function post(path, body) {
 
 // ---------- tabs ----------
 function showTab(name) {
+  if (name === 'simulation') name = 'settings';
   if (!document.getElementById('tab-' + name)) name = 'overview';
   activeTab = name;
   document.querySelectorAll('#tabs button').forEach((b) => b.setAttribute('aria-selected', b.dataset.tab === name));
@@ -568,7 +572,7 @@ function renderState(s) {
   if (rp.status === 'waiting' && rp.next_replug_at) chips.push(`<span class="chip warn">Re-plug ${hm(rp.next_replug_at)} if no session</span>`);
   if (rp.status === 'replugging') chips.push('<span class="chip warn">Re-plugging…</span>');
   if (rp.status === 'gave_up') chips.push('<span class="chip err">No session — re-plug gave up</span>');
-  if (activeTab === 'automation' && !auto.dirty) drawReplugStatus(rp);
+  if (activeTab === 'settings') drawReplugStatus(rp);
   $('o-chips').innerHTML = chips.join(' ');
 
   $('o-power').textContent = num(s.power_kw, 2) + ' kW';
@@ -946,7 +950,7 @@ function entityLabel(e) {
 }
 function drawPickers() {
   const all = $('sim-all').checked;
-  document.querySelectorAll('#tab-simulation .picker').forEach((span) => {
+  document.querySelectorAll('#tab-settings .picker').forEach((span) => {
     const key = span.dataset.key, domain = span.dataset.domain;
     const classes = (span.dataset.class || '').split(',').filter(Boolean);
     const units = (span.dataset.units || '').split(',').filter(Boolean);
@@ -1012,11 +1016,11 @@ function drawSimulation() {
       : `<span class="chip">Waiting</span> <span class="muted">re-arms once the SoC is ${m.threshold}% or more</span>`],
   ]);
 }
-$('tab-simulation').addEventListener('change', (ev) => {
+$('tab-settings').addEventListener('change', (ev) => {
   const key = ev.target.dataset.key;
   if (key) { sim.edit[key] = ev.target.value.trim(); simSetDirty(true); }
 });
-$('tab-simulation').addEventListener('input', (ev) => {
+$('tab-settings').addEventListener('input', (ev) => {
   if (ev.target.dataset.key && ev.target.tagName === 'INPUT') { sim.edit[ev.target.dataset.key] = ev.target.value.trim(); simSetDirty(true); }
 });
 $('sim-auto').addEventListener('change', (e) => { sim.edit.auto_plug = e.target.checked; simSetDirty(true); });
@@ -1182,13 +1186,13 @@ function refreshTab(full) {
   else if (activeTab === 'messages') refreshMessages();
   else if (activeTab === 'provider') refreshProvider();
   else if (activeTab === 'automation') refreshAutomation(false);
-  else if (activeTab === 'simulation') refreshSimulation(false);
+  else if (activeTab === 'settings') { refreshAutomation(false); refreshSimulation(false); }
   else if (activeTab === 'health') refreshHealth();
 }
 setInterval(() => {
   if (document.hidden) return;
   if (activeTab === 'messages') refreshMessages();
-  if (activeTab === 'simulation') refreshSimulation(false);
+  if (activeTab === 'settings') refreshSimulation(false);
 }, 2000);
 setInterval(() => { if (!document.hidden) refreshTab(false); }, 10000);
 // keep the chart's history filling in while on other tabs

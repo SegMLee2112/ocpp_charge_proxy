@@ -1,6 +1,6 @@
 """Reads your Home Assistant sensors directly and acts on them.
 
-Set up on the web page's Simulation tab (saved in /data/sensors.json):
+Set up on the web page's Settings tab (saved in /data/sensors.json):
 
 - power_entity:  real power (W or kW) reported instead of the simulation
 - soc_entity:    the car's SoC, reported to the provider (and car full / taper)

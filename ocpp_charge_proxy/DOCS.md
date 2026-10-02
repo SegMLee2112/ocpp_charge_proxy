@@ -50,7 +50,7 @@ rises above 0 and off when it drops back to 0.
 ### Power entity
 
 You can optionally pick a Home Assistant power sensor (W or kW) on the
-add-on's **Simulation** tab. The proxy will report this real power value to your
+add-on's **Settings** tab. The proxy will report this real power value to your
 provider instead of simulating power delivery. The value is capped at what the
 virtual chargepoint could physically deliver at its current setting.
 
@@ -58,7 +58,7 @@ If not configured, the proxy uses a realistic power simulation.
 
 ### SoC sensor for reporting
 
-You can also pick a **SoC sensor** on the Simulation tab, for example from
+You can also pick a **SoC sensor** on the Settings tab, for example from
 your car's own integration, reporting 0–100%. When set:
 
 - The car's state of charge is sent to your provider whenever it asks for
@@ -74,19 +74,17 @@ comes back.
 
 ### Schedule and auto re-plug
 
-On the add-on's **Automation** tab:
-
-- **Schedule:** add as many times as you like, each with a time, the days
+- **Schedule** (**Automation** tab): add as many times as you like, each with a time, the days
   it runs on, and whether it plugs in or unplugs; turn single times or the
   whole schedule on and off. Times are in your Home Assistant time zone. A
   time missed while the add-on was stopped isn't run later. Unplugging
   during a session ends the session.
-- **Auto re-plug:** Octopus sometimes doesn't start a session after you plug
+- **Auto re-plug** (**Settings** tab): Octopus sometimes doesn't start a session after you plug
   in. When Plugged In has been on for `replug_after_min` minutes (default 10)
   with no session and the add-on is connected, it unplugs, waits 30 seconds
   and plugs back in, up to `replug_attempts` times (default 3). It then gives
   up until the car is next unplugged or a session starts, and the wait starts
-  again after each re-plug. Changing the minutes or tries on the Automation
+  again after each re-plug. Changing the minutes or tries on the Settings
   tab is kept until you change the add-on options themselves.
 
 Settings are saved in `/data/automation.json`.
@@ -161,7 +159,7 @@ The add-on creates its own entities (no integration needed):
   services). `sensor.ocpp_charge_proxy_energy` keeps its entity ID, so its
   Energy dashboard history carries on.
 - Your power, SoC and car plugged in sensors and auto plug-in are set up on
-  the web page's **Simulation** tab; the add-on reads them through Home
+  the web page's **Settings** tab; the add-on reads them through Home
   Assistant's API.
 
 ## Web GUI
@@ -169,8 +167,7 @@ The add-on creates its own entities (no integration needed):
 Open the add-on from the sidebar (or **Open Web UI**). It updates live and
 follows your Home Assistant theme.
 
-- **Overview:** state, power, current, SoC and energy; controls for Plugged
-  In, max current, a power override and a test SoC; the current session;
+- **Overview:** state, power, current, SoC and energy; the current session;
   and a chart of power, current (with your max and the provider limit) or
   SoC over the last 30 minutes to 6 hours.
 - **Sessions:** the last 20 charging sessions (energy, duration, peak
@@ -180,10 +177,11 @@ follows your Home Assistant theme.
 - **Provider:** what your provider has set: charging limits, charging
   profiles drawn as a timeline, the local authorisation list and every
   configuration key.
-- **Simulation:** your power, SoC and car plugged in sensors and auto
-  plug-in, with their live values (power source, reporting SoC, monitored
-  SoC).
-- **Automation:** the plug-in schedule and auto re-plug (see below).
+- **Automation:** the plug-in schedule (see below).
+- **Settings:** controls for Plugged In, max current, a power override and a
+  test SoC; auto re-plug (see below); and your power, SoC and car plugged in
+  sensors and auto plug-in, with their live values (power source, reporting
+  SoC, monitored SoC) and the add-on's Home Assistant entities.
 - **Health:** version, uptime, reconnects and the last drop's reason,
   heartbeat and clock offset, the Home Assistant link, and any held messages.
 
