@@ -117,11 +117,15 @@ sensors live through Home Assistant's API.
 
 - A **web GUI** in the Home Assistant sidebar (the add-on's Web UI), live
   over push updates and styled to match your HA theme, light or dark:
+  - **Header:** a status button showing "All good" or the issues that need
+    attention, linking to the Health tab.
   - **Overview:** state, power, current, SoC and energy; the current
-    session; and a chart of power, current (with your max and the provider limit) or
+    session; and a chart (shaded by state, with session start/end marked,
+    kept across restarts) of power, current (with your max and the provider limit) or
     SoC over the last 30 minutes to 6 hours.
-  - **Sessions:** the last 20 charging sessions (energy, duration, peak
-    power, what ended them, transaction ID and ID tag), and plug-ins that
+  - **Sessions:** energy per day for the last 14 days; the last 20 charging
+    sessions (energy, duration, peak power, what ended them, transaction ID
+    and ID tag, with details and the power curve on click), and plug-ins that
     never got a session with the reason, kept across restarts.
   - **Messages:** the last 300 OCPP messages both ways, kept across
     restarts, with a filter, full JSON on click and a Copy button for
@@ -129,7 +133,7 @@ sensors live through Home Assistant's API.
   - **Provider:** what your provider has set: charging limits, charging
     profiles drawn as a timeline, the local authorisation list and every
     configuration key.
-  - **Automation:** the plug-in schedule (below).
+  - **Automation:** the plug-in schedule (below), with a week view.
   - **Settings:** controls for Plugged In, max current, a power override and
     a test SoC; the simulated car's start delay and ramp-up; auto re-plug;
     and your power, SoC and car plugged in sensors and auto plug-in, with

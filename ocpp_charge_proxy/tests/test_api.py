@@ -183,6 +183,7 @@ async def test_gui_endpoints(aiohttp_client, shared_state, mock_commands):
     assert len((await (await client.get("/api/history?since=0")).json())["samples"]) == 1
     assert (await (await client.get("/api/history?since=9999999999")).json())["samples"] == []
     assert (await (await client.get("/api/provider")).json())["configuration"] == []
+    assert (await client.get("/api/energy/daily")).status == 501  # no daily tracker given
     health = await (await client.get("/api/health")).json()
     assert health["version"] == "1.1.0"
     assert health["event_streams"] == {"integration": 0, "gui": 0}

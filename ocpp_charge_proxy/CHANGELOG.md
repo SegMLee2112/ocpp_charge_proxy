@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.1.0
+
+- **Status in the header:** "All good" or the number of issues (not
+  connected to your provider, held messages, Home Assistant link down, old
+  integration still installed, auto re-plug gave up). Click it to open the
+  Health tab, which lists them under "Needs attention".
+- **Phone-friendly tabs:** on narrow screens the tabs show icons with short
+  labels and all fit on screen.
+- **Chart:** shaded by state (charging, paused, waiting for a session), with
+  session start and end marked. The chart's last 6 hours are kept across
+  restarts (`/data/history.json`).
+- **Sessions tab:** an "Energy per day" bar chart for the last 14 days (from
+  the energy meter, kept in `/data/daily_energy.json`), and click any row for
+  its details: start/end, meter readings, average power and its power curve
+  (while within the chart's 6 hours).
+- **Automation tab:** "Your week" shows when the schedule has the car plugged
+  in each day, updating as you edit.
+- **Settings tab:** one "Unsaved changes" bar with Save / Discard for the
+  start-up, re-plug and sensor settings, instead of a Save button on each
+  card. Plugged In, max current and the overrides still apply at once.
+
 ## 2.0.4
 
 - The Home Assistant link and entities status moved from the Settings tab

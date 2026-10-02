@@ -169,7 +169,9 @@ follows your Home Assistant theme.
 - **Overview:** state, power, current, SoC and energy; the current session;
   and a chart of power, current (with your max and the provider limit) or
   SoC over the last 30 minutes to 6 hours.
-- **Sessions:** the last 20 charging sessions (energy, duration, peak
+- **Header:** a status button ("All good" or the number of issues) that
+  opens the Health tab.
+- **Sessions:** energy per day for the last 14 days, and the last 20 charging sessions (energy, duration, peak
   power, what ended them, transaction ID and ID tag), kept across restarts,
   and the last 20 plug-ins that never got a session: when, for how long, who
   plugged in, and whether auto re-plug gave up on it or it was unplugged
@@ -180,7 +182,8 @@ follows your Home Assistant theme.
 - **Provider:** what your provider has set: charging limits, charging
   profiles drawn as a timeline, the local authorisation list and every
   configuration key.
-- **Automation:** the plug-in schedule (see below).
+- **Automation:** the plug-in schedule (see below), with a week view of when
+  it has the car plugged in.
 - **Settings:** controls for Plugged In, max current, a power override and a
   test SoC; auto re-plug (see below); and your power, SoC and car plugged in
   sensors and auto plug-in, with their live values (power source, reporting

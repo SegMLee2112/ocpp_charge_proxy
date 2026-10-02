@@ -62,6 +62,7 @@ def create_api_app(
     app.router.add_get("/api/messages", handle_messages)
     app.router.add_get("/api/sessions", handle_sessions)
     app.router.add_get("/api/history", handle_history)
+    app.router.add_get("/api/energy/daily", handle_energy_daily)
     app.router.add_get("/api/provider", handle_provider)
     app.router.add_get("/api/health", handle_health)
     # Schedule and auto re-plug
@@ -295,6 +296,15 @@ async def handle_history(request: web.Request) -> web.Response:
         {"samples": gui.history.since(_number_param(request, "since", 0)), "now": time.time()},
         dumps=_dumps,
     )
+
+
+async def handle_energy_daily(request: web.Request) -> web.Response:
+    """kWh per day for the last ?days=N days (default 14, max 62)."""
+    gui = request.app["gui"]
+    if gui is None or gui.daily is None:
+        return _gui_unavailable()
+    days = int(min(62, max(1, _number_param(request, "days", 14))))
+    return web.json_response({"days": gui.daily.snapshot(days)}, dumps=_dumps)
 
 
 async def handle_provider(request: web.Request) -> web.Response:

@@ -1,6 +1,6 @@
 import json
 
-from src.gui_data import Health, MessageLog, PowerHistory, SessionLog
+from src.gui_data import DailyEnergy, Health, MessageLog, PowerHistory, SessionLog
 from src.shared_state import SharedState
 
 
@@ -147,4 +147,33 @@ def test_message_log_saves_only_when_changed(tmp_path):
     log.save()
     assert (tmp_path / "messages.json").exists()
     assert MessageLog(data_dir=str(tmp_path / "empty")).since(0) == []
+
+
+def test_chart_history_kept_across_restarts(tmp_path):
+    now = [10_000.0]
+    history = PowerHistory(clock=lambda: now[0], data_dir=str(tmp_path))
+    history.sample(SharedState(power_kw=1.4))
+    history.save()
+    again = PowerHistory(clock=lambda: now[0], data_dir=str(tmp_path))
+    assert [s["power_kw"] for s in again.since(0)] == [1.4]
+    now[0] += 7 * 3600  # older than the chart window: dropped
+    assert PowerHistory(clock=lambda: now[0], data_dir=str(tmp_path)).since(0) == []
+
+
+def test_daily_energy(tmp_path):
+    import datetime
+    day = [datetime.date(2026, 10, 1)]
+    daily = DailyEnergy(str(tmp_path), today=lambda: day[0])
+    daily.update(6600.0)
+    daily.update(6607.5)
+    day[0] = datetime.date(2026, 10, 2)
+    daily.update(6608.0)  # yesterday's last reading starts today
+    daily.update(6610.0)
+    daily.save()
+    again = DailyEnergy(str(tmp_path), today=lambda: day[0])
+    snap = again.snapshot(3)
+    assert [d["date"] for d in snap] == ["2026-09-30", "2026-10-01", "2026-10-02"]
+    assert [d["kwh"] for d in snap] == [0.0, 7.5, 2.5]
+    again.update(0)  # ignored
+    assert again.snapshot(1)[0]["kwh"] == 2.5
 

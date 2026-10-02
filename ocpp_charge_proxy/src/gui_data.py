@@ -325,13 +325,57 @@ class SessionLog:
 # --- Power history for the chart ---------------------------------------------
 
 
+def _write_json(path: str, data) -> None:
+    """Atomic write with a .bak of the previous version."""
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, default=str)
+        f.flush()
+        os.fsync(f.fileno())
+    if os.path.exists(path):
+        os.replace(path, path + ".bak")
+    os.replace(tmp, path)
+
+
+def _read_json(path: str):
+    for p in (path, path + ".bak"):
+        try:
+            with open(p, encoding="utf-8") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            continue
+        except Exception:
+            logger.warning("%s is unreadable", p)
+    return None
+
+
 class PowerHistory:
-    """Samples every HISTORY_SAMPLE_S seconds for the last HISTORY_HOURS hours."""
+    """Samples every HISTORY_SAMPLE_S seconds for the last HISTORY_HOURS hours.
+
+    With a data_dir the samples are kept in history.json across restarts
+    (saved by persist_loop every few minutes and at shutdown).
+    """
 
     def __init__(self, size: int = HISTORY_HOURS * 3600 // HISTORY_SAMPLE_S,
-                 clock: Callable[[], float] = time.time) -> None:
+                 clock: Callable[[], float] = time.time, data_dir: Optional[str] = None) -> None:
         self._samples: deque[dict] = deque(maxlen=size)
         self._clock = clock
+        self._path = os.path.join(data_dir, "history.json") if data_dir else None
+        self._dirty = False
+        if self._path:
+            data = _read_json(self._path)
+            cutoff = self._clock() - HISTORY_HOURS * 3600
+            if isinstance(data, list):
+                self._samples.extend(s for s in data if isinstance(s, dict) and s.get("t", 0) > cutoff)
+
+    def save(self) -> None:
+        if not self._path or not self._dirty:
+            return
+        try:
+            _write_json(self._path, list(self._samples))
+            self._dirty = False
+        except Exception:
+            logger.warning("Could not save the chart history", exc_info=True)
 
     def sample(self, state) -> dict:
         entry = {
@@ -345,10 +389,78 @@ class PowerHistory:
             "state": str(state.state),
         }
         self._samples.append(entry)
+        self._dirty = True
         return entry
 
     def since(self, after: float = 0.0) -> list[dict]:
         return [s for s in self._samples if s["t"] > after]
+
+
+class DailyEnergy:
+    """kWh delivered per day (local time), from the energy register.
+
+    Keeps the register's first and last reading for each day in
+    daily_energy.json (the last DAILY_DAYS days), so the Sessions tab can draw
+    daily bars that survive restarts and aren't limited to the kept sessions.
+    """
+
+    DAILY_DAYS = 62
+
+    def __init__(self, data_dir: Optional[str] = None,
+                 today: Callable[[], datetime.date] = lambda: datetime.datetime.now().astimezone().date()) -> None:
+        self._path = os.path.join(data_dir, "daily_energy.json") if data_dir else None
+        self._today = today
+        self.days: dict[str, list[float]] = {}  # "YYYY-MM-DD" -> [first_kwh, last_kwh]
+        self._dirty = False
+        if self._path:
+            data = _read_json(self._path)
+            if isinstance(data, dict):
+                self.days = {k: v for k, v in data.items() if isinstance(v, list) and len(v) == 2}
+
+    def update(self, energy_kwh: float) -> None:
+        if energy_kwh is None or energy_kwh <= 0:
+            return
+        day = self._today().isoformat()
+        entry = self.days.get(day)
+        if entry is None:
+            # The day starts where the last one ended (charging while the add-on
+            # was stopped can't happen), else at this reading
+            previous = max(self.days) if self.days else None
+            start = self.days[previous][1] if previous and previous < day else energy_kwh
+            self.days[day] = [start, energy_kwh]
+            for old in sorted(self.days)[:-self.DAILY_DAYS]:
+                del self.days[old]
+            self._dirty = True
+        elif energy_kwh != entry[1]:
+            entry[1] = energy_kwh
+            self._dirty = True
+
+    def snapshot(self, days: int = 14) -> list[dict]:
+        today = self._today()
+        out = []
+        for i in range(days - 1, -1, -1):
+            day = (today - datetime.timedelta(days=i)).isoformat()
+            first_last = self.days.get(day)
+            out.append({"date": day, "kwh": round(max(0.0, first_last[1] - first_last[0]), 3) if first_last else 0.0})
+        return out
+
+    def save(self) -> None:
+        if not self._path or not self._dirty:
+            return
+        try:
+            _write_json(self._path, self.days)
+            self._dirty = False
+        except Exception:
+            logger.warning("Could not save daily energy", exc_info=True)
+
+
+async def persist_loop(*stores, interval: float = 300) -> None:
+    """Save the chart history and daily energy every few minutes."""
+    import asyncio
+    while True:
+        await asyncio.sleep(interval)
+        for store in stores:
+            store.save()
 
 
 @dataclass
@@ -360,6 +472,7 @@ class GuiSources:
     sessions: Callable[[], dict]
     provider: Callable[[], dict]
     health: Callable[[], dict]
+    daily: Optional[DailyEnergy] = None
 
 
 async def sample_loop(history: PowerHistory, shared_state, refresh: Optional[Callable[[], None]] = None,
