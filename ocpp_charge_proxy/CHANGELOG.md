@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.7.0
+
+OCPP 1.6 conformance fixes:
+
+- StartTransaction now uses the idTag from RemoteStartTransaction (was a fixed
+  `NoAuthorization`), and StopTransaction uses the session's own idTag (was
+  hard-coded).
+- Start sequence is now Preparing -> StartTransaction -> Charging. Removed the
+  spurious Available / SuspendedEV statuses and the mid-start connector 0 status.
+- A BootNotification requested via TriggerMessage now re-sends the real charger
+  identity (was an empty model and vendor), adopts the heartbeat interval from
+  the reply, and doesn't repeat the boot status sequence.
+- Empty optional fields are no longer sent: BootNotification `iccid`, `imsi`,
+  `meterSerialNumber` (and serial/firmware when blank), StatusNotification
+  `info`, `vendorId`, `vendorErrorCode`, and StopTransaction `transactionData`.
+- Periodic MeterValues now follow `MeterValuesSampledData` (requested measurands,
+  in order; unavailable ones such as SoC skipped) and carry the transactionId
+  whenever a transaction is open, including while paused by a charging profile.
+- Configuration keys the proxy doesn't model (e.g. vendor keys `minSoC`, `maxSoC`,
+  `AuthEnabledOffline`) are still accepted, and are now stored and reported by
+  GetConfiguration.
+
+## 0.6.1
+
+- StopTransaction reason now reflects how the charge ended: `EVDisconnected`
+  when unplugged from Home Assistant, `UnlockCommand` for UnlockConnector,
+  `SoftReset` / `HardReset` for Reset (previously all `Remote`).
+
 ## 0.6.0
 
 - Fix: phantom energy at the start of every charge. The first reading after a

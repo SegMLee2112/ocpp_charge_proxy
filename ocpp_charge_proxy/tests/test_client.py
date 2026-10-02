@@ -394,3 +394,160 @@ def test_unplug_reason_is_ev_disconnected(mock_connection, mock_persistence):
             reason=_Reason.ev_disconnected,
         )
     ) == _Reason.ev_disconnected
+
+
+# --- 0.7.0: OCPP conformance fixes ---
+
+from ocpp.v16.enums import RegistrationStatus as _RegStatus
+
+OCTOPUS_TAG = "ffffffffffffff7f"
+OCTOPUS_SAMPLED = (
+    "Energy.Active.Import.Register,Power.Active.Import,Frequency,Power.Offered,"
+    "Current.Offered,SoC,Energy.Active.Export.Register,Power.Active.Export"
+)
+
+
+def _boot_recorder(interval=10):
+    """cp.call fake: accepts BootNotification, records everything."""
+    sent = []
+
+    async def fake_call(request):
+        sent.append(request)
+        if isinstance(request, _call.BootNotificationPayload):
+            return MagicMock(status=_RegStatus.accepted, interval=interval)
+        if isinstance(request, _call.StartTransactionPayload):
+            return MagicMock(transaction_id=4242)
+        return MagicMock()
+
+    return AsyncMock(side_effect=fake_call), sent
+
+
+def _run(coro):
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
+
+def test_id_tag_echoed_in_start_and_stop(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _call_recorder()
+    cp.state = ChargePointStatus.preparing
+
+    async def scenario():
+        await cp.on_remote_start_transaction(id_tag=OCTOPUS_TAG, connector_id=1)
+        for _ in range(5):
+            await asyncio.sleep(0)
+        await cp._do_stop_transaction()
+
+    _run(scenario())
+    start = [r for r in sent if isinstance(r, _call.StartTransactionPayload)][0]
+    stop = [r for r in sent if isinstance(r, _call.StopTransactionPayload)][0]
+    assert start.id_tag == OCTOPUS_TAG
+    assert stop.id_tag == OCTOPUS_TAG
+    assert stop.transaction_data is None  # no empty list sent
+
+
+def test_start_sequence_is_preparing_to_charging(mock_connection, mock_persistence):
+    """No Available / SuspendedEV / connector-0 statuses during a start."""
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _call_recorder()
+    cp.state = ChargePointStatus.preparing
+    cp._pending_id_tag = OCTOPUS_TAG
+
+    _run(cp._do_start_transaction())
+    statuses = [
+        (r.connector_id, r.status) for r in sent
+        if isinstance(r, _call.StatusNotificationPayload)
+    ]
+    assert statuses == [(1, ChargePointStatus.charging)]
+    # StartTransaction comes before the Charging status
+    kinds = [type(r).__name__ for r in sent]
+    assert kinds.index("StartTransactionPayload") < kinds.index("StatusNotificationPayload")
+
+
+def test_status_notification_has_no_empty_optional_fields(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _call_recorder()
+    _run(cp.send_status())
+    status = sent[0]
+    assert status.info is None and status.vendor_id is None and status.vendor_error_code is None
+
+
+def test_boot_notification_omits_empty_optional_fields(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _boot_recorder()
+    _run(cp.send_boot_notification(model="PLP2-0-2-2", vendor="Wall Box Chargers"))
+    boot = sent[0]
+    assert boot.charge_point_model == "PLP2-0-2-2"
+    assert boot.iccid is None and boot.imsi is None and boot.meter_serial_number is None
+    assert boot.charge_point_serial_number is None  # no serial given -> omitted
+    assert boot.firmware_version is None
+
+
+def test_triggered_boot_notification_resends_real_identity(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _boot_recorder(interval=10)
+    _run(cp.send_boot_notification(
+        model="PLP2-0-2-2", vendor="Wall Box Chargers",
+        serial_number="426759", firmware_version="6.13.6",
+    ))
+    sent.clear()
+    cp.call, sent = _boot_recorder(interval=20)
+
+    _run(cp._handle_triggered_message("BootNotification", 0))
+    assert len(sent) == 1  # just the BootNotification — no boot status sequence
+    boot = sent[0]
+    assert isinstance(boot, _call.BootNotificationPayload)
+    assert boot.charge_point_model == "PLP2-0-2-2"
+    assert boot.charge_point_vendor == "Wall Box Chargers"
+    assert boot.charge_point_serial_number == "426759"
+    assert boot.firmware_version == "6.13.6"
+    assert cp._heartbeat_interval == 20  # interval from the reply adopted
+
+
+def test_periodic_meter_values_follow_sampled_data(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _call_recorder()
+    _run(cp.on_change_configuration(key="MeterValuesSampledData", value=OCTOPUS_SAMPLED))
+
+    # Charging: everything requested that we can supply, in request order, no SoC
+    cp.state = ChargePointStatus.charging
+    cp._charger_sim.start_charging()
+    cp._transaction_id = 4242
+    _run(cp.send_meter_values())
+    mv = [r for r in sent if isinstance(r, _call.MeterValuesPayload)][-1]
+    assert mv.transaction_id == 4242
+    assert [sv["measurand"] for sv in mv.meter_value[0]["sampledValue"]] == [
+        "Energy.Active.Import.Register", "Power.Active.Import", "Frequency",
+        "Power.Offered", "Current.Offered",
+        "Energy.Active.Export.Register", "Power.Active.Export",
+    ]
+    assert all(sv["context"] == "Sample.Periodic" for sv in mv.meter_value[0]["sampledValue"])
+
+    # Idle: no Frequency/Offered values, no transactionId
+    cp.state = ChargePointStatus.available
+    cp._charger_sim.stop_charging()
+    cp._transaction_id = None
+    _run(cp.send_meter_values())
+    mv = [r for r in sent if isinstance(r, _call.MeterValuesPayload)][-1]
+    assert mv.transaction_id is None
+    assert [sv["measurand"] for sv in mv.meter_value[0]["sampledValue"]] == [
+        "Energy.Active.Import.Register", "Power.Active.Import",
+        "Energy.Active.Export.Register", "Power.Active.Export",
+    ]
+
+
+def test_vendor_keys_are_stored_and_reported(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    for key, value in (("minSoC", "25"), ("maxSoC", "97"), ("AuthEnabledOffline", "False")):
+        result = _run(cp.on_change_configuration(key=key, value=value))
+        assert result.status == "Accepted"
+    assert _config_value(cp, "minSoC") == "25"
+    assert _config_value(cp, "maxSoC") == "97"
+    assert _config_value(cp, "AuthEnabledOffline") == "False"
+    # And included in a full GetConfiguration
+    full = _run(cp.on_get_configuration())
+    keys = {k["key"] for k in full.configuration_key}
+    assert {"minSoC", "maxSoC", "AuthEnabledOffline"} <= keys

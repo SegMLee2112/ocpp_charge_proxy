@@ -81,12 +81,22 @@ class ChargePoint(BaseChargePoint):
         self._energy_register_wh: int = persistence.load_energy_register_wh()
         self._transaction_id: Optional[int] = None
         self._transaction_start_energy_wh: int = 0
+        # idTag the server authorised the session with (RemoteStart) — echoed
+        # in StartTransaction and StopTransaction.
+        self._pending_id_tag: Optional[str] = None
+        self._transaction_id_tag: Optional[str] = None
+        # The BootNotification sent at connect, re-sent verbatim if the server
+        # requests one via TriggerMessage.
+        self._boot_request: Optional[call.BootNotificationPayload] = None
         self._last_meter_time: float = time.monotonic()
         self._meter_value_interval: int = 60  # default, updated by ChangeConfiguration
         self._heartbeat_interval: int = 30  # default, set by BootNotification / ChangeConfiguration
         self._heartbeat_interval_changed = asyncio.Event()
         self._clock_aligned_interval: int = 0  # 0 = disabled; set by ChangeConfiguration
         self._aligned_measurands: list[str] = []
+        self._sampled_measurands: list[str] = [
+            "Energy.Active.Import.Register", "Power.Active.Import",
+        ]  # MeterValuesSampledData, updated by ChangeConfiguration
         self._clock_aligned_changed = asyncio.Event()
         self._last_aligned_boundary: Optional[datetime.datetime] = None
         self._server_config: dict[str, str] = {}  # stores config sent by server
@@ -149,17 +159,17 @@ class ChargePoint(BaseChargePoint):
         self, model: str, vendor: str,
         serial_number: str = "", firmware_version: str = "",
     ) -> int:
+        # Optional fields are left out (None is dropped from the message)
+        # rather than sent as empty strings.
         request = call.BootNotificationPayload(
             charge_point_model=model,
             charge_point_vendor=vendor,
-            charge_point_serial_number=serial_number,
-            charge_box_serial_number=serial_number,
-            firmware_version=firmware_version,
+            charge_point_serial_number=serial_number or None,
+            charge_box_serial_number=serial_number or None,
+            firmware_version=firmware_version or None,
             meter_type="Internal NON compliant",
-            meter_serial_number="",
-            iccid="",
-            imsi="",
         )
+        self._boot_request = request
 
         while True:
             response: call_result.BootNotificationPayload = await self.call(request)
@@ -224,9 +234,6 @@ class ChargePoint(BaseChargePoint):
             error_code=ChargePointErrorCode.no_error,
             status=status or self.state,
             timestamp=_now_iso(),
-            info="",
-            vendor_id="",
-            vendor_error_code="",
         )
         await self.call(request)
 
@@ -329,26 +336,20 @@ class ChargePoint(BaseChargePoint):
         await self._apply_profile_state()
         reading = self._take_reading()
 
-        if reading is not None:
-            meter_value = build_charging_meter_values(
-                reading=reading,
-                energy_register_wh=self._energy_register_wh,
-            )
-            request = call.MeterValuesPayload(
-                connector_id=self.connector_id,
-                transaction_id=self._transaction_id,
-                meter_value=meter_value,
-            )
-        else:
-            meter_value = build_idle_meter_values(
-                energy_register_wh=self._energy_register_wh,
-            )
-            request = call.MeterValuesPayload(
-                connector_id=self.connector_id,
-                meter_value=meter_value,
-            )
-
-        await self.call(request)
+        # Only the measurands the server asked for in MeterValuesSampledData;
+        # ones we can't supply (e.g. SoC, or Frequency while idle) are skipped.
+        meter_value = build_meter_values(
+            reading=reading,
+            energy_register_wh=self._energy_register_wh,
+            context="Sample.Periodic",
+            measurands=self._sampled_measurands,
+        )
+        # transactionId whenever a transaction is open (incl. paused by profile)
+        await self.call(call.MeterValuesPayload(
+            connector_id=self.connector_id,
+            transaction_id=self._transaction_id,
+            meter_value=meter_value,
+        ))
 
     async def send_clock_aligned_meter_values(
         self, boundary: Optional[datetime.datetime] = None,
@@ -418,15 +419,10 @@ class ChargePoint(BaseChargePoint):
     async def _do_start_transaction(self) -> None:
         """Start a charging transaction."""
         try:
-            # Send OCPP protocol states but don't update shared_state with
-            # intermediate values (Bug 1 fix) — the API should only see the
-            # final stable state (Charging).
-            self.state = ChargePointStatus.available
-            await self.send_status()
-            await self._send_status_for_connector(0)
-
-            self.state = ChargePointStatus.suspended_ev
-            await self.send_status()
+            # OCPP 1.6 sequence after RemoteStart: (Preparing) -> StartTransaction
+            # -> Charging. No intermediate Available/SuspendedEV, and connector 0
+            # status only belongs at boot.
+            id_tag = self._pending_id_tag or "NoAuthorization"
 
             # Not charging yet: restart the energy interval so idle time
             # before the start isn't counted at charging power.
@@ -435,13 +431,14 @@ class ChargePoint(BaseChargePoint):
             self._transaction_start_energy_wh = self._energy_register_wh
             request = call.StartTransactionPayload(
                 connector_id=self.connector_id,
-                id_tag="NoAuthorization",
+                id_tag=id_tag,
                 meter_start=self._energy_register_wh,
                 timestamp=_now_iso(),
             )
             response: call_result.StartTransactionPayload = await self.call(request)
             self._transaction_id = response.transaction_id
-            logger.info("Transaction started: %s", self._transaction_id)
+            self._transaction_id_tag = id_tag
+            logger.info("Transaction started: %s (idTag %s)", self._transaction_id, id_tag)
 
             # Transition to Charging — now update shared_state atomically
             self.state = ChargePointStatus.charging
@@ -453,6 +450,7 @@ class ChargePoint(BaseChargePoint):
             logger.error("Failed to start transaction", exc_info=True)
             self._charger_sim.stop_charging()
             self._transaction_id = None
+            self._transaction_id_tag = None
             self.state = ChargePointStatus.preparing
             self._shared_state.state = self.state
             self._shared_state.transaction_id = None
@@ -478,11 +476,10 @@ class ChargePoint(BaseChargePoint):
 
             request = call.StopTransactionPayload(
                 transaction_id=transaction_id,
-                id_tag="ffffffffffffff7f",
+                id_tag=self._transaction_id_tag,  # the session's own tag (omitted if unknown)
                 meter_stop=self._energy_register_wh,
                 timestamp=_now_iso(),
                 reason=reason,
-                transaction_data=[],
             )
             response: call_result.StopTransactionPayload = await self.call(request)
             logger.info("Transaction %s stopped, response: %s", transaction_id, response)
@@ -490,6 +487,8 @@ class ChargePoint(BaseChargePoint):
             logger.error("Failed to stop transaction", exc_info=True)
         finally:
             self._transaction_id = None
+            self._transaction_id_tag = None
+            self._pending_id_tag = None
             self._shared_state.transaction_id = None
             self._zero_power_state()
             # Bug 3 fix: use caller-specified final state
@@ -509,6 +508,7 @@ class ChargePoint(BaseChargePoint):
             self._profile_scheduler.set_profile(charging_profile)
 
         self._shared_state.plugged_in = True
+        self._pending_id_tag = id_tag
         asyncio.create_task(self._do_start_transaction())
         return call_result.RemoteStartTransactionPayload(
             status=RemoteStartStopStatus.accepted
@@ -597,6 +597,11 @@ class ChargePoint(BaseChargePoint):
                     status=ConfigurationStatus.rejected
                 )
             self._config_store[key] = (value, False)
+        else:
+            # Keys we don't model (e.g. vendor keys minSoC, maxSoC,
+            # AuthEnabledOffline) are accepted as before, and now stored so
+            # GetConfiguration reports what was set.
+            self._config_store[key] = (value, False)
 
         self._server_config[key] = value
         self._shared_state.server_config = dict(self._server_config)
@@ -605,6 +610,9 @@ class ChargePoint(BaseChargePoint):
             self._set_heartbeat_interval(heartbeat_s)
         elif key == "ClockAlignedDataInterval":
             self._set_clock_aligned_interval(aligned_s)
+        elif key == "MeterValuesSampledData":
+            self._sampled_measurands = [m.strip() for m in value.split(",") if m.strip()]
+            logger.info("Sampled measurands: %s", self._sampled_measurands or "(default)")
         elif key == "MeterValuesAlignedData":
             self._aligned_measurands = [m.strip() for m in value.split(",") if m.strip()]
             logger.info("Clock-aligned measurands: %s", self._aligned_measurands or "(default)")
@@ -713,10 +721,17 @@ class ChargePoint(BaseChargePoint):
             elif message == "Heartbeat":
                 await self.call(call.HeartbeatPayload())
             elif message == "BootNotification":
-                await self.call(call.BootNotificationPayload(
-                    charge_point_model="",
-                    charge_point_vendor="",
-                ))
+                if self._boot_request is None:
+                    logger.warning("Triggered BootNotification before first boot; ignoring")
+                    return
+                # Same identity as at connect. Not a reconnect, so no boot
+                # status sequence — just adopt the interval if accepted.
+                response = await self.call(self._boot_request)
+                if (
+                    response.status == RegistrationStatus.accepted
+                    and response.interval and response.interval > 0
+                ):
+                    self._set_heartbeat_interval(response.interval)
         except Exception:
             logger.warning("Failed to send triggered %s", message, exc_info=True)
 

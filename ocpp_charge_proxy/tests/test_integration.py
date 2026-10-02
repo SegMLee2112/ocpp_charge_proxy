@@ -106,6 +106,7 @@ class MockServer(BaseChargePoint):
     @on(Action.StopTransaction)
     async def on_stop_transaction(self, transaction_id, meter_stop, timestamp, **kw):
         self.last_stop_tx = {
+            "id_tag": kw.get("id_tag"),
             "transaction_id": transaction_id,
             "meter_stop": meter_stop,
             "timestamp": timestamp,
@@ -167,10 +168,10 @@ async def test_full_ocpp_flow(tmp_path):
         assert remote_start_resp.status == RemoteStartStopStatus.accepted
 
         # Wait for the background StartTransaction to arrive at the server
-        # (state transitions: Available -> SuspendedEV -> Charging)
+        # (state transitions: Preparing -> Charging)
         await asyncio.wait_for(server.start_tx_received.wait(), timeout=5)
         assert server.last_start_tx is not None
-        assert server.last_start_tx["id_tag"] == "NoAuthorization"
+        assert server.last_start_tx["id_tag"] == "TEST_TAG"  # echoed from RemoteStart
         assert server.last_start_tx["meter_start"] == 0  # fresh persistence
 
         # The client sets _transaction_id after processing the response in a
@@ -194,6 +195,7 @@ async def test_full_ocpp_flow(tmp_path):
         await asyncio.wait_for(server.stop_tx_received.wait(), timeout=5)
         assert server.last_stop_tx is not None
         assert server.last_stop_tx["transaction_id"] == 42
+        assert server.last_stop_tx["id_tag"] == "TEST_TAG"
         assert server.last_stop_tx["meter_stop"] == 0  # no time elapsed, no energy added
 
     finally:
