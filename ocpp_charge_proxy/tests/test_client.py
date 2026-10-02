@@ -434,6 +434,7 @@ def test_id_tag_echoed_in_start_and_stop(mock_connection, mock_persistence):
     cp = make_cp(mock_connection, mock_persistence)
     cp.call, sent = _call_recorder()
     cp.state = ChargePointStatus.preparing
+    cp._stop_txn_sampled = []  # StopTxnSampledData empty -> no transactionData
 
     async def scenario():
         await cp.on_remote_start_transaction(id_tag=OCTOPUS_TAG, connector_id=1)
@@ -609,3 +610,202 @@ def test_power_override_ignores_simulated_ramp(mock_connection, mock_persistence
     cp._power_override = 7.0
     reading = cp._take_reading()
     assert reading.power_kw == 7.0
+
+
+# --- 0.9.0: holding messages while offline ---
+
+
+def _queue_persistence():
+    """MagicMock persistence that remembers the saved offline queue."""
+    p = MagicMock()
+    p.load_energy_register_wh.return_value = 5000
+    store = {"queue": []}
+    p.load_offline_queue.side_effect = lambda: list(store["queue"])
+    p.save_offline_queue.side_effect = lambda q: store.__setitem__("queue", q)
+    return p, store
+
+
+def _started_cp(mock_connection, persistence):
+    """Online ChargePoint with transaction 4242 charging."""
+    cp = make_cp(mock_connection, persistence)
+    cp.call, sent = _boot_recorder()
+    cp.state = ChargePointStatus.preparing
+    cp._pending_id_tag = OCTOPUS_TAG
+    _run(cp._do_start_transaction())
+    assert cp._transaction_id == 4242
+    return cp, sent
+
+
+def test_offline_messages_held_and_sent_in_order_after_boot(mock_connection):
+    persistence, store = _queue_persistence()
+    cp, sent = _started_cp(mock_connection, persistence)
+    cp.detach()
+    assert not cp.is_online
+    sent.clear()
+
+    _run(cp.send_meter_values())
+    _run(cp.send_meter_values())
+    _run(cp._do_stop_transaction())
+    assert sent == []  # nothing went out while offline
+    assert [e["action"] for e in store["queue"]] == [
+        "MeterValuesPayload", "MeterValuesPayload", "StopTransactionPayload",
+    ]  # persisted in case the add-on restarts before reconnecting
+
+    cp.attach(mock_connection)
+    _run(cp.send_boot_notification(model="M", vendor="V"))
+    kinds = [type(r).__name__ for r in sent]
+    assert kinds[:4] == [
+        "BootNotificationPayload",
+        "MeterValuesPayload", "MeterValuesPayload", "StopTransactionPayload",
+    ]  # held messages first, then statuses
+    assert all(getattr(r, "transaction_id", 4242) == 4242 for r in sent[1:4])
+    assert cp._offline_queue == []
+    assert store["queue"] == []
+
+
+def test_statuses_not_sent_or_held_while_offline(mock_connection):
+    persistence, store = _queue_persistence()
+    cp, sent = _started_cp(mock_connection, persistence)
+    cp.detach()
+    sent.clear()
+    _run(cp.send_status())
+    assert sent == [] and store["queue"] == []
+
+
+def test_idle_meter_values_not_held(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _call_recorder()
+    cp.detach()
+    _run(cp.send_meter_values())
+    assert sent == [] and cp._offline_queue == []
+
+
+def test_connection_drop_mid_send_holds_message(mock_connection):
+    from src.client import ChargePointOffline
+    persistence, store = _queue_persistence()
+    cp, sent = _started_cp(mock_connection, persistence)
+
+    async def dropped(request):
+        raise ChargePointOffline("connection lost")
+
+    cp.call = AsyncMock(side_effect=dropped)
+    _run(cp._do_stop_transaction())
+    assert [e["action"] for e in store["queue"]] == ["StopTransactionPayload"]
+
+
+def test_start_offline_gets_renumbered_when_accepted(mock_connection):
+    persistence, store = _queue_persistence()
+    cp = make_cp(mock_connection, persistence)
+    cp.call, sent = _boot_recorder()
+    cp.detach()
+    cp.state = ChargePointStatus.preparing
+    cp._pending_id_tag = OCTOPUS_TAG
+    _run(cp._do_start_transaction())
+    local_id = cp._transaction_id
+    assert local_id < 0  # provisional until the server answers
+    assert cp.state == ChargePointStatus.charging  # still charges offline
+    _run(cp.send_meter_values())
+    assert store["queue"][1]["payload"]["transaction_id"] == local_id
+
+    cp.attach(mock_connection)
+    _run(cp.send_boot_notification(model="M", vendor="V"))
+    mv = [r for r in sent if isinstance(r, _call.MeterValuesPayload)][0]
+    assert mv.transaction_id == 4242
+    assert cp._transaction_id == 4242
+
+
+def test_held_messages_survive_restart(mock_connection, tmp_path):
+    from src.persistence import Persistence
+    persistence = Persistence(data_dir=str(tmp_path))
+    cp, _ = _started_cp(mock_connection, persistence)
+    cp.detach()
+    _run(cp._do_stop_transaction(reason=_Reason.reboot))
+
+    # New process: queue loaded from disk and sent after boot
+    cp2 = make_cp(None, persistence)
+    cp2.call, sent = _boot_recorder()
+    assert len(cp2._offline_queue) == 1
+    cp2.attach(mock_connection)
+    _run(cp2.send_boot_notification(model="M", vendor="V"))
+    stop = [r for r in sent if isinstance(r, _call.StopTransactionPayload)][0]
+    assert stop.transaction_id == 4242
+    assert stop.reason == "Reboot"
+    assert stop.id_tag == OCTOPUS_TAG
+    assert Persistence(data_dir=str(tmp_path)).load_offline_queue() == []
+
+
+def test_offline_queue_cap_drops_meter_values_not_start_stop(mock_connection, monkeypatch):
+    import src.client as client_mod
+    monkeypatch.setattr(client_mod, "OFFLINE_QUEUE_MAX", 3)
+    persistence, store = _queue_persistence()
+    cp, _ = _started_cp(mock_connection, persistence)
+    cp.detach()
+    for _ in range(5):
+        _run(cp.send_meter_values())
+    _run(cp._do_stop_transaction())
+    kinds = [e["action"] for e in cp._offline_queue]
+    assert len(kinds) == 3
+    assert kinds[-1] == "StopTransactionPayload"
+
+
+# --- 0.9.0: StopTransaction transactionData ---
+
+
+def test_stop_transaction_includes_transaction_data(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _boot_recorder()
+    cp.state = ChargePointStatus.preparing
+    cp._pending_id_tag = OCTOPUS_TAG
+    _run(cp._do_start_transaction())
+    _run(cp.send_meter_values())
+    _run(cp.send_meter_values())
+    _run(cp._do_stop_transaction())
+    stop = [r for r in sent if isinstance(r, _call.StopTransactionPayload)][0]
+    contexts = [mv["sampledValue"][0]["context"] for mv in stop.transaction_data]
+    assert contexts == [
+        "Transaction.Begin", "Sample.Periodic", "Sample.Periodic", "Transaction.End",
+    ]
+    measurands = {sv["measurand"] for mv in stop.transaction_data for sv in mv["sampledValue"]}
+    assert measurands == {"Energy.Active.Import.Register"}  # StopTxnSampledData default
+    begin = float(stop.transaction_data[0]["sampledValue"][0]["value"])
+    end = float(stop.transaction_data[-1]["sampledValue"][0]["value"])
+    assert end == stop.meter_stop and begin <= end
+
+
+def test_stop_txn_sampled_and_aligned_data_follow_configuration(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _boot_recorder()
+    _run(cp.on_change_configuration(
+        key="StopTxnSampledData", value="Energy.Active.Import.Register,Power.Active.Import",
+    ))
+    _run(cp.on_change_configuration(key="StopTxnAlignedData", value="Energy.Active.Import.Register"))
+    assert _config_value(cp, "StopTxnSampledData") == "Energy.Active.Import.Register,Power.Active.Import"
+    cp.state = ChargePointStatus.preparing
+    _run(cp._do_start_transaction())
+    _run(cp.send_meter_values())
+    _run(cp.send_clock_aligned_meter_values(_utc(15, 15)))
+    _run(cp._do_stop_transaction())
+    stop = [r for r in sent if isinstance(r, _call.StopTransactionPayload)][0]
+    periodic = [mv for mv in stop.transaction_data if mv["sampledValue"][0]["context"] == "Sample.Periodic"][0]
+    assert [sv["measurand"] for sv in periodic["sampledValue"]] == [
+        "Energy.Active.Import.Register", "Power.Active.Import",
+    ]
+    clock = [mv for mv in stop.transaction_data if mv["sampledValue"][0]["context"] == "Sample.Clock"][0]
+    assert clock["timestamp"] == "2026-10-01T15:15:00Z"
+
+
+def test_transaction_data_thinned_but_keeps_begin_and_end(mock_connection, mock_persistence, monkeypatch):
+    import src.client as client_mod
+    monkeypatch.setattr(client_mod, "STOP_TXN_MAX_READINGS", 10)
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _boot_recorder()
+    cp.state = ChargePointStatus.preparing
+    _run(cp._do_start_transaction())
+    for _ in range(40):
+        _run(cp.send_meter_values())
+    _run(cp._do_stop_transaction())
+    stop = [r for r in sent if isinstance(r, _call.StopTransactionPayload)][0]
+    data = stop.transaction_data
+    assert len(data) <= 10
+    assert data[0]["sampledValue"][0]["context"] == "Transaction.Begin"
+    assert data[-1]["sampledValue"][0]["context"] == "Transaction.End"

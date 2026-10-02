@@ -48,3 +48,10 @@ def test_seed_energy_register_on_fresh_install(tmp_path):
     p = Persistence(data_dir=str(tmp_path))
     assert p.seed_energy_register_wh(500) is True
     assert p.load_energy_register_wh() == 500
+
+
+def test_offline_queue_round_trip(tmp_path):
+    p = Persistence(data_dir=str(tmp_path))
+    assert p.load_offline_queue() == []
+    p.save_offline_queue([{"seq": 1, "action": "StopTransactionPayload", "payload": {"meter_stop": 1}}])
+    assert Persistence(data_dir=str(tmp_path)).load_offline_queue()[0]["payload"]["meter_stop"] == 1

@@ -30,7 +30,12 @@ async def _graceful_shutdown(cp: ChargePoint) -> None:
     """Tell the server we're going away, while the socket is still open."""
     from ocpp.v16.enums import ChargePointStatus as CPS, Reason
 
-    logger.info("Shutting down: notifying OCPP server")
+    online = cp.is_online
+    logger.info(
+        "Shutting down: %s",
+        "notifying OCPP server" if online
+        else "offline, StopTransaction will be held and sent on next connection",
+    )
     if cp._transaction_id is not None:
         try:
             await asyncio.wait_for(
@@ -41,6 +46,8 @@ async def _graceful_shutdown(cp: ChargePoint) -> None:
             )
         except Exception:
             logger.warning("Could not stop transaction during shutdown", exc_info=True)
+    if not cp.is_online:
+        return
     try:
         await asyncio.wait_for(cp.send_status_unavailable(), SHUTDOWN_STATUS_TIMEOUT)
         logger.info("Sent Unavailable status to server")
@@ -155,6 +162,24 @@ async def run() -> None:
         if cp is not None:
             cp._power_override = power_kw
 
+    # One ChargePoint for the life of the process: like a real charger it
+    # keeps charging (and its transaction) across a dropped connection, and
+    # holds transaction messages until it can send them.
+    cp = ChargePoint(
+        id=config.chargepoint_id,
+        connection=None,
+        persistence=persistence,
+        current_amps=config.current_amps,
+        shared_state=shared_state,
+        start_delay_s=config.start_delay_s,
+        ramp_up_s=config.ramp_up_s,
+    )
+    charger_tasks = [
+        asyncio.create_task(cp.meter_values_loop()),
+        asyncio.create_task(cp.clock_aligned_loop()),
+    ]
+    notified_server = False
+
     api_app = create_api_app(shared_state, do_plug, do_unplug, do_set_current, do_set_power)
     runner = web.AppRunner(api_app)
     await runner.setup()
@@ -163,7 +188,6 @@ async def run() -> None:
     logger.info("API server started on port 8099")
 
     attempt = 0
-    cp = None
     try:
       while not stop_event.is_set():
         try:
@@ -173,79 +197,17 @@ async def run() -> None:
             ) as ws:
                 attempt = 0
                 logger.info("Connected to OCPP server")
-
-                cp = ChargePoint(
-                    id=config.chargepoint_id,
-                    connection=ws,
-                    persistence=persistence,
-                    current_amps=config.current_amps,
-                    shared_state=shared_state,
-                    start_delay_s=config.start_delay_s,
-                    ramp_up_s=config.ramp_up_s,
-                )
-
-                # Start message loop first so incoming messages are handled
-                start_task = asyncio.create_task(cp.start())
-
-                # Use configured serial, or generate/load a persistent one
-                serial = config.charger_serial or persistence.load_serial_number()
-
-                boot_task = asyncio.create_task(cp.send_boot_notification(
-                    model=config.charger_model,
-                    vendor=config.charger_vendor,
-                    serial_number=serial,
-                    firmware_version=config.firmware_version,
-                ))
-                await asyncio.wait(
-                    {boot_task, stop_task}, return_when=asyncio.FIRST_COMPLETED,
-                )
-                if not boot_task.done():
-                    # Shutdown requested while still booting
-                    await _cancel_all([boot_task, start_task])
-                    break
+                cp.attach(ws)
                 try:
-                    interval = boot_task.result()
-                except BaseException:
-                    await _cancel_all([start_task])
-                    raise
-
-                tasks = [
-                    start_task,
-                    asyncio.create_task(cp.heartbeat_loop(interval)),
-                    asyncio.create_task(cp.meter_values_loop()),
-                    asyncio.create_task(cp.clock_aligned_loop()),
-                ]
-
-                # Run interactive console when stdin is a terminal
-                if sys.stdin.isatty():
-                    tasks.append(asyncio.create_task(
-                        console_loop(cp, do_plug, do_unplug, do_set_current)
-                    ))
-
-                # Wait until ANY task ends (normally the message loop when the
-                # socket closes), then cancel the rest. asyncio.gather() does
-                # not cancel siblings on failure, which left the old
-                # connection's heartbeat/meter loops running forever after a
-                # reconnect ("Heartbeat cycle failed ... ConnectionClosedOK").
-                try:
-                    done, _ = await asyncio.wait(
-                        [*tasks, stop_task], return_when=asyncio.FIRST_COMPLETED,
+                    await _run_connection(
+                        cp, config, persistence, stop_task,
+                        do_plug, do_unplug, do_set_current,
                     )
-                    if stop_task in done:
-                        # Message loop is still running here, so the server's
-                        # replies to our goodbye messages can be received.
-                        await _graceful_shutdown(cp)
                 finally:
-                    await _cancel_all(tasks)
-
-                if stop_task in done:
+                    cp.detach()
+                if stop_event.is_set():
+                    notified_server = True
                     break
-
-                for t in done:
-                    exc = t.exception()
-                    if exc is not None:
-                        raise exc
-
                 # Message loop returned cleanly — server closed with 1000 (OK).
                 # Treat as a lost connection and reconnect.
                 raise websockets.exceptions.ConnectionClosedOK(None, None)
@@ -255,7 +217,6 @@ async def run() -> None:
             websockets.exceptions.WebSocketException,
             OSError,
         ) as e:
-            cp = None  # prevent stale cp access during reconnection
             shared_state.connected_to_server = False
             backoff = BACKOFF_STEPS[min(attempt, len(BACKOFF_STEPS) - 1)]
             logger.warning(
@@ -267,14 +228,87 @@ async def run() -> None:
                 await asyncio.wait_for(asyncio.shield(stop_task), backoff)
             except asyncio.TimeoutError:
                 pass
+        except _BootCancelled:
+            break
         except SystemExit as e:
             # e.g. BootNotification rejected by the server
             logger.info("Shutting down: %s", e)
             break
+      if stop_event.is_set() and not notified_server:
+          # Stopped while offline: hold the StopTransaction for next time
+          await _graceful_shutdown(cp)
     finally:
         stop_task.cancel()
+        await _cancel_all(charger_tasks)
         await runner.cleanup()
         logger.info("OCPP Charge Proxy stopped")
+
+
+class _BootCancelled(Exception):
+    """Shutdown requested while waiting for BootNotification."""
+
+
+async def _run_connection(cp, config, persistence, stop_task, do_plug, do_unplug, do_set_current) -> None:
+    """Boot and run one websocket connection until it ends or shutdown."""
+    # Start message loop first so incoming messages are handled
+    start_task = asyncio.create_task(cp.start())
+
+    # Use configured serial, or generate/load a persistent one
+    serial = config.charger_serial or persistence.load_serial_number()
+
+    boot_task = asyncio.create_task(cp.send_boot_notification(
+        model=config.charger_model,
+        vendor=config.charger_vendor,
+        serial_number=serial,
+        firmware_version=config.firmware_version,
+    ))
+    await asyncio.wait(
+        {boot_task, stop_task}, return_when=asyncio.FIRST_COMPLETED,
+    )
+    if not boot_task.done():
+        # Shutdown requested while still booting
+        await _cancel_all([boot_task, start_task])
+        raise _BootCancelled()
+    try:
+        interval = boot_task.result()
+    except BaseException:
+        await _cancel_all([start_task])
+        raise
+
+    tasks = [
+        start_task,
+        asyncio.create_task(cp.heartbeat_loop(interval)),
+    ]
+
+    # Run interactive console when stdin is a terminal
+    if sys.stdin.isatty():
+        tasks.append(asyncio.create_task(
+            console_loop(cp, do_plug, do_unplug, do_set_current)
+        ))
+
+    # Wait until ANY task ends (normally the message loop when the
+    # socket closes), then cancel the rest. asyncio.gather() does
+    # not cancel siblings on failure, which left the old
+    # connection's heartbeat/meter loops running forever after a
+    # reconnect ("Heartbeat cycle failed ... ConnectionClosedOK").
+    try:
+        done, _ = await asyncio.wait(
+            [*tasks, stop_task], return_when=asyncio.FIRST_COMPLETED,
+        )
+        if stop_task in done:
+            # Message loop is still running here, so the server's
+            # replies to our goodbye messages can be received.
+            await _graceful_shutdown(cp)
+    finally:
+        await _cancel_all(tasks)
+
+    if stop_task in done:
+        return
+
+    for t in done:
+        exc = t.exception()
+        if exc is not None:
+            raise exc
 
 
 def main():

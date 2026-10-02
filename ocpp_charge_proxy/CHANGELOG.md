@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.9.0
+
+- New: messages are held while offline. If the connection to the OCPP server
+  drops mid-charge, charging carries on (energy register, meter readings,
+  charging profile) and the transaction stays open. StartTransaction,
+  StopTransaction and MeterValues for the transaction are held in order and
+  sent as soon as BootNotification is accepted on reconnect, before the status
+  updates. Like a real charger, StatusNotifications, Heartbeats and idle meter
+  readings are not held; the current status is sent on reconnect instead.
+- Held messages are saved to `/data/offline_queue.json`, so they survive an
+  add-on restart. Stopping the add-on while offline holds the StopTransaction
+  (reason `Reboot`) for the next connection.
+- If a transaction starts while the server is unreachable, it uses a
+  provisional id until StartTransaction is accepted. Held messages for that
+  transaction are then renumbered with the id the server assigns.
+- A call in flight when the connection drops now fails at once and is held,
+  instead of waiting 30s and blocking the next connection's BootNotification.
+- Up to 1,000 messages are held. Beyond that the oldest MeterValues are
+  dropped; StartTransaction and StopTransaction are never dropped.
+- New: StopTransaction `transactionData`. Readings selected by the new
+  `StopTxnSampledData` key (default `Energy.Active.Import.Register`) are taken
+  at the start (`Transaction.Begin`), every `MeterValueSampleInterval`
+  (`Sample.Periodic`) and at the stop (`Transaction.End`), plus
+  `StopTxnAlignedData` (default empty) on clock-aligned boundaries
+  (`Sample.Clock`). The server can change both keys with ChangeConfiguration.
+  The list is capped at 100 readings; beyond that the resolution is halved,
+  and the Begin and End readings are always kept. Set both keys empty to send
+  no transactionData.
+
 ## 0.8.0
 
 - New: realistic charging start. After StartTransaction (or resuming from a

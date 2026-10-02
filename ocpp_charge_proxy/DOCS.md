@@ -68,6 +68,31 @@ If not configured, the proxy uses a realistic power simulation.
 If the connection drops, the add-on automatically reconnects with exponential
 backoff.
 
+### While offline
+
+Like a real charger, a dropped connection doesn't stop the session. Charging,
+the energy register and any charging profile carry on, and the transaction
+stays open. StartTransaction, StopTransaction and the session's MeterValues are
+held in order and sent once the server accepts the BootNotification on
+reconnect. Status updates and heartbeats aren't held; the current status is
+sent after reconnecting instead. Held messages are saved to
+`/data/offline_queue.json`, so they also survive an add-on restart. Up to
+1,000 messages are held, and the oldest meter readings are dropped first.
+
+### StopTransaction readings
+
+StopTransaction includes `transactionData` with the session's readings, as
+real chargers do. Two configuration keys choose what's included, and your
+provider can change them with ChangeConfiguration:
+
+| Key | Default | Readings |
+|-----|---------|----------|
+| `StopTxnSampledData` | `Energy.Active.Import.Register` | At the start, every `MeterValueSampleInterval`, and at the stop |
+| `StopTxnAlignedData` | *(empty)* | On each `ClockAlignedDataInterval` boundary |
+
+Long sessions are thinned to at most 100 readings, and the first and last are
+always kept.
+
 ## Companion Integration
 
 Install the companion integration via HACS to get proper HA entities:

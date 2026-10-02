@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 _ENERGY_FILE = "energy_register.json"
 _SERIAL_FILE = "serial_number.json"
+_QUEUE_FILE = "offline_queue.json"
 
 
 class Persistence:
@@ -28,7 +29,7 @@ class Persistence:
         path = os.path.join(self._data_dir, filename)
         try:
             with open(path, "w") as f:
-                json.dump({key: value}, f)
+                json.dump({key: value}, f, default=str)
         except OSError:
             logger.warning("Failed to write %s", path)
 
@@ -49,6 +50,14 @@ class Persistence:
             return False
         self.save_energy_register_wh(value)
         return True
+
+    def load_offline_queue(self) -> list:
+        """Transaction messages held while offline (see ChargePoint._send_tx)."""
+        queue = self._read(_QUEUE_FILE, "messages", [])
+        return queue if isinstance(queue, list) else []
+
+    def save_offline_queue(self, messages: list) -> None:
+        self._write(_QUEUE_FILE, "messages", messages)
 
     def load_serial_number(self) -> str:
         serial = self._read(_SERIAL_FILE, "serial", "")

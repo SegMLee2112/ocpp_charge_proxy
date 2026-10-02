@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import datetime
+import json
 import logging
 import time
 from typing import Optional
@@ -40,6 +42,32 @@ from src.persistence import Persistence
 from src.shared_state import SharedState
 
 logger = logging.getLogger(__name__)
+
+# Offline message queue: transaction-related messages (StartTransaction,
+# StopTransaction, MeterValues with a transactionId) are held while the server
+# is unreachable and sent in order once BootNotification is accepted again.
+OFFLINE_QUEUE_MAX = 1000  # oldest MeterValues dropped beyond this; Start/Stop never
+# StopTransaction transactionData: beyond this many readings, every other
+# intermediate reading is dropped (keeps the whole session at lower resolution).
+STOP_TXN_MAX_READINGS = 100
+
+
+class ChargePointOffline(Exception):
+    """Raised by ChargePoint.call when there is no live server connection."""
+
+
+_CONNECTION_ERRORS = (
+    ChargePointOffline,
+    websockets.exceptions.ConnectionClosed,
+    OSError,
+    asyncio.TimeoutError,
+)
+
+
+def _payload_to_dict(payload) -> dict:
+    if dataclasses.is_dataclass(payload):
+        return dataclasses.asdict(payload)
+    return dict(vars(payload))
 
 
 def _now_iso() -> str:
@@ -130,6 +158,8 @@ class ChargePoint(BaseChargePoint):
             "MeterValuesSampledData": (
                 "Energy.Active.Import.Register,Power.Active.Import", False
             ),
+            "StopTxnSampledData": ("Energy.Active.Import.Register", False),
+            "StopTxnAlignedData": ("", False),
             "ConnectorPhaseRotation": ("1.RST", True),
             "GetConfigurationMaxKeys": ("50", True),
         }
@@ -138,9 +168,250 @@ class ChargePoint(BaseChargePoint):
             start_delay_s=start_delay_s,
             ramp_up_s=ramp_up_s,
         )
+
+        # --- Offline message queue ---
+        # Built with a live connection (tests, simple use) = already registered.
+        # __main__ builds it with connection=None and calls attach() per socket;
+        # it only counts as online once BootNotification is accepted.
+        self._registered: bool = connection is not None
+        self._inflight_calls: set[asyncio.Future] = set()
+        self._drain_lock = asyncio.Lock()
+        loaded = persistence.load_offline_queue()
+        self._offline_queue: list[dict] = [
+            e for e in (loaded if isinstance(loaded, list) else [])
+            if isinstance(e, dict) and "action" in e and "payload" in e
+        ]
+        for e in self._offline_queue:
+            e["_held"] = True
+        self._last_saved_queue: str = self._queue_json()
+        self._queue_seq: int = max((e.get("seq", 0) for e in self._offline_queue), default=0) + 1
+        self._last_local_tx_id: int = 0
+        if self._offline_queue:
+            logger.info(
+                "Loaded %d held message(s) from a previous run; will send on connect",
+                len(self._offline_queue),
+            )
+
+        # --- StopTransaction transactionData ---
+        self._stop_txn_sampled: list[str] = ["Energy.Active.Import.Register"]
+        self._stop_txn_aligned: list[str] = []
+        self._stop_txn_data: list[dict] = []
         self._profile_scheduler = ChargingProfileScheduler(
             rated_power_w=self._charger_sim.rated_power_kw * 1000
         )
+
+    # --- Connection lifecycle -------------------------------------------
+
+    @property
+    def is_online(self) -> bool:
+        """Connected and BootNotification accepted."""
+        return self._registered and self._connection is not None
+
+    def attach(self, connection) -> None:
+        """Use a new websocket. Not online until BootNotification is accepted."""
+        self._connection = connection
+        self._registered = False
+
+    def detach(self) -> None:
+        """The websocket is gone: go offline and fail any call still waiting."""
+        self._registered = False
+        self._connection = None
+        self._shared_state.connected_to_server = False
+        for task in list(self._inflight_calls):
+            task.cancel()
+        if self._transaction_id is not None:
+            logger.info(
+                "Offline mid-transaction: still charging, holding transaction "
+                "messages until reconnected",
+            )
+
+    async def call(self, payload, *args, **kwargs):
+        """BaseChargePoint.call that fails fast when the connection drops.
+
+        Without this, a call in flight when the socket dies waits the full
+        response timeout while holding the library's call lock, which also
+        blocks the BootNotification on the next connection.
+        """
+        if self._connection is None:
+            raise ChargePointOffline("not connected")
+        task = asyncio.ensure_future(super().call(payload, *args, **kwargs))
+        self._inflight_calls.add(task)
+        try:
+            await asyncio.wait({task})
+        except asyncio.CancelledError:
+            task.cancel()
+            raise
+        finally:
+            self._inflight_calls.discard(task)
+        if task.cancelled():
+            raise ChargePointOffline("connection lost")
+        return task.result()
+
+    # --- Offline message queue ------------------------------------------
+
+    def _queue_json(self) -> str:
+        data = [
+            {k: v for k, v in e.items() if not k.startswith("_")}
+            for e in self._offline_queue
+        ]
+        return json.dumps(data, default=str, sort_keys=True)
+
+    def _save_queue(self) -> None:
+        """Persist the queue if it changed (so held messages survive a restart)."""
+        current = self._queue_json()
+        if current == self._last_saved_queue:
+            return
+        self._persistence.save_offline_queue(json.loads(current))
+        self._last_saved_queue = current
+
+    def _trim_queue(self) -> None:
+        dropped = 0
+        while len(self._offline_queue) > OFFLINE_QUEUE_MAX:
+            idx = next(
+                (i for i, e in enumerate(self._offline_queue)
+                 if e["action"] == "MeterValuesPayload"),
+                None,
+            )
+            if idx is None:
+                break
+            self._offline_queue.pop(idx)
+            dropped += 1
+        if dropped:
+            logger.warning("Offline queue full: dropped %d oldest MeterValues", dropped)
+
+    def _new_local_tx_id(self) -> int:
+        """Provisional (negative) transactionId until the server assigns one."""
+        local = -int(time.time())
+        if self._last_local_tx_id < 0 and local >= self._last_local_tx_id:
+            local = self._last_local_tx_id - 1  # same second: keep ids unique
+        self._last_local_tx_id = local
+        return local
+
+    async def _send_tx(self, request, local_tx_id: Optional[int] = None):
+        """Send a transaction-related message through the ordered queue.
+
+        Returns the server's response, or None if the message is being held
+        until the connection comes back.
+        """
+        entry = {
+            "seq": self._queue_seq,
+            "action": type(request).__name__,
+            "payload": _payload_to_dict(request),
+            "_request": request,
+        }
+        if local_tx_id is not None:
+            entry["local_tx_id"] = local_tx_id
+        self._queue_seq += 1
+        self._offline_queue.append(entry)
+        self._trim_queue()
+        try:
+            if self._registered:
+                await self._drain_queue()
+        finally:
+            self._save_queue()
+        if any(e is entry for e in self._offline_queue):
+            logger.info(
+                "Offline: holding %s (%d message(s) queued)",
+                entry["action"].removesuffix("Payload"), len(self._offline_queue),
+            )
+        return entry.get("_response")
+
+    def _request_from_entry(self, entry: dict):
+        request = entry.get("_request")
+        if request is None:  # loaded from disk
+            request = getattr(call, entry["action"])(**entry["payload"])
+            entry["_request"] = request
+        return request
+
+    def _remap_transaction_id(self, old: int, new) -> None:
+        for e in self._offline_queue:
+            if e["payload"].get("transaction_id") == old:
+                e["payload"]["transaction_id"] = new
+                if e.get("_request") is not None:
+                    e["_request"].transaction_id = new
+        if self._transaction_id == old:
+            self._transaction_id = new
+            self._shared_state.transaction_id = new
+
+    def _drop_transaction(self, local_tx_id: int) -> None:
+        before = len(self._offline_queue)
+        self._offline_queue = [
+            e for e in self._offline_queue
+            if e["payload"].get("transaction_id") != local_tx_id
+        ]
+        if before != len(self._offline_queue):
+            logger.warning(
+                "Dropped %d held message(s) for a transaction the server never accepted",
+                before - len(self._offline_queue),
+            )
+
+    async def _drain_queue(self) -> None:
+        """Send held messages in order while online. Safe to call concurrently."""
+        async with self._drain_lock:
+            sent_held = 0
+            try:
+                while self._offline_queue and self._registered:
+                    entry = self._offline_queue[0]
+                    try:
+                        response = await self.call(self._request_from_entry(entry))
+                    except _CONNECTION_ERRORS as e:
+                        for queued in self._offline_queue:
+                            queued["_held"] = True
+                        logger.info(
+                            "Holding %d message(s) until reconnected (%s)",
+                            len(self._offline_queue), e or type(e).__name__,
+                        )
+                        return
+                    except Exception:
+                        logger.warning(
+                            "Server rejected held %s; dropping it",
+                            entry["action"], exc_info=True,
+                        )
+                        self._offline_queue.pop(0)
+                        if "local_tx_id" in entry:
+                            self._drop_transaction(entry["local_tx_id"])
+                        continue
+                    self._offline_queue.pop(0)
+                    entry["_response"] = response
+                    if entry.get("_held"):
+                        sent_held += 1
+                    if "local_tx_id" in entry:
+                        real_id = getattr(response, "transaction_id", None)
+                        if real_id is None:
+                            self._drop_transaction(entry["local_tx_id"])
+                        else:
+                            self._remap_transaction_id(entry["local_tx_id"], real_id)
+            finally:
+                if sent_held:
+                    logger.info("Sent %d held message(s) after reconnecting", sent_held)
+                self._save_queue()
+
+    # --- StopTransaction transactionData ----------------------------------
+
+    def _record_stop_txn_reading(
+        self,
+        reading: Optional[ChargerReading],
+        measurands: list[str],
+        context: str,
+        timestamp: Optional[str] = None,
+    ) -> None:
+        """Keep a reading for the StopTransaction transactionData."""
+        if self._transaction_id is None or not measurands:
+            return
+        mv = build_meter_values(
+            reading=reading,
+            energy_register_wh=self._energy_register_wh,
+            context=context,
+            measurands=measurands,
+            timestamp=timestamp,
+        )[0]
+        if not mv["sampledValue"]:
+            return
+        self._stop_txn_data.append(mv)
+        if len(self._stop_txn_data) > STOP_TXN_MAX_READINGS:
+            # Halve the resolution, always keeping Transaction.Begin and the latest
+            data = self._stop_txn_data
+            self._stop_txn_data = [data[0], *data[1:-1][1::2], data[-1]]
 
     @property
     def energy_register_kwh(self) -> float:
@@ -182,7 +453,10 @@ class ChargePoint(BaseChargePoint):
             response: call_result.BootNotificationPayload = await self.call(request)
 
             if response.status == RegistrationStatus.accepted:
+                self._registered = True
                 self._shared_state.connected_to_server = True
+                # Messages held while offline go first, oldest first
+                await self._drain_queue()
                 await self._send_status_for_connector(0)
                 await self.send_status()
                 interval = response.interval if response.interval and response.interval > 0 else 30
@@ -215,6 +489,8 @@ class ChargePoint(BaseChargePoint):
                 pass
             try:
                 await self.call(call.HeartbeatPayload())
+                if self._offline_queue:
+                    await self._drain_queue()  # retry anything a timeout held back
             except websockets.exceptions.ConnectionClosed:
                 # Socket is gone — exit so the supervisor reconnects instead of
                 # leaving a zombie loop spamming a dead connection.
@@ -226,23 +502,36 @@ class ChargePoint(BaseChargePoint):
     async def meter_values_loop(self) -> None:
         while True:
             await asyncio.sleep(self._meter_value_interval)
+            # Runs for the life of the charger, online or not: charging and
+            # the energy register carry on while offline.
             try:
                 await self.send_meter_values()
-            except websockets.exceptions.ConnectionClosed:
-                logger.info("Meter values loop stopping: connection closed")
-                raise
+            except _CONNECTION_ERRORS:
+                logger.debug("Meter values not sent: offline")
             except Exception:
                 logger.warning("Meter values cycle failed", exc_info=True)
 
     async def _send_status_for_connector(self, connector_id: int, status: ChargePointStatus | None = None) -> None:
-        """Send StatusNotification for a connector."""
+        """Send StatusNotification for a connector (skipped while offline).
+
+        Status isn't queued: the current status is sent after BootNotification
+        on reconnect instead.
+        """
+        if not self._registered:
+            logger.debug("Offline: not sending StatusNotification")
+            return
         request = call.StatusNotificationPayload(
             connector_id=connector_id,
             error_code=ChargePointErrorCode.no_error,
             status=status or self.state,
             timestamp=_now_iso(),
         )
-        await self.call(request)
+        try:
+            await self.call(request)
+        except _CONNECTION_ERRORS:
+            # A status lost to a dropped connection must never abort what
+            # called it (e.g. the StopTransaction that follows Finishing).
+            logger.debug("StatusNotification not sent: offline")
 
     async def send_status(self) -> None:
         await self._send_status_for_connector(self.connector_id)
@@ -362,12 +651,20 @@ class ChargePoint(BaseChargePoint):
             context="Sample.Periodic",
             measurands=self._sampled_measurands,
         )
+        self._record_stop_txn_reading(
+            reading, self._stop_txn_sampled, "Sample.Periodic",
+            timestamp=meter_value[0]["timestamp"],
+        )
         # transactionId whenever a transaction is open (incl. paused by profile)
-        await self.call(call.MeterValuesPayload(
+        request = call.MeterValuesPayload(
             connector_id=self.connector_id,
             transaction_id=self._transaction_id,
             meter_value=meter_value,
-        ))
+        )
+        if self._transaction_id is not None:
+            await self._send_tx(request)  # held while offline
+        elif self._registered:
+            await self.call(request)  # idle readings aren't held
 
     async def send_clock_aligned_meter_values(
         self, boundary: Optional[datetime.datetime] = None,
@@ -384,14 +681,22 @@ class ChargePoint(BaseChargePoint):
             measurands=self._aligned_measurands,
             timestamp=timestamp,
         )
+        self._record_stop_txn_reading(
+            reading, self._stop_txn_aligned, "Sample.Clock",
+            timestamp=meter_value[0]["timestamp"],
+        )
         kwargs = {}
         if self._transaction_id is not None:
             kwargs["transaction_id"] = self._transaction_id
-        await self.call(call.MeterValuesPayload(
+        request = call.MeterValuesPayload(
             connector_id=self.connector_id,
             meter_value=meter_value,
             **kwargs,
-        ))
+        )
+        if self._transaction_id is not None:
+            await self._send_tx(request)  # held while offline
+        elif self._registered:
+            await self.call(request)  # idle readings aren't held
 
     def _set_clock_aligned_interval(self, seconds: int) -> None:
         self._clock_aligned_interval = seconds
@@ -428,9 +733,8 @@ class ChargePoint(BaseChargePoint):
             self._last_aligned_boundary = boundary
             try:
                 await self.send_clock_aligned_meter_values(boundary)
-            except websockets.exceptions.ConnectionClosed:
-                logger.info("Clock-aligned loop stopping: connection closed")
-                raise
+            except _CONNECTION_ERRORS:
+                logger.debug("Clock-aligned meter values not sent: offline")
             except Exception:
                 logger.warning("Clock-aligned meter values failed", exc_info=True)
 
@@ -447,16 +751,28 @@ class ChargePoint(BaseChargePoint):
             self._checkpoint_energy()
             self._charger_sim.start_charging()
             self._transaction_start_energy_wh = self._energy_register_wh
+            start_ts = _now_iso()
             request = call.StartTransactionPayload(
                 connector_id=self.connector_id,
                 id_tag=id_tag,
                 meter_start=self._energy_register_wh,
-                timestamp=_now_iso(),
+                timestamp=start_ts,
             )
-            response: call_result.StartTransactionPayload = await self.call(request)
-            self._transaction_id = response.transaction_id
+            # Provisional id until the server answers. If the connection is
+            # down, StartTransaction is held and anything sent for this
+            # transaction in the meantime is renumbered once it's accepted.
+            local_tx_id = self._new_local_tx_id()
+            self._transaction_id = local_tx_id
             self._transaction_id_tag = id_tag
-            logger.info("Transaction started: %s (idTag %s)", self._transaction_id, id_tag)
+            self._stop_txn_data = []
+            self._record_stop_txn_reading(
+                None, self._stop_txn_sampled, "Transaction.Begin", timestamp=start_ts,
+            )
+            response = await self._send_tx(request, local_tx_id=local_tx_id)
+            if response is None:
+                logger.info("Transaction started offline (idTag %s); StartTransaction held", id_tag)
+            else:
+                logger.info("Transaction started: %s (idTag %s)", self._transaction_id, id_tag)
 
             # Transition to Charging — now update shared_state atomically
             self.state = ChargePointStatus.charging
@@ -469,6 +785,7 @@ class ChargePoint(BaseChargePoint):
             self._charger_sim.stop_charging()
             self._transaction_id = None
             self._transaction_id_tag = None
+            self._stop_txn_data = []
             self.state = ChargePointStatus.preparing
             self._shared_state.state = self.state
             self._shared_state.transaction_id = None
@@ -485,6 +802,11 @@ class ChargePoint(BaseChargePoint):
             self._checkpoint_energy()
             transaction_id = self._transaction_id
             energy_delivered_kwh = (self._energy_register_wh - self._transaction_start_energy_wh) / 1000.0
+            stop_ts = _now_iso()
+            self._record_stop_txn_reading(
+                None, self._stop_txn_sampled, "Transaction.End", timestamp=stop_ts,
+            )
+            transaction_data = self._stop_txn_data or None  # never an empty list
             self._charger_sim.stop_charging()
             self._profile_scheduler.clear_profile()
 
@@ -496,17 +818,22 @@ class ChargePoint(BaseChargePoint):
                 transaction_id=transaction_id,
                 id_tag=self._transaction_id_tag,  # the session's own tag (omitted if unknown)
                 meter_stop=self._energy_register_wh,
-                timestamp=_now_iso(),
+                timestamp=stop_ts,
                 reason=reason,
+                transaction_data=transaction_data,
             )
-            response: call_result.StopTransactionPayload = await self.call(request)
-            logger.info("Transaction %s stopped, response: %s", transaction_id, response)
+            response = await self._send_tx(request)
+            if response is None:
+                logger.info("Transaction %s stopped offline; StopTransaction held", transaction_id)
+            else:
+                logger.info("Transaction %s stopped, response: %s", transaction_id, response)
         except Exception:
             logger.error("Failed to stop transaction", exc_info=True)
         finally:
             self._transaction_id = None
             self._transaction_id_tag = None
             self._pending_id_tag = None
+            self._stop_txn_data = []
             self._shared_state.transaction_id = None
             self._zero_power_state()
             # Bug 3 fix: use caller-specified final state
@@ -631,6 +958,12 @@ class ChargePoint(BaseChargePoint):
         elif key == "MeterValuesSampledData":
             self._sampled_measurands = [m.strip() for m in value.split(",") if m.strip()]
             logger.info("Sampled measurands: %s", self._sampled_measurands or "(default)")
+        elif key == "StopTxnSampledData":
+            self._stop_txn_sampled = [m.strip() for m in value.split(",") if m.strip()]
+            logger.info("StopTransaction sampled measurands: %s", self._stop_txn_sampled or "(none)")
+        elif key == "StopTxnAlignedData":
+            self._stop_txn_aligned = [m.strip() for m in value.split(",") if m.strip()]
+            logger.info("StopTransaction aligned measurands: %s", self._stop_txn_aligned or "(none)")
         elif key == "MeterValuesAlignedData":
             self._aligned_measurands = [m.strip() for m in value.split(",") if m.strip()]
             logger.info("Clock-aligned measurands: %s", self._aligned_measurands or "(default)")
