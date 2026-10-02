@@ -980,3 +980,23 @@ def test_last_command_error_and_bulky_payloads(mock_connection, mock_persistence
     cp._record_traffic(_json.dumps([4, "s9", "FormationViolation", "bad", {}]), incoming=True)
     assert cp._shared_state.last_command_sent["status"] == "Error: FormationViolation"
     cp._record_traffic("not json", incoming=True)  # never raises
+
+
+def test_online_start_never_exposes_provisional_id(mock_connection, mock_persistence):
+    """While StartTransaction is in flight there's no transactionId yet, then the server's."""
+    cp = make_cp(mock_connection, mock_persistence)
+    seen = []
+
+    async def slow_call(request):
+        if isinstance(request, _call.StartTransactionPayload):
+            seen.append(cp._transaction_id)  # what HA / RemoteStop would see now
+            await asyncio.sleep(0.01)
+            return MagicMock(transaction_id=42)
+        return MagicMock()
+
+    cp.call = AsyncMock(side_effect=slow_call)
+    cp.state = ChargePointStatus.preparing
+    _run(cp._do_start_transaction())
+    assert seen == [None]
+    assert cp._transaction_id == 42
+    assert cp._shared_state.transaction_id == 42

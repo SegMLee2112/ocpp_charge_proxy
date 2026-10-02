@@ -555,13 +555,14 @@ class ChargePoint(BaseChargePoint):
         measurands: list[str],
         context: str,
         timestamp: Optional[str] = None,
+        energy_wh: Optional[int] = None,
     ) -> None:
         """Keep a reading for the StopTransaction transactionData."""
         if self._transaction_id is None or not measurands:
             return
         mv = build_meter_values(
             reading=reading,
-            energy_register_wh=self._energy_register_wh,
+            energy_register_wh=self._energy_register_wh if energy_wh is None else energy_wh,
             context=context,
             measurands=measurands,
             timestamp=timestamp,
@@ -924,22 +925,26 @@ class ChargePoint(BaseChargePoint):
                 meter_start=self._energy_register_wh,
                 timestamp=start_ts,
             )
-            # Provisional id until the server answers. If the connection is
-            # down, StartTransaction is held and anything sent for this
-            # transaction in the meantime is renumbered once it's accepted.
+            # Online, the transactionId is the server's, as before. Only if
+            # StartTransaction is held (offline) does the transaction run on a
+            # provisional id, and messages sent for it are renumbered once the
+            # server accepts the start.
             local_tx_id = self._new_local_tx_id()
-            self._transaction_id = local_tx_id
             self._transaction_id_tag = id_tag
             self._stop_txn_data = []
-            self._record_stop_txn_reading(
-                None, self._stop_txn_sampled, "Transaction.Begin", timestamp=start_ts,
-            )
-            self._save_active_transaction()  # recorded before anything is sent
             response = await self._send_tx(request, local_tx_id=local_tx_id)
             if response is None:
+                if self._transaction_id is None:
+                    self._transaction_id = local_tx_id
                 logger.info("Transaction started offline (idTag %s); StartTransaction held", id_tag)
             else:
+                self._transaction_id = response.transaction_id
                 logger.info("Transaction started: %s (idTag %s)", self._transaction_id, id_tag)
+            self._record_stop_txn_reading(
+                None, self._stop_txn_sampled, "Transaction.Begin", timestamp=start_ts,
+                energy_wh=self._transaction_start_energy_wh,
+            )
+            self._save_active_transaction()
 
             # Transition to Charging — now update shared_state atomically
             self.state = ChargePointStatus.charging
