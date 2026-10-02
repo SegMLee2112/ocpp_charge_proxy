@@ -107,3 +107,42 @@ async def test_get_state_refreshes_live_power(aiohttp_client, shared_state, mock
     resp = await client.get("/api/state")
     assert resp.status == 200
     assert (await resp.json())["power_kw"] == 3.6
+
+
+# --- 0.9.4: SoC and push updates ---
+
+
+@pytest.mark.asyncio
+async def test_post_soc(aiohttp_client, shared_state, mock_commands):
+    received = []
+
+    async def set_soc(soc):
+        received.append(soc)
+
+    app = create_api_app(
+        shared_state,
+        on_plug=mock_commands["plug"],
+        on_unplug=mock_commands["unplug"],
+        on_set_current=mock_commands["set_current"],
+        on_set_soc=set_soc,
+    )
+    client = await aiohttp_client(app)
+    assert (await client.post("/api/soc", json={"soc": 81})).status == 200
+    assert (await client.post("/api/soc", json={"soc": None})).status == 200
+    assert (await client.post("/api/soc", json={"soc": 150})).status == 400
+    assert (await client.post("/api/soc", data="nope")).status == 400
+    assert received == [81.0, None]
+
+
+@pytest.mark.asyncio
+async def test_events_stream_sends_state(client, shared_state):
+    shared_state.state = "Charging"
+    resp = await client.get("/api/events")
+    assert resp.status == 200
+    assert resp.headers["Content-Type"].startswith("text/event-stream")
+    line = b""
+    while not line.startswith(b"data:"):
+        line = await resp.content.readline()
+    import json as _json
+    assert _json.loads(line[5:])["state"] == "Charging"
+    resp.close()

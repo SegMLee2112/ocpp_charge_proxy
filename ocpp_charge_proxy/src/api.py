@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
+import time
 import os
 from pathlib import Path
 from typing import Callable, Awaitable
@@ -20,6 +23,7 @@ def create_api_app(
     on_set_current: Callable[[int], Awaitable[None]],
     on_set_power: Callable[[float | None], Awaitable[None]] | None = None,
     on_refresh: Callable[[], None] | None = None,
+    on_set_soc: Callable[[float | None], Awaitable[None]] | None = None,
 ) -> web.Application:
     app = web.Application()
     app["shared_state"] = shared_state
@@ -28,6 +32,9 @@ def create_api_app(
     app["on_set_current"] = on_set_current
     app["on_set_power"] = on_set_power
     app["on_refresh"] = on_refresh
+    app["on_set_soc"] = on_set_soc
+    app["events_stop"] = asyncio.Event()
+    app.on_shutdown.append(_close_event_streams)
 
     # Ingress serves the status page — use relative path for API calls
     static_dir = Path(__file__).parent / "static"
@@ -38,6 +45,8 @@ def create_api_app(
     app.router.add_post("/api/unplug", handle_unplug)
     app.router.add_post("/api/current", handle_current)
     app.router.add_post("/api/power", handle_power)
+    app.router.add_post("/api/soc", handle_soc)
+    app.router.add_get("/api/events", handle_events)
 
     return app
 
@@ -106,3 +115,93 @@ async def handle_power(request: web.Request) -> web.Response:
         )
     await on_set_power(power_kw)
     return web.json_response({"status": "ok"})
+
+
+async def handle_soc(request: web.Request) -> web.Response:
+    """Car state of charge (%) from the integration; null = unknown / not set."""
+    on_set_soc = request.app["on_set_soc"]
+    if on_set_soc is None:
+        return web.json_response(
+            {"status": "error", "message": "SoC not supported"}, status=501,
+        )
+    try:
+        body = await request.json()
+        soc = body.get("soc")
+        if soc is not None:
+            soc = float(soc)
+            if not 0 <= soc <= 100:
+                raise ValueError("soc must be 0-100")
+    except (ValueError, TypeError, AttributeError, json.JSONDecodeError):
+        return web.json_response(
+            {"status": "error", "message": "Invalid request. Send JSON: {\"soc\": 0-100} or {\"soc\": null}"},
+            status=400,
+        )
+    await on_set_soc(soc)
+    return web.json_response({"status": "ok"})
+
+
+# --- Push updates (Server-Sent Events) -------------------------------------
+
+# Fields that change on every live-power refresh: pushed at most every
+# EVENTS_LIVE_INTERVAL seconds, so HA's recorder isn't flooded. Any other
+# change (state, plug, connection, energy, commands...) is pushed at once.
+_LIVE_FIELDS = {
+    "power_kw", "voltage", "current_a", "frequency_hz", "power_offered_kw",
+    "power_entity_value",
+}
+EVENTS_CHECK_INTERVAL = 1.0
+EVENTS_LIVE_INTERVAL = 10.0
+
+
+def _significant(data: dict) -> dict:
+    return {k: v for k, v in data.items() if k not in _LIVE_FIELDS}
+
+
+def _state_snapshot(app: web.Application) -> dict:
+    on_refresh = app["on_refresh"]
+    if on_refresh is not None:
+        try:
+            on_refresh()
+        except Exception:
+            logger.debug("Live power refresh failed", exc_info=True)
+    return app["shared_state"].to_dict()
+
+
+async def handle_events(request: web.Request) -> web.StreamResponse:
+    """Stream the state to the integration as Server-Sent Events.
+
+    One event straight away, then on every significant change (within ~1s),
+    and at least every EVENTS_LIVE_INTERVAL seconds with live power (which
+    also keeps the connection alive).
+    """
+    app = request.app
+    stop: asyncio.Event = app["events_stop"]
+    resp = web.StreamResponse(headers={
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    })
+    await resp.prepare(request)
+    last_sig = None
+    last_sent = 0.0
+    try:
+        while not stop.is_set():
+            sig = _significant(app["shared_state"].to_dict())
+            now = time.monotonic()
+            if sig != last_sig or now - last_sent >= EVENTS_LIVE_INTERVAL:
+                data = _state_snapshot(app)
+                await resp.write(f"data: {json.dumps(data, default=str)}\n\n".encode())
+                last_sig = _significant(data)
+                last_sent = now
+            try:
+                await asyncio.wait_for(stop.wait(), EVENTS_CHECK_INTERVAL)
+            except asyncio.TimeoutError:
+                pass
+    except (ConnectionResetError, ConnectionError):
+        pass  # integration went away
+    return resp
+
+
+async def _close_event_streams(app: web.Application) -> None:
+    """End open event streams so add-on shutdown isn't held up by them."""
+    app["events_stop"].set()

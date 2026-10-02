@@ -53,6 +53,22 @@ virtual chargepoint could physically deliver at its current setting.
 
 If not configured, the proxy uses a realistic power simulation.
 
+### Car battery (SoC) entity
+
+You can also set a **car battery (SoC) sensor**, for example from your car's
+own integration, reporting 0–100%. When set:
+
+- The car's state of charge is sent to your provider whenever it asks for
+  `SoC` in its meter values (Octopus does), while a car is plugged in.
+- **Car full:** when the sensor reads 100% during a session, the charger
+  reports `SuspendedEV` and stops drawing power, as a real car does when its
+  battery is full. The session stays open; if the SoC drops below 100%,
+  charging resumes. A charging-profile pause (`SuspendedEVSE`) takes priority.
+
+Leave it unset (or clear it) and no SoC is reported and car-full never
+triggers. If the sensor becomes unavailable, SoC reporting pauses until it
+comes back.
+
 ## How it works
 
 1. The add-on connects to your provider's OCPP server via WebSocket
@@ -126,9 +142,23 @@ Install the companion integration via HACS to get proper HA entities:
 
 ### Integration options
 
-In the integration's settings (Configure), you can optionally set a **power
-sensor** entity. This should be a sensor that reports power in watts (W), such
-as your battery charge power or grid demand sensor.
+In the integration's settings (Configure), you can optionally set:
+
+- a **power sensor**, reporting power in watts (W), such as your battery
+  charge power or grid demand sensor;
+- a **car battery (SoC) sensor**, reporting the car's charge in %.
+
+Clear a field to stop using that sensor.
+
+The add-on pushes its state to the integration as it changes, so entities
+update within a second or so (live power every 10s). Changes to the power and
+SoC sensors are sent to the add-on straight away. If push updates aren't
+available (e.g. an older add-on) the integration polls every 10 seconds
+instead.
+
+The add-on's own page (sidebar) shows the connection, state, power, energy,
+car SoC, the current transaction, any held messages and the last command
+received from and sent to your provider.
 
 ## Getting your OCPP credentials
 

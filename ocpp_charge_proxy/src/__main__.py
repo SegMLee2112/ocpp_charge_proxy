@@ -163,6 +163,14 @@ async def run() -> None:
         if cp is not None:
             cp._power_override = power_kw
 
+    async def do_set_soc(soc: float | None):
+        if cp is not None:
+            cp.set_soc(soc)
+            try:
+                await cp._apply_profile_state()  # car full / no longer full
+            except Exception:
+                logger.warning("Failed to apply SoC change", exc_info=True)
+
     # One ChargePoint for the life of the process: like a real charger it
     # keeps charging (and its transaction) across a dropped connection, and
     # holds transaction messages until it can send them.
@@ -184,6 +192,7 @@ async def run() -> None:
     api_app = create_api_app(
         shared_state, do_plug, do_unplug, do_set_current, do_set_power,
         on_refresh=cp.refresh_live_power,
+        on_set_soc=do_set_soc,
     )
     runner = web.AppRunner(api_app)
     await runner.setup()

@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.9.4
+
+- Fix: crash-safe storage. The energy register (and the offline queue,
+  open transaction and serial) is now written to a temp file, flushed to disk
+  and swapped in atomically, with a `.bak` copy of the previous version. A
+  power cut mid-write could previously leave a half-written file, which was
+  read back as 0, resetting the meter for both the provider and the Energy
+  dashboard. If the main file is ever unreadable, the backup is used.
+- New: optional **car battery (SoC) sensor** in the integration's settings,
+  alongside the power sensor. When set, the car's SoC is sent to the provider
+  in meter values (when requested, while a car is plugged in, location `EV`,
+  unit `Percent`). When unset, nothing is reported. Fields can now be cleared
+  to unset a sensor (previously a set power sensor couldn't be removed).
+- New: **car full**. With a SoC sensor set and reading 100% mid-session, the
+  charger reports `SuspendedEV` and stops drawing power, with the session
+  kept open; it resumes charging if the SoC drops below 100%. A
+  charging-profile pause (`SuspendedEVSE`) takes priority. Plugging in an
+  already-full car goes Charging -> SuspendedEV. No SoC sensor = never full.
+- New: **push updates**. The add-on streams its state to the integration
+  (`/api/events`, Server-Sent Events): state, plug, connection and command
+  changes arrive within about a second, and live power every 10s. Power and
+  SoC sensor changes are pushed to the add-on straight away. Polling every
+  10s remains as the fallback (and with older add-ons).
+- Add-on status page now also shows power, energy, car SoC, the transaction,
+  held messages, and the last command received/sent, refreshing every 5s.
+- Tests: two RemoteStart/RemoteStop tests no longer leave a call running
+  after they finish (the "coroutine 'ChargePoint.call' was never awaited"
+  warning), and now also check the start/stop actually happened.
+
 ## 0.9.3
 
 - Live power in Home Assistant. Power, Current and the other live figures were

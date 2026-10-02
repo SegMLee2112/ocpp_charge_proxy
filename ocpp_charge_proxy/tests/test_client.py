@@ -26,6 +26,12 @@ def mock_persistence():
     return p
 
 
+async def _settle(rounds: int = 20) -> None:
+    """Let tasks started by a handler (asyncio.create_task) run to completion."""
+    for _ in range(rounds):
+        await asyncio.sleep(0)
+
+
 def make_cp(connection, persistence):
     cp = ChargePoint(
         id="CP001",
@@ -55,13 +61,18 @@ def test_remote_start_when_available_rejected(mock_connection, mock_persistence)
 def test_remote_start_when_preparing(mock_connection, mock_persistence):
     """RemoteStart accepted when car is plugged in (Preparing state)."""
     cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _call_recorder()
     cp.state = ChargePointStatus.preparing
-    loop = asyncio.new_event_loop()
-    result = loop.run_until_complete(
-        cp.on_remote_start_transaction(id_tag="TAG001", connector_id=1)
-    )
-    loop.close()
+
+    async def scenario():
+        result = await cp.on_remote_start_transaction(id_tag="TAG001", connector_id=1)
+        await _settle()  # let the background StartTransaction finish
+        return result
+
+    result = _run(scenario())
     assert result.status == RemoteStartStopStatus.accepted
+    assert any(isinstance(r, _call.StartTransactionPayload) for r in sent)
+    assert cp.state == ChargePointStatus.charging
 
 
 def test_remote_start_when_already_charging(mock_connection, mock_persistence):
@@ -78,14 +89,19 @@ def test_remote_start_when_already_charging(mock_connection, mock_persistence):
 def test_remote_stop_mismatched_transaction_id_accepted(mock_connection, mock_persistence):
     """Octopus workaround: RemoteStop with a different tx id still stops the only active tx."""
     cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _call_recorder()
     cp._transaction_id = 1790607644
     cp.state = ChargePointStatus.charging
-    loop = asyncio.new_event_loop()
-    result = loop.run_until_complete(
-        cp.on_remote_stop_transaction(transaction_id=1)
-    )
-    loop.close()
+
+    async def scenario():
+        result = await cp.on_remote_stop_transaction(transaction_id=1)
+        await _settle()  # let the background StopTransaction finish
+        return result
+
+    result = _run(scenario())
     assert result.status == RemoteStartStopStatus.accepted
+    stop = [r for r in sent if isinstance(r, _call.StopTransactionPayload)][0]
+    assert stop.transaction_id == 1790607644  # the active one, not the server's 1
 
 
 def test_remote_stop_no_transaction_rejected(mock_connection, mock_persistence):
@@ -1049,3 +1065,114 @@ def test_live_power_uses_power_entity(mock_connection, mock_persistence):
     cp.refresh_live_power()
     assert cp._shared_state.power_kw == 3.3
     assert cp._shared_state.power_source == "entity"
+
+
+# --- 0.9.4: SoC entity and car full ---
+
+
+def _charging_cp(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _boot_recorder()
+    cp.state = ChargePointStatus.preparing
+    _run(cp._do_start_transaction())
+    sent.clear()
+    return cp, sent
+
+
+def _statuses(sent):
+    return [r.status for r in sent if isinstance(r, _call.StatusNotificationPayload)]
+
+
+def test_soc_reported_only_while_car_connected(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _call_recorder()
+    _run(cp.on_change_configuration(key="MeterValuesSampledData", value=OCTOPUS_SAMPLED))
+    cp.set_soc(55)
+    _run(cp.send_meter_values())  # Available: no car, no SoC
+    mv = [r for r in sent if isinstance(r, _call.MeterValuesPayload)][-1]
+    assert "SoC" not in [sv["measurand"] for sv in mv.meter_value[0]["sampledValue"]]
+
+    cp.state = ChargePointStatus.preparing  # car plugged in
+    _run(cp.send_meter_values())
+    mv = [r for r in sent if isinstance(r, _call.MeterValuesPayload)][-1]
+    socs = [sv["value"] for sv in mv.meter_value[0]["sampledValue"] if sv["measurand"] == "SoC"]
+    assert socs == ["55"]
+
+
+def test_no_soc_entity_reports_nothing_and_never_full(mock_connection, mock_persistence):
+    cp, sent = _charging_cp(mock_connection, mock_persistence)
+    _run(cp.on_change_configuration(key="MeterValuesSampledData", value=OCTOPUS_SAMPLED))
+    cp.set_soc(None)
+    assert not cp.car_full
+    _run(cp.send_meter_values())
+    mv = [r for r in sent if isinstance(r, _call.MeterValuesPayload)][-1]
+    assert "SoC" not in [sv["measurand"] for sv in mv.meter_value[0]["sampledValue"]]
+    assert cp.state == ChargePointStatus.charging
+
+
+def test_car_full_suspends_ev_and_resumes_below_100(mock_connection, mock_persistence):
+    cp, sent = _charging_cp(mock_connection, mock_persistence)
+    cp.set_soc(99)
+    _run(cp._apply_profile_state())
+    assert cp.state == ChargePointStatus.charging
+
+    cp.set_soc(100)
+    _run(cp._apply_profile_state())
+    assert cp.state == ChargePointStatus.suspended_ev
+    assert not cp._charger_sim.is_charging
+    assert _statuses(sent) == [ChargePointStatus.suspended_ev]
+    cp.refresh_live_power()
+    assert cp._shared_state.power_kw == 0.0
+    assert cp._transaction_id == 4242  # session stays open
+
+    # No energy while full, even over a long time
+    before = cp._energy_register_wh
+    cp._last_meter_time -= 3600
+    _run(cp.send_meter_values())
+    assert cp._energy_register_wh == before
+
+    cp.set_soc(98)
+    _run(cp._apply_profile_state())
+    assert cp.state == ChargePointStatus.charging
+    assert cp._charger_sim.is_charging
+    assert _statuses(sent)[-1] == ChargePointStatus.charging
+
+
+def test_profile_pause_wins_over_car_full(mock_connection, mock_persistence):
+    cp, sent = _charging_cp(mock_connection, mock_persistence)
+    cp._profile_scheduler.get_current_limit_kw = lambda: 0.0
+    cp._profile_scheduler.set_profile({
+        "chargingProfileId": 1, "stackLevel": 0, "chargingProfilePurpose": "TxProfile",
+        "chargingProfileKind": "Relative",
+        "chargingSchedule": {"chargingRateUnit": "A", "chargingSchedulePeriod": [{"startPeriod": 0, "limit": 0}]},
+    })
+    cp.set_soc(100)
+    _run(cp._apply_profile_state())
+    assert cp.state == ChargePointStatus.suspended_evse
+
+
+def test_plugged_in_already_full_goes_suspended_ev(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _boot_recorder()
+    cp.set_soc(100)
+    cp.state = ChargePointStatus.preparing
+    _run(cp._do_start_transaction())
+    assert _statuses(sent) == [ChargePointStatus.charging, ChargePointStatus.suspended_ev]
+    assert cp.state == ChargePointStatus.suspended_ev
+
+
+def test_soc_clamped_and_shared(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.set_soc(104)
+    assert cp._shared_state.soc_percent == 100.0
+    cp.set_soc(None)
+    assert cp._shared_state.soc_percent is None
+
+
+def test_held_messages_count_in_shared_state(mock_connection):
+    persistence, store = _queue_persistence()
+    cp, _ = _started_cp(mock_connection, persistence)
+    cp.detach()
+    _run(cp.send_meter_values())
+    _run(cp.send_meter_values())
+    assert cp._shared_state.held_messages == 2

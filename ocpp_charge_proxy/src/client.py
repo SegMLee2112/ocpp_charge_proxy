@@ -133,6 +133,7 @@ class ChargePoint(BaseChargePoint):
         self.state = ChargePointStatus.available
         self._persistence = persistence
         self._power_override: Optional[float] = None  # kW, set via API
+        self._soc: Optional[float] = None  # % from the integration's SoC entity
         self._shared_state = shared_state or SharedState()
         self._energy_register_wh: int = persistence.load_energy_register_wh()
         self._shared_state.energy_kwh = self.energy_register_kwh  # never serve 0 before first reading
@@ -212,6 +213,7 @@ class ChargePoint(BaseChargePoint):
         for e in self._offline_queue:
             e["_held"] = True
         self._last_saved_queue: str = self._queue_json()
+        self._shared_state.held_messages = len(self._offline_queue)
         self._queue_seq: int = max((e.get("seq", 0) for e in self._offline_queue), default=0) + 1
         self._last_local_tx_id: int = 0
         if self._offline_queue:
@@ -361,6 +363,7 @@ class ChargePoint(BaseChargePoint):
             return
         self._persistence.save_offline_queue(json.loads(current))
         self._last_saved_queue = current
+        self._shared_state.held_messages = len(self._offline_queue)
 
     def _trim_queue(self) -> None:
         dropped = 0
@@ -566,6 +569,7 @@ class ChargePoint(BaseChargePoint):
             context=context,
             measurands=measurands,
             timestamp=timestamp,
+            soc=self._soc_for_report(),
         )[0]
         if not mv["sampledValue"]:
             return
@@ -704,26 +708,73 @@ class ChargePoint(BaseChargePoint):
             self.connector_id, ChargePointStatus.unavailable,
         )
 
+    # --- SoC and car full ------------------------------------------------
+
+    def set_soc(self, soc: Optional[float]) -> None:
+        """Car's state of charge (%) from the integration, or None if unknown/unset."""
+        if soc is not None:
+            soc = max(0.0, min(100.0, float(soc)))
+        self._soc = soc
+        self._shared_state.soc_percent = soc
+
+    @property
+    def car_full(self) -> bool:
+        """Only ever true with a SoC entity set and reading 100%."""
+        return self._soc is not None and self._soc >= 100.0
+
+    def _soc_for_report(self) -> Optional[float]:
+        """SoC to put in meter values: only while a car is connected."""
+        if self.state in (ChargePointStatus.available, ChargePointStatus.unavailable,
+                          ChargePointStatus.faulted):
+            return None
+        return self._soc
+
     async def _apply_profile_state(self) -> None:
-        """Pause/resume charging according to the active charging profile."""
-        if self._transaction_id is not None and self._profile_scheduler.has_profile:
-            limit_kw = self._profile_scheduler.get_current_limit_kw()
+        """Set Charging / SuspendedEVSE / SuspendedEV for an open transaction.
+
+        SuspendedEVSE: the charging profile allows 0 kW (charger not offering).
+        SuspendedEV:   the car is full (SoC entity at 100%) and stops drawing,
+                       like a real car; charging resumes if SoC drops below 100%.
+        The charger pause wins if both apply, as on a real charger.
+        """
+        if self._transaction_id is None:
+            return
+        if self.state not in (
+            ChargePointStatus.charging,
+            ChargePointStatus.suspended_evse,
+            ChargePointStatus.suspended_ev,
+        ):
+            return
+        limit_kw = (
+            self._profile_scheduler.get_current_limit_kw()
+            if self._profile_scheduler.has_profile else None
+        )
+        if limit_kw is not None and limit_kw <= 0:
+            target = ChargePointStatus.suspended_evse
+        elif self.car_full:
+            target = ChargePointStatus.suspended_ev
+        else:
+            target = ChargePointStatus.charging
+        if target == self.state:
+            return
+
+        self._checkpoint_energy()  # close the energy interval at the change
+        if target == ChargePointStatus.charging:
             if limit_kw is not None:
-                if limit_kw <= 0 and self._charger_sim.is_charging:
-                    logger.info("Profile says pause — suspending charge")
-                    self._checkpoint_energy()  # count energy up to the pause
-                    self._charger_sim.stop_charging()
-                    self.state = ChargePointStatus.suspended_evse
-                    self._shared_state.state = self.state
-                    self._zero_power_state()
-                    await self.send_status()
-                elif limit_kw > 0 and not self._charger_sim.is_charging:
-                    logger.info("Profile says charge at %.1f kW — resuming", limit_kw)
-                    self._checkpoint_energy()  # don't bill the paused time
-                    self._charger_sim.start_charging()
-                    self.state = ChargePointStatus.charging
-                    self._shared_state.state = self.state
-                    await self.send_status()
+                logger.info("Profile says charge at %.1f kW — resuming", limit_kw)
+            else:
+                logger.info("Resuming charge (car no longer full)")
+            self._charger_sim.start_charging()
+        else:
+            if target == ChargePointStatus.suspended_evse:
+                logger.info("Profile says pause — suspending charge")
+            else:
+                logger.info("Car full (SoC %.0f%%) — car stopped drawing power", self._soc)
+            self._charger_sim.stop_charging()
+            self._zero_power_state()
+        self.state = target
+        self._shared_state.state = self.state
+        await self.send_status()
 
     def _checkpoint_energy(self) -> None:
         """Close the current energy interval at a charging state change.
@@ -843,6 +894,7 @@ class ChargePoint(BaseChargePoint):
             energy_register_wh=self._energy_register_wh,
             context="Sample.Periodic",
             measurands=self._sampled_measurands,
+            soc=self._soc_for_report(),
         )
         self._record_stop_txn_reading(
             reading, self._stop_txn_sampled, "Sample.Periodic",
@@ -873,6 +925,7 @@ class ChargePoint(BaseChargePoint):
             context="Sample.Clock",
             measurands=self._aligned_measurands,
             timestamp=timestamp,
+            soc=self._soc_for_report(),
         )
         self._record_stop_txn_reading(
             reading, self._stop_txn_aligned, "Sample.Clock",
@@ -977,6 +1030,8 @@ class ChargePoint(BaseChargePoint):
             self._shared_state.state = self.state
             self._shared_state.transaction_id = self._transaction_id
             await self.send_status()
+            if self.car_full:
+                await self._apply_profile_state()  # plugged in already full
         except Exception:
             # Bug 2 fix: reset to consistent state on failure
             logger.error("Failed to start transaction", exc_info=True)

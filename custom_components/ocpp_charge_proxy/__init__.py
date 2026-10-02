@@ -11,14 +11,15 @@ PLATFORMS = ["sensor", "binary_sensor", "switch", "select"]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up OCPP Charge Proxy from a config entry."""
-    power_entity = entry.options.get("power_entity", "")
     coordinator = OCPPChargeProxyCoordinator(
         hass,
         config_entry=entry,
         api_url=entry.data["api_url"],
-        power_entity=power_entity,
+        power_entity=entry.options.get("power_entity", ""),
+        soc_entity=entry.options.get("soc_entity", ""),
     )
     await coordinator.async_config_entry_first_refresh()
+    coordinator.async_start()  # push updates + entity tracking
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator

@@ -67,6 +67,33 @@
     .state-finishing { color: #ab47bc; }
     .state-unavailable { color: #ef5350; }
     .state-unknown { color: #888; }
+    .details {
+      margin: 40px auto 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 20px 32px;
+      max-width: 640px;
+    }
+    .detail .status-label { margin-bottom: 6px; }
+    .detail-value { font-size: 17px; color: #fff; }
+    .commands {
+      margin: 36px auto 0;
+      max-width: 640px;
+      text-align: left;
+      border-top: 1px solid #333;
+      padding-top: 20px;
+      display: grid;
+      gap: 14px;
+    }
+    .command { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .command-name { color: #fff; font-size: 15px; }
+    .command-meta { color: #888; font-size: 13px; }
+    .muted { color: #666; }
+    .warn { color: #ffa726; }
+    @media (max-width: 480px) {
+      .status-row { flex-direction: column; gap: 28px; }
+      .container { padding: 24px 16px; }
+    }
     .footer {
       margin-top: 48px;
       color: #555;
@@ -97,7 +124,24 @@
         </div>
       </div>
     </div>
-    <div class="footer">Auto-refreshes every 10 seconds</div>
+    <div class="details">
+      <div class="detail"><div class="status-label">Power</div><div class="detail-value" id="power">—</div></div>
+      <div class="detail"><div class="status-label">Energy</div><div class="detail-value" id="energy">—</div></div>
+      <div class="detail"><div class="status-label">Car SoC</div><div class="detail-value" id="soc">—</div></div>
+      <div class="detail"><div class="status-label">Transaction</div><div class="detail-value" id="tx">—</div></div>
+      <div class="detail"><div class="status-label">Held messages</div><div class="detail-value" id="held">—</div></div>
+    </div>
+    <div class="commands">
+      <div class="command">
+        <div><div class="status-label">Last command received</div><div class="command-name" id="rx-name">—</div></div>
+        <div class="command-meta" id="rx-meta"></div>
+      </div>
+      <div class="command">
+        <div><div class="status-label">Last command sent</div><div class="command-name" id="tx-name">—</div></div>
+        <div class="command-meta" id="tx-meta"></div>
+      </div>
+    </div>
+    <div class="footer">Auto-refreshes every 5 seconds</div>
     <div class="error" id="error" style="display:none"></div>
   </div>
 
@@ -130,6 +174,33 @@
         stateEl.textContent = state;
         stateEl.className = STATE_CLASSES[state] || 'state-unknown';
 
+        const set = (id, text, cls) => {
+          const el = document.getElementById(id);
+          el.textContent = text;
+          el.className = (id.endsWith('-name') ? 'command-name' : 'detail-value') + (cls ? ' ' + cls : '');
+        };
+        const power = Number(data.power_kw || 0);
+        set('power', power.toFixed(2) + ' kW' + (data.power_source === 'entity' ? ' (sensor)' : ''));
+        set('energy', Number(data.energy_kwh || 0).toLocaleString(undefined, {maximumFractionDigits: 1}) + ' kWh');
+        if (data.soc_percent === null || data.soc_percent === undefined) {
+          set('soc', 'Not set', 'muted');
+        } else {
+          set('soc', Math.round(data.soc_percent) + '%' + (data.soc_percent >= 100 ? ' (full)' : ''));
+        }
+        set('tx', data.transaction_id === null || data.transaction_id === undefined ? 'None' : String(data.transaction_id),
+            data.transaction_id === null || data.transaction_id === undefined ? 'muted' : '');
+        const held = data.held_messages || 0;
+        set('held', held ? held + ' waiting' : 'None', held ? 'warn' : 'muted');
+
+        const showCommand = (prefix, cmd) => {
+          if (!cmd) { set(prefix + '-name', 'None yet', 'muted'); document.getElementById(prefix + '-meta').textContent = ''; return; }
+          set(prefix + '-name', cmd.action);
+          const when = cmd.timestamp ? new Date(cmd.timestamp).toLocaleTimeString() : '';
+          document.getElementById(prefix + '-meta').textContent = [cmd.status, when].filter(Boolean).join(' · ');
+        };
+        showCommand('rx', data.last_command_received);
+        showCommand('tx', data.last_command_sent);
+
         document.getElementById('error').style.display = 'none';
       } catch (e) {
         document.getElementById('error').textContent = 'Cannot reach add-on API';
@@ -138,7 +209,7 @@
     }
 
     refresh();
-    setInterval(refresh, 10000);
+    setInterval(refresh, 5000);
   </script>
 </body>
 </html>

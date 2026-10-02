@@ -1,7 +1,7 @@
 {
   "domain": "ocpp_charge_proxy",
   "name": "OCPP Charge Proxy",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "documentation": "https://github.com/thewhale21/ocpp_charge_proxy",
   "dependencies": [],
   "codeowners": ["@thewhale21"],

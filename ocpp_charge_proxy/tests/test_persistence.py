@@ -64,3 +64,43 @@ def test_active_transaction_round_trip(tmp_path):
     assert Persistence(data_dir=str(tmp_path)).load_active_transaction()["transaction_id"] == 7
     p.save_active_transaction(None)
     assert p.load_active_transaction() is None
+
+
+# --- 0.9.4: crash-safe writes ---
+
+
+def test_write_is_atomic_and_keeps_backup(tmp_path):
+    p = Persistence(data_dir=str(tmp_path))
+    p.save_energy_register_wh(1000)
+    assert not (tmp_path / "energy_register.json.tmp").exists()
+    assert not (tmp_path / "energy_register.json.bak").exists()  # nothing to back up yet
+    p.save_energy_register_wh(2000)
+    assert p.load_energy_register_wh() == 2000
+    assert '"energy_wh": 1000' in (tmp_path / "energy_register.json.bak").read_text()
+
+
+def test_corrupt_register_falls_back_to_backup_not_zero(tmp_path):
+    """A power cut mid-write must never reset the meter to 0."""
+    p = Persistence(data_dir=str(tmp_path))
+    p.save_energy_register_wh(6612327)
+    p.save_energy_register_wh(6612437)
+    (tmp_path / "energy_register.json").write_text('{"energy_wh": 66')  # torn write
+    assert Persistence(data_dir=str(tmp_path)).load_energy_register_wh() == 6612327
+
+
+def test_missing_main_file_uses_backup(tmp_path):
+    p = Persistence(data_dir=str(tmp_path))
+    p.save_energy_register_wh(10)
+    p.save_energy_register_wh(20)
+    (tmp_path / "energy_register.json").unlink()
+    assert p.load_energy_register_wh() == 10
+
+
+def test_corrupt_main_never_overwrites_good_backup(tmp_path):
+    p = Persistence(data_dir=str(tmp_path))
+    p.save_energy_register_wh(10)
+    p.save_energy_register_wh(20)  # backup = 10
+    (tmp_path / "energy_register.json").write_text("garbage")
+    p.save_energy_register_wh(30)
+    assert '"energy_wh": 10' in (tmp_path / "energy_register.json.bak").read_text()
+    assert p.load_energy_register_wh() == 30

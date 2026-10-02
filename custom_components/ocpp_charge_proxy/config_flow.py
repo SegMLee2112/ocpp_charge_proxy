@@ -24,6 +24,28 @@ from .const import DOMAIN
 logger = logging.getLogger(__name__)
 
 API_PORT = 8099
+
+POWER_SELECTOR = EntitySelector(EntitySelectorConfig(domain="sensor", device_class="power"))
+SOC_SELECTOR = EntitySelector(EntitySelectorConfig(domain="sensor", device_class="battery"))
+
+
+def _entity_fields(power: str = "", soc: str = "") -> dict:
+    """Optional power + SoC entity pickers.
+
+    Pre-filled with suggested_value rather than default, so a picker can be
+    cleared to unset it (with default=..., clearing just restores the old one).
+    """
+    return {
+        vol.Optional("power_entity", description={"suggested_value": power or None}): POWER_SELECTOR,
+        vol.Optional("soc_entity", description={"suggested_value": soc or None}): SOC_SELECTOR,
+    }
+
+
+def _entity_options(user_input: dict) -> dict:
+    return {
+        "power_entity": user_input.get("power_entity") or "",
+        "soc_entity": user_input.get("soc_entity") or "",
+    }
 ADDON_SLUG = "ocpp_charge_proxy"
 SUPERVISOR_ADDONS_URL = "http://supervisor/addons"
 
@@ -138,18 +160,12 @@ class OCPPChargeProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_create_entry(
                 title="OCPP Charge Proxy",
                 data={"api_url": self._discovered_url},
-                options={"power_entity": user_input.get("power_entity", "")},
+                options=_entity_options(user_input),
             )
 
         return self.async_show_form(
             step_id="hassio_confirm",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional("power_entity"): EntitySelector(
-                        EntitySelectorConfig(domain="sensor", device_class="power")
-                    ),
-                }
-            ),
+            data_schema=vol.Schema(_entity_fields()),
             description_placeholders={"url": self._discovered_url},
         )
 
@@ -167,7 +183,7 @@ class OCPPChargeProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(
                     title="OCPP Charge Proxy",
                     data={"api_url": api_url},
-                    options={"power_entity": user_input.get("power_entity", "")},
+                    options=_entity_options(user_input),
                 )
             errors["base"] = "cannot_connect"
 
@@ -190,9 +206,7 @@ class OCPPChargeProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required("api_url", default=default_url): str,
-                    vol.Optional("power_entity"): EntitySelector(
-                        EntitySelectorConfig(domain="sensor", device_class="power")
-                    ),
+                    **_entity_fields(),
                 }
             ),
             errors=errors,
@@ -223,17 +237,14 @@ class OCPPChargeProxyOptionsFlow(_OptionsBase):
     ) -> config_entries.ConfigFlowResult:
         """Manage options."""
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            # A cleared picker is simply missing: store "" so it's unset
+            return self.async_create_entry(title="", data=_entity_options(user_input))
 
-        current = self._config_entry.options.get("power_entity", "")
-
+        options = self._config_entry.options
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional("power_entity", default=current): EntitySelector(
-                        EntitySelectorConfig(domain="sensor", device_class="power")
-                    ),
-                }
-            ),
+            data_schema=vol.Schema(_entity_fields(
+                power=options.get("power_entity", ""),
+                soc=options.get("soc_entity", ""),
+            )),
         )

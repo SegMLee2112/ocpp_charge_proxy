@@ -255,3 +255,25 @@ def test_charger_sim_zero_delay_and_ramp_is_instant():
     sim.start_charging()
     assert sim.ramp_factor() == 1.0
     assert sim.sample().power_kw > 6.5
+
+
+# --- 0.9.4: SoC ---
+
+
+def test_soc_reported_when_requested_and_known():
+    mv = build_meter_values(
+        reading=_make_reading(), energy_register_wh=1, context="Sample.Periodic",
+        measurands=["Energy.Active.Import.Register", "SoC"], soc=79.6,
+    )
+    soc = [sv for sv in mv[0]["sampledValue"] if sv["measurand"] == "SoC"][0]
+    assert soc["value"] == "80"
+    assert soc["unit"] == "Percent"
+    assert soc["location"] == "EV"
+
+
+def test_soc_skipped_without_value():
+    mv = build_meter_values(
+        reading=_make_reading(), energy_register_wh=1, context="Sample.Periodic",
+        measurands=["Energy.Active.Import.Register", "SoC"],
+    )
+    assert [sv["measurand"] for sv in mv[0]["sampledValue"]] == ["Energy.Active.Import.Register"]
