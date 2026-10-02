@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.9.1
+
+- New: transactions interrupted by a power cut or crash are now closed. While
+  a transaction is open it is saved to `/data/active_transaction.json` (id,
+  idTag, last meter reading and its time), updated on every reading. If the
+  add-on starts and finds one still open, it holds a StopTransaction with
+  reason `PowerLoss`, using the last saved reading as `meterStop` and its time
+  as the timestamp, and sends it after the next BootNotification, as a real
+  charger does after losing power. `transactionData` is included when
+  `StopTxnSampledData` was set.
+- A StopTransaction cut off before it could be queued (for example a shutdown
+  that timed out while sending the Finishing status) is now recovered the same
+  way, rather than lost.
+- If the interrupted transaction's StartTransaction was itself still held, the
+  PowerLoss stop is renumbered with the server's id once StartTransaction is
+  accepted. A transaction that already has a held StopTransaction isn't
+  stopped twice.
+- Changed: `StopTxnSampledData` now defaults to empty (was
+  `Energy.Active.Import.Register`), matching Wallbox Pulsar Plus firmware, so
+  StopTransaction only includes `transactionData` once the server sets
+  `StopTxnSampledData` or `StopTxnAlignedData` with ChangeConfiguration.
+
 ## 0.9.0
 
 - New: messages are held while offline. If the connection to the OCPP server

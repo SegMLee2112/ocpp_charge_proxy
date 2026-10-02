@@ -434,7 +434,6 @@ def test_id_tag_echoed_in_start_and_stop(mock_connection, mock_persistence):
     cp = make_cp(mock_connection, mock_persistence)
     cp.call, sent = _call_recorder()
     cp.state = ChargePointStatus.preparing
-    cp._stop_txn_sampled = []  # StopTxnSampledData empty -> no transactionData
 
     async def scenario():
         await cp.on_remote_start_transaction(id_tag=OCTOPUS_TAG, connector_id=1)
@@ -751,9 +750,16 @@ def test_offline_queue_cap_drops_meter_values_not_start_stop(mock_connection, mo
 # --- 0.9.0: StopTransaction transactionData ---
 
 
+def test_stop_txn_data_empty_by_default_like_wallbox(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    assert _config_value(cp, "StopTxnSampledData") == ""
+    assert _config_value(cp, "StopTxnAlignedData") == ""
+
+
 def test_stop_transaction_includes_transaction_data(mock_connection, mock_persistence):
     cp = make_cp(mock_connection, mock_persistence)
     cp.call, sent = _boot_recorder()
+    _run(cp.on_change_configuration(key="StopTxnSampledData", value="Energy.Active.Import.Register"))
     cp.state = ChargePointStatus.preparing
     cp._pending_id_tag = OCTOPUS_TAG
     _run(cp._do_start_transaction())
@@ -766,7 +772,7 @@ def test_stop_transaction_includes_transaction_data(mock_connection, mock_persis
         "Transaction.Begin", "Sample.Periodic", "Sample.Periodic", "Transaction.End",
     ]
     measurands = {sv["measurand"] for mv in stop.transaction_data for sv in mv["sampledValue"]}
-    assert measurands == {"Energy.Active.Import.Register"}  # StopTxnSampledData default
+    assert measurands == {"Energy.Active.Import.Register"}
     begin = float(stop.transaction_data[0]["sampledValue"][0]["value"])
     end = float(stop.transaction_data[-1]["sampledValue"][0]["value"])
     assert end == stop.meter_stop and begin <= end
@@ -799,6 +805,7 @@ def test_transaction_data_thinned_but_keeps_begin_and_end(mock_connection, mock_
     monkeypatch.setattr(client_mod, "STOP_TXN_MAX_READINGS", 10)
     cp = make_cp(mock_connection, mock_persistence)
     cp.call, sent = _boot_recorder()
+    _run(cp.on_change_configuration(key="StopTxnSampledData", value="Energy.Active.Import.Register"))
     cp.state = ChargePointStatus.preparing
     _run(cp._do_start_transaction())
     for _ in range(40):
@@ -809,3 +816,116 @@ def test_transaction_data_thinned_but_keeps_begin_and_end(mock_connection, mock_
     assert len(data) <= 10
     assert data[0]["sampledValue"][0]["context"] == "Transaction.Begin"
     assert data[-1]["sampledValue"][0]["context"] == "Transaction.End"
+
+
+# --- 0.9.1: closing a transaction interrupted by power loss ---
+
+
+def test_power_loss_closes_transaction_on_next_start(mock_connection, tmp_path):
+    from src.persistence import Persistence
+    persistence = Persistence(data_dir=str(tmp_path))
+    cp, _ = _started_cp(mock_connection, persistence)
+    cp._power_override = 7.0
+    cp._last_meter_time -= 3600
+    _run(cp.send_meter_values())  # an hour of charging, then the power goes
+    last_wh = cp._energy_register_wh
+    saved = persistence.load_active_transaction()
+    assert saved["transaction_id"] == 4242 and saved["energy_wh"] == last_wh
+    del cp  # no clean stop
+
+    cp2 = make_cp(None, persistence)
+    assert persistence.load_active_transaction() is None
+    cp2.call, sent = _boot_recorder()
+    cp2.attach(mock_connection)
+    _run(cp2.send_boot_notification(model="M", vendor="V"))
+    kinds = [type(r).__name__ for r in sent]
+    assert kinds[:2] == ["BootNotificationPayload", "StopTransactionPayload"]
+    stop = sent[1]
+    assert stop.reason == "PowerLoss"
+    assert stop.transaction_id == 4242
+    assert stop.meter_stop == last_wh
+    assert stop.id_tag == OCTOPUS_TAG
+    assert stop.timestamp == saved["timestamp"]  # time of the last reading
+    assert stop.transaction_data is None  # StopTxnSampledData empty (Wallbox)
+
+
+def test_power_loss_stop_includes_transaction_data_when_configured(mock_connection, tmp_path):
+    from src.persistence import Persistence
+    persistence = Persistence(data_dir=str(tmp_path))
+    cp = make_cp(mock_connection, persistence)
+    cp.call, _ = _boot_recorder()
+    _run(cp.on_change_configuration(key="StopTxnSampledData", value="Energy.Active.Import.Register"))
+    cp.state = ChargePointStatus.preparing
+    _run(cp._do_start_transaction())
+    _run(cp.send_meter_values())
+
+    cp2 = make_cp(None, persistence)
+    stop = cp2._request_from_entry(cp2._offline_queue[0])
+    contexts = [mv["sampledValue"][0]["context"] for mv in stop.transaction_data]
+    assert contexts == ["Transaction.Begin", "Sample.Periodic", "Transaction.End"]
+
+
+def test_clean_stop_leaves_nothing_to_recover(mock_connection, tmp_path):
+    from src.persistence import Persistence
+    persistence = Persistence(data_dir=str(tmp_path))
+    cp, _ = _started_cp(mock_connection, persistence)
+    _run(cp._do_stop_transaction())
+    assert persistence.load_active_transaction() is None
+    assert make_cp(None, persistence)._offline_queue == []
+
+
+def test_power_loss_after_offline_stop_not_stopped_twice(mock_connection, tmp_path):
+    """Stop already held on disk, but the open-transaction file wasn't cleared."""
+    from src.persistence import Persistence
+    persistence = Persistence(data_dir=str(tmp_path))
+    cp, _ = _started_cp(mock_connection, persistence)
+    saved = persistence.load_active_transaction()
+    cp.detach()
+    _run(cp._do_stop_transaction(reason=_Reason.reboot))
+    persistence.save_active_transaction(saved)  # simulate dying before the clear
+    cp2 = make_cp(None, persistence)
+    assert [e["payload"]["reason"] for e in cp2._offline_queue] == ["Reboot"]
+
+
+def test_power_loss_with_unconfirmed_start_is_renumbered(mock_connection, tmp_path):
+    from src.persistence import Persistence
+    persistence = Persistence(data_dir=str(tmp_path))
+    cp = make_cp(mock_connection, persistence)
+    cp.call, _ = _boot_recorder()
+    cp.detach()
+    cp.state = ChargePointStatus.preparing
+    cp._pending_id_tag = OCTOPUS_TAG
+    _run(cp._do_start_transaction())  # StartTransaction held, provisional id
+
+    cp2 = make_cp(None, persistence)
+    assert [e["action"] for e in cp2._offline_queue] == [
+        "StartTransactionPayload", "StopTransactionPayload",
+    ]
+    cp2.call, sent = _boot_recorder()
+    cp2.attach(mock_connection)
+    _run(cp2.send_boot_notification(model="M", vendor="V"))
+    stop = [r for r in sent if isinstance(r, _call.StopTransactionPayload)][0]
+    assert stop.transaction_id == 4242 and stop.reason == "PowerLoss"
+
+
+def test_stop_cut_off_before_queued_is_recovered(mock_connection, tmp_path):
+    """Shutdown timeout hits during the Finishing status, before StopTransaction."""
+    from src.persistence import Persistence
+    persistence = Persistence(data_dir=str(tmp_path))
+    cp, _ = _started_cp(mock_connection, persistence)
+
+    async def hang(request):
+        await asyncio.Future()
+
+    cp.call = AsyncMock(side_effect=hang)
+
+    async def shutdown():
+        try:
+            await asyncio.wait_for(cp._do_stop_transaction(reason=_Reason.reboot), 0.05)
+        except asyncio.TimeoutError:
+            pass
+
+    _run(shutdown())
+    assert persistence.load_active_transaction()["transaction_id"] == 4242
+    cp2 = make_cp(None, persistence)
+    assert [e["payload"]["reason"] for e in cp2._offline_queue] == ["PowerLoss"]

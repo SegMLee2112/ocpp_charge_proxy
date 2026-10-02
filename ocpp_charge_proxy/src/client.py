@@ -158,7 +158,7 @@ class ChargePoint(BaseChargePoint):
             "MeterValuesSampledData": (
                 "Energy.Active.Import.Register,Power.Active.Import", False
             ),
-            "StopTxnSampledData": ("Energy.Active.Import.Register", False),
+            "StopTxnSampledData": ("", False),
             "StopTxnAlignedData": ("", False),
             "ConnectorPhaseRotation": ("1.RST", True),
             "GetConfigurationMaxKeys": ("50", True),
@@ -193,9 +193,16 @@ class ChargePoint(BaseChargePoint):
             )
 
         # --- StopTransaction transactionData ---
-        self._stop_txn_sampled: list[str] = ["Energy.Active.Import.Register"]
+        # Empty by default, as reported by Wallbox Pulsar Plus firmware
+        # (StopTxnSampledData = StopTxnAlignedData = ""): no transactionData
+        # unless the server asks for it via ChangeConfiguration.
+        self._stop_txn_sampled: list[str] = []
         self._stop_txn_aligned: list[str] = []
         self._stop_txn_data: list[dict] = []
+
+        # A transaction still saved as open means the last run never stopped
+        # it (power cut, crash, SIGKILL): close it the way a real charger does.
+        self._recover_interrupted_transaction()
         self._profile_scheduler = ChargingProfileScheduler(
             rated_power_w=self._charger_sim.rated_power_kw * 1000
         )
@@ -287,12 +294,8 @@ class ChargePoint(BaseChargePoint):
         self._last_local_tx_id = local
         return local
 
-    async def _send_tx(self, request, local_tx_id: Optional[int] = None):
-        """Send a transaction-related message through the ordered queue.
-
-        Returns the server's response, or None if the message is being held
-        until the connection comes back.
-        """
+    def _enqueue(self, request, local_tx_id: Optional[int] = None) -> dict:
+        """Add a transaction message to the end of the ordered queue."""
         entry = {
             "seq": self._queue_seq,
             "action": type(request).__name__,
@@ -304,6 +307,15 @@ class ChargePoint(BaseChargePoint):
         self._queue_seq += 1
         self._offline_queue.append(entry)
         self._trim_queue()
+        return entry
+
+    async def _send_tx(self, request, local_tx_id: Optional[int] = None):
+        """Send a transaction-related message through the ordered queue.
+
+        Returns the server's response, or None if the message is being held
+        until the connection comes back.
+        """
+        entry = self._enqueue(request, local_tx_id)
         try:
             if self._registered:
                 await self._drain_queue()
@@ -332,6 +344,7 @@ class ChargePoint(BaseChargePoint):
         if self._transaction_id == old:
             self._transaction_id = new
             self._shared_state.transaction_id = new
+            self._save_active_transaction()
 
     def _drop_transaction(self, local_tx_id: int) -> None:
         before = len(self._offline_queue)
@@ -386,6 +399,63 @@ class ChargePoint(BaseChargePoint):
                     logger.info("Sent %d held message(s) after reconnecting", sent_held)
                 self._save_queue()
 
+    # --- Interrupted transactions (power loss) --------------------------
+
+    def _save_active_transaction(self) -> None:
+        """Save the open transaction (or clear it) so a restart can close it."""
+        if self._transaction_id is None:
+            self._persistence.save_active_transaction(None)
+            return
+        self._persistence.save_active_transaction({
+            "transaction_id": self._transaction_id,
+            "id_tag": self._transaction_id_tag,
+            "energy_wh": self._energy_register_wh,
+            "timestamp": _now_iso(),
+            "stop_txn_sampled": self._stop_txn_sampled,
+            "stop_txn_data": self._stop_txn_data,
+        })
+
+    def _recover_interrupted_transaction(self) -> None:
+        saved = self._persistence.load_active_transaction()
+        if not isinstance(saved, dict) or saved.get("transaction_id") is None:
+            return
+        tx_id = saved["transaction_id"]
+        already_stopped = any(
+            e["action"] == "StopTransactionPayload"
+            and e["payload"].get("transaction_id") == tx_id
+            for e in self._offline_queue
+        )
+        if not already_stopped:
+            # Last known meter reading and time = the moment power was lost
+            meter_stop = int(saved.get("energy_wh", self._energy_register_wh))
+            timestamp = saved.get("timestamp") or _now_iso()
+            transaction_data = list(saved.get("stop_txn_data") or [])
+            measurands = saved.get("stop_txn_sampled") or []
+            if measurands:
+                end = build_meter_values(
+                    reading=None, energy_register_wh=meter_stop,
+                    context="Transaction.End", measurands=measurands,
+                    timestamp=timestamp,
+                )[0]
+                if end["sampledValue"]:
+                    transaction_data.append(end)
+            self._enqueue(call.StopTransactionPayload(
+                transaction_id=tx_id,
+                id_tag=saved.get("id_tag"),
+                meter_stop=meter_stop,
+                timestamp=timestamp,
+                reason=Reason.power_loss,
+                transaction_data=transaction_data or None,
+            ))
+            self._offline_queue[-1]["_held"] = True
+            self._save_queue()
+            logger.warning(
+                "Transaction %s was still open when the add-on last stopped "
+                "(power cut or crash); holding StopTransaction (PowerLoss, %d Wh)",
+                tx_id, meter_stop,
+            )
+        self._persistence.save_active_transaction(None)
+
     # --- StopTransaction transactionData ----------------------------------
 
     def _record_stop_txn_reading(
@@ -412,6 +482,7 @@ class ChargePoint(BaseChargePoint):
             # Halve the resolution, always keeping Transaction.Begin and the latest
             data = self._stop_txn_data
             self._stop_txn_data = [data[0], *data[1:-1][1::2], data[-1]]
+        self._save_active_transaction()
 
     @property
     def energy_register_kwh(self) -> float:
@@ -587,6 +658,8 @@ class ChargePoint(BaseChargePoint):
         self._last_meter_time = now
 
         if self.state != ChargePointStatus.charging:
+            if self._transaction_id is not None:
+                self._save_active_transaction()  # paused, still open
             self._shared_state.energy_kwh = self.energy_register_kwh
             # Bug 7 fix: zero out power values when idle
             self._zero_power_state()
@@ -636,6 +709,8 @@ class ChargePoint(BaseChargePoint):
         self._shared_state.frequency_hz = reading.frequency_hz
         self._shared_state.power_offered_kw = reading.power_offered_kw
         self._shared_state.energy_kwh = self.energy_register_kwh
+        if self._transaction_id is not None:
+            self._save_active_transaction()
         return reading
 
     async def send_meter_values(self) -> None:
@@ -768,6 +843,7 @@ class ChargePoint(BaseChargePoint):
             self._record_stop_txn_reading(
                 None, self._stop_txn_sampled, "Transaction.Begin", timestamp=start_ts,
             )
+            self._save_active_transaction()  # recorded before anything is sent
             response = await self._send_tx(request, local_tx_id=local_tx_id)
             if response is None:
                 logger.info("Transaction started offline (idTag %s); StartTransaction held", id_tag)
@@ -786,6 +862,7 @@ class ChargePoint(BaseChargePoint):
             self._transaction_id = None
             self._transaction_id_tag = None
             self._stop_txn_data = []
+            self._save_active_transaction()
             self.state = ChargePointStatus.preparing
             self._shared_state.state = self.state
             self._shared_state.transaction_id = None
@@ -797,6 +874,8 @@ class ChargePoint(BaseChargePoint):
         reason: Reason = Reason.remote,
     ) -> None:
         """Stop the active transaction. final_state controls where we end up."""
+        request = None
+        handled = False
         try:
             # Still Charging here: count energy up to now so meterStop is complete
             self._checkpoint_energy()
@@ -823,6 +902,7 @@ class ChargePoint(BaseChargePoint):
                 transaction_data=transaction_data,
             )
             response = await self._send_tx(request)
+            handled = True
             if response is None:
                 logger.info("Transaction %s stopped offline; StopTransaction held", transaction_id)
             else:
@@ -834,6 +914,15 @@ class ChargePoint(BaseChargePoint):
             self._transaction_id_tag = None
             self._pending_id_tag = None
             self._stop_txn_data = []
+            if handled or (request is not None and any(
+                e.get("_request") is request for e in self._offline_queue
+            )):
+                self._save_active_transaction()  # StopTransaction sent or held: closed
+            else:
+                # Cut off before StopTransaction was queued (e.g. shutdown timed
+                # out on the Finishing status): leave the transaction saved so
+                # the next start closes it with reason PowerLoss.
+                logger.warning("Transaction left open on disk; will be closed on next start")
             self._shared_state.transaction_id = None
             self._zero_power_state()
             # Bug 3 fix: use caller-specified final state

@@ -55,3 +55,12 @@ def test_offline_queue_round_trip(tmp_path):
     assert p.load_offline_queue() == []
     p.save_offline_queue([{"seq": 1, "action": "StopTransactionPayload", "payload": {"meter_stop": 1}}])
     assert Persistence(data_dir=str(tmp_path)).load_offline_queue()[0]["payload"]["meter_stop"] == 1
+
+
+def test_active_transaction_round_trip(tmp_path):
+    p = Persistence(data_dir=str(tmp_path))
+    assert p.load_active_transaction() is None
+    p.save_active_transaction({"transaction_id": 7, "energy_wh": 100})
+    assert Persistence(data_dir=str(tmp_path)).load_active_transaction()["transaction_id"] == 7
+    p.save_active_transaction(None)
+    assert p.load_active_transaction() is None

@@ -79,15 +79,21 @@ sent after reconnecting instead. Held messages are saved to
 `/data/offline_queue.json`, so they also survive an add-on restart. Up to
 1,000 messages are held, and the oldest meter readings are dropped first.
 
+If the add-on is stopped without warning mid-charge (power cut, crash), the
+open transaction is closed on the next start. A StopTransaction with reason
+`PowerLoss` is sent, using the last meter reading saved before the
+interruption.
+
 ### StopTransaction readings
 
-StopTransaction includes `transactionData` with the session's readings, as
-real chargers do. Two configuration keys choose what's included, and your
-provider can change them with ChangeConfiguration:
+StopTransaction can include `transactionData` with the session's readings.
+Two configuration keys choose what's included. Both are empty by default, as
+on a Wallbox Pulsar Plus, so nothing is added unless your provider sets them
+with ChangeConfiguration:
 
 | Key | Default | Readings |
 |-----|---------|----------|
-| `StopTxnSampledData` | `Energy.Active.Import.Register` | At the start, every `MeterValueSampleInterval`, and at the stop |
+| `StopTxnSampledData` | *(empty)* | At the start, every `MeterValueSampleInterval`, and at the stop |
 | `StopTxnAlignedData` | *(empty)* | On each `ClockAlignedDataInterval` boundary |
 
 Long sessions are thinned to at most 100 readings, and the first and last are

@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 _ENERGY_FILE = "energy_register.json"
 _SERIAL_FILE = "serial_number.json"
 _QUEUE_FILE = "offline_queue.json"
+_TRANSACTION_FILE = "active_transaction.json"
 
 
 class Persistence:
@@ -58,6 +59,14 @@ class Persistence:
 
     def save_offline_queue(self, messages: list) -> None:
         self._write(_QUEUE_FILE, "messages", messages)
+
+    def load_active_transaction(self) -> dict | None:
+        """The transaction open at the last save (None if none was open)."""
+        tx = self._read(_TRANSACTION_FILE, "transaction", None)
+        return tx if isinstance(tx, dict) else None
+
+    def save_active_transaction(self, transaction: dict | None) -> None:
+        self._write(_TRANSACTION_FILE, "transaction", transaction)
 
     def load_serial_number(self) -> str:
         serial = self._read(_SERIAL_FILE, "serial", "")
