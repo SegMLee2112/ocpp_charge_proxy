@@ -435,13 +435,25 @@ class DailyEnergy:
             entry[1] = energy_kwh
             self._dirty = True
 
-    def snapshot(self, days: int = 14) -> list[dict]:
+    def snapshot(self, days: int = 14, sessions: Optional[list] = None) -> list[dict]:
+        """kWh per day. Days the meter wasn't tracked for (before 2.1.0, or a
+        restart mid-day) are filled in from the kept sessions: each session's
+        energy counts on the day it started, and the larger figure is used."""
+        from_sessions: dict[str, float] = {}
+        for s in sessions or []:
+            if s.get("type") == "no_session" or s.get("energy_kwh") is None:
+                continue
+            start = _parse_iso(s.get("start"))
+            if start:
+                day = start.astimezone().date().isoformat()
+                from_sessions[day] = from_sessions.get(day, 0.0) + float(s["energy_kwh"])
         today = self._today()
         out = []
         for i in range(days - 1, -1, -1):
             day = (today - datetime.timedelta(days=i)).isoformat()
             first_last = self.days.get(day)
-            out.append({"date": day, "kwh": round(max(0.0, first_last[1] - first_last[0]), 3) if first_last else 0.0})
+            meter = max(0.0, first_last[1] - first_last[0]) if first_last else 0.0
+            out.append({"date": day, "kwh": round(max(meter, from_sessions.get(day, 0.0)), 3)})
         return out
 
     def save(self) -> None:

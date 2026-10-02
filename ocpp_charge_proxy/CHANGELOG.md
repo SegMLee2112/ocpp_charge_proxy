@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.1
+
+- **Energy per day** fills in days from the kept sessions (each session's
+  energy on the day it started) where the meter-based figure is missing or
+  lower, so sessions from before 2.1.0, or before a restart earlier in the
+  day, show in the bars.
+
 ## 2.1.0
 
 - **Status in the header:** "All good" or the number of issues (not

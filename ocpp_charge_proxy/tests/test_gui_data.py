@@ -177,3 +177,18 @@ def test_daily_energy(tmp_path):
     again.update(0)  # ignored
     assert again.snapshot(1)[0]["kwh"] == 2.5
 
+
+def test_daily_energy_filled_in_from_sessions(tmp_path):
+    import datetime
+    today = datetime.date.today()
+    daily = DailyEnergy(str(tmp_path), today=lambda: today)
+    daily.update(6619.83)  # tracking only started now (e.g. just updated)
+    start = datetime.datetime.combine(today, datetime.time(12, 0)).astimezone().isoformat()
+    sessions = [
+        {"start": start, "energy_kwh": 0.52},
+        {"start": start, "type": "no_session"},
+    ]
+    assert daily.snapshot(1, sessions)[0]["kwh"] == 0.52
+    daily.update(6625.83)  # 6 kWh metered today: more than the sessions
+    assert daily.snapshot(1, sessions)[0]["kwh"] == 6.0
+

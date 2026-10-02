@@ -304,7 +304,12 @@ async def handle_energy_daily(request: web.Request) -> web.Response:
     if gui is None or gui.daily is None:
         return _gui_unavailable()
     days = int(min(62, max(1, _number_param(request, "days", 14))))
-    return web.json_response({"days": gui.daily.snapshot(days)}, dumps=_dumps)
+    try:
+        sessions = gui.sessions()
+        kept = list(sessions.get("history") or []) + ([sessions["current"]] if sessions.get("current") else [])
+    except Exception:
+        kept = []
+    return web.json_response({"days": gui.daily.snapshot(days, kept)}, dumps=_dumps)
 
 
 async def handle_provider(request: web.Request) -> web.Response:
