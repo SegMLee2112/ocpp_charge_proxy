@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.1
+
+- Fix: Home Assistant Energy dashboard spike after every add-on restart. The API
+  reported `energy_kwh = 0` until the first meter reading (~60s after boot), so
+  HA's total-increasing Energy sensor saw the register drop to 0 and recorded the
+  climb back (the entire lifetime register, ~6,500 kWh) as new consumption. The
+  stored register is now reported from startup.
+
 ## 0.7.0
 
 OCPP 1.6 conformance fixes:

@@ -79,6 +79,7 @@ class ChargePoint(BaseChargePoint):
         self._power_override: Optional[float] = None  # kW, set via API
         self._shared_state = shared_state or SharedState()
         self._energy_register_wh: int = persistence.load_energy_register_wh()
+        self._shared_state.energy_kwh = self.energy_register_kwh  # never serve 0 before first reading
         self._transaction_id: Optional[int] = None
         self._transaction_start_energy_wh: int = 0
         # idTag the server authorised the session with (RemoteStart) — echoed

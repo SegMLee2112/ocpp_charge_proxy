@@ -551,3 +551,15 @@ def test_vendor_keys_are_stored_and_reported(mock_connection, mock_persistence):
     full = _run(cp.on_get_configuration())
     keys = {k["key"] for k in full.configuration_key}
     assert {"minSoC", "maxSoC", "AuthEnabledOffline"} <= keys
+
+
+def test_shared_state_energy_set_from_register_at_startup(mock_connection, mock_persistence):
+    """API must report the stored register immediately, not 0 until the first reading."""
+    from src.shared_state import SharedState
+    shared = SharedState()
+    assert shared.energy_kwh == 0.0
+    ChargePoint(
+        id="CP001", connection=mock_connection, persistence=mock_persistence,
+        current_amps=32, shared_state=shared,
+    )
+    assert shared.energy_kwh == 5.0  # mock_persistence register is 5000 Wh

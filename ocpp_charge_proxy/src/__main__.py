@@ -85,6 +85,11 @@ async def run() -> None:
             )
 
     shared_state = SharedState()
+    # Report the stored energy register from the start. The API comes up
+    # before the first meter reading; serving the default 0 meant HA's
+    # total_increasing Energy sensor saw stored -> 0 -> stored on every restart
+    # and recorded the whole register as new consumption.
+    shared_state.energy_kwh = persistence.load_energy_register_wh() / 1000.0
 
     # SIGTERM/SIGINT are handled inside the event loop so shutdown runs as
     # normal async code (a plain signal.signal handler raising SystemExit
