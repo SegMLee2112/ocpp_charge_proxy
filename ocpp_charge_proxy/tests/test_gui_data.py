@@ -89,3 +89,62 @@ def test_health_counts_reconnects():
     assert snap["version"] == "1.1.0" and snap["uptime_s"] == 65
     assert snap["reconnects"] == 1 and snap["disconnects"] == 1
     assert snap["connected_for_s"] == 5 and snap["last_disconnect"]["reason"] == "timeout"
+
+
+def test_plug_in_without_session_recorded(tmp_path):
+    log = SessionLog(str(tmp_path))
+    log.plugged(True, "schedule", "2026-10-02T22:30:00Z")
+    assert SessionLog(str(tmp_path)).plug["plugged_by"] == "schedule"  # survives a restart
+    log.plugged(False, "auto re-plug", "2026-10-02T22:40:00Z")
+    entry = log.history[0]
+    assert entry["type"] == "no_session" and entry["reason"] == "replugged"
+    assert entry["duration_s"] == 600 and entry["plugged_by"] == "schedule"
+    assert entry["unplugged_by"] == "auto re-plug" and log.plug is None
+
+
+def test_plug_in_that_gets_a_session_is_not_recorded_as_failed(tmp_path):
+    log = SessionLog(str(tmp_path))
+    log.plugged(True, "web page")
+    log.start(1, "TAG", 0)
+    log.stop(1000, "Remote")
+    log.plugged(False, "web page")
+    assert [e.get("type") for e in log.history] == [None]
+
+
+def test_no_session_entries_kept_separately(tmp_path):
+    log = SessionLog(str(tmp_path), size=2)
+    log.start(1, "T", 0)
+    log.stop(10, "Remote")
+    for _ in range(3):
+        log.plugged(True, "web page")
+        log.plugged(False, "web page")
+    kinds = [e.get("type", "session") for e in log.history]
+    assert kinds.count("no_session") == 2 and kinds.count("session") == 1
+    snap = log.snapshot()
+    assert snap["waiting"] is None
+    log.plugged(True, "Home Assistant")
+    assert log.snapshot()["waiting"]["plugged_by"] == "Home Assistant"
+
+
+def test_message_log_kept_across_restarts(tmp_path):
+    log = MessageLog(data_dir=str(tmp_path))
+    log.record('[2,"a","Heartbeat",{}]', incoming=False)
+    log.record('[3,"a",{"currentTime":"2026-10-02T15:00:00Z"}]', incoming=True)
+    log.save()
+    again = MessageLog(data_dir=str(tmp_path))
+    entries = again.since(0)
+    assert [e["type"] for e in entries] == ["call", "result", "restart"]
+    assert again.last_seq == 3
+    again.record('[2,"b","Heartbeat",{}]', incoming=False)
+    assert again.since(3)[0]["seq"] == 4  # numbering carries on
+
+
+def test_message_log_saves_only_when_changed(tmp_path):
+    log = MessageLog(data_dir=str(tmp_path))
+    log.save()
+    assert not (tmp_path / "messages.json").exists()  # nothing to save
+    log.record('[2,"a","Heartbeat",{}]', incoming=False)
+    log.save()
+    assert (tmp_path / "messages.json").exists()
+    assert MessageLog(data_dir=str(tmp_path / "empty")).since(0) == []
+

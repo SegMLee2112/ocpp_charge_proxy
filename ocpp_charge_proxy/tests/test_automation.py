@@ -137,10 +137,10 @@ def test_replug_after_wait_up_to_the_limit():
 
     calls = []
 
-    async def unplug():
+    async def unplug(source=None):
         calls.append("unplug")
 
-    async def plug():
+    async def plug(source=None):
         calls.append("plug")
 
     _run(a.run_replug(unplug, plug, wait_s=0))
@@ -180,13 +180,12 @@ def test_replug_waits_only_while_online_and_enabled():
     assert a.replug_status()["status"] == "off"
 
 
-def test_replug_settings_gui_wins_until_option_changes(tmp_path):
+def test_replug_settings_saved_win_over_defaults(tmp_path):
     a, _ = _automation(tmp_path, ReplugOptions(True, 10, 3))
+    assert a.replug["after_min"] == 10  # nothing saved: the defaults
     a.set_replug(after_min=15, attempts=5)
-    b, _ = _automation(tmp_path, ReplugOptions(True, 10, 3))
+    b, _ = _automation(tmp_path, ReplugOptions(True, 20, 3))
     assert (b.replug["after_min"], b.replug["attempts"]) == (15, 5)
-    c, _ = _automation(tmp_path, ReplugOptions(True, 20, 3))  # add-on option changed
-    assert c.replug["after_min"] == 20 and c.replug["attempts"] == 3
 
 
 def test_replug_settings_validated():
@@ -205,12 +204,12 @@ def test_loop_runs_schedule_and_publishes():
     state = SharedState(connected_to_server=True)
     calls = []
 
-    async def plug():
+    async def plug(source=None):
         calls.append("plug")
         state.plugged_in = True
         state.state = "Preparing"
 
-    async def unplug():
+    async def unplug(source=None):
         calls.append("unplug")
 
     async def scenario():

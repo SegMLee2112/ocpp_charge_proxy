@@ -33,11 +33,6 @@ updates its state so Home Assistant automations can respond.
 | `firmware_version` | `6.11.16` | Firmware version reported in BootNotification |
 | `current_amps` | `32` | Maximum charging current in amps (6/10/13/16/20/25/32). Starting value: once you change Max current on the add-on's web page that's remembered, until you change this option again |
 | `initial_energy_wh` | `0` | Seed the energy register (Wh). Set to your old charger's meter reading when migrating. Only applied if higher than the stored register (the meter never goes backwards); cleared after first boot. |
-| `start_delay_s` | `3` | Seconds after StartTransaction before the simulated car draws any current (also applied when resuming after a charging-profile pause). `0` = instant. |
-| `ramp_up_s` | `5` | Seconds for power to ramp linearly from 0 to full after the start delay. `0` = jump straight to full power. Not applied when power comes from a real power entity. |
-| `replug_enabled` | `true` | Auto re-plug: if your provider hasn't started a session `replug_after_min` minutes after Plugged In turns on, unplug for 30 seconds and plug back in |
-| `replug_after_min` | `10` | Minutes plugged in with no session before re-plugging (1–240) |
-| `replug_attempts` | `3` | Re-plug tries before giving up until the car is next unplugged or a session starts (0–20) |
 | `log_level` | `info` | Logging level (debug/info/warning/error). OCPP messages are logged at `info`, except Heartbeats and periodic meter readings (in a session or not), which only show at `debug`. Clock-aligned readings stay at `info` |
 
 ### Controlling your charger
@@ -72,7 +67,7 @@ Leave it unset (or clear it) and no SoC is reported and car-full never
 triggers. If the sensor becomes unavailable, SoC reporting pauses until it
 comes back.
 
-### Schedule and auto re-plug
+### Schedule, auto re-plug and start-up
 
 - **Schedule** (**Automation** tab): add as many times as you like, each with a time, the days
   it runs on, and whether it plugs in or unplugs; turn single times or the
@@ -80,12 +75,16 @@ comes back.
   time missed while the add-on was stopped isn't run later. Unplugging
   during a session ends the session.
 - **Auto re-plug** (**Settings** tab): Octopus sometimes doesn't start a session after you plug
-  in. When Plugged In has been on for `replug_after_min` minutes (default 10)
-  with no session and the add-on is connected, it unplugs, waits 30 seconds
-  and plugs back in, up to `replug_attempts` times (default 3). It then gives
-  up until the car is next unplugged or a session starts, and the wait starts
-  again after each re-plug. Changing the minutes or tries on the Settings
-  tab is kept until you change the add-on options themselves.
+  in. When Plugged In has been on for the set minutes (default 10) with no
+  session and the add-on is connected, it unplugs, waits 30 seconds and
+  plugs back in, up to the set number of tries (default 3). It then gives up
+  until the car is next unplugged or a session starts, and the wait starts
+  again after each re-plug.
+- **Start delay and ramp-up** (**Settings** tab, Simulated car): after
+  StartTransaction (or resuming after a charging-profile pause) the simulated
+  car waits the start delay (default 3s) before drawing current, then ramps
+  linearly to full power over the ramp-up (default 5s). 0 and 0 = full power
+  straight away. Not applied when power comes from your power sensor.
 
 Settings are saved in `/data/automation.json`.
 
@@ -171,9 +170,13 @@ follows your Home Assistant theme.
   and a chart of power, current (with your max and the provider limit) or
   SoC over the last 30 minutes to 6 hours.
 - **Sessions:** the last 20 charging sessions (energy, duration, peak
-  power, what ended them), kept across restarts.
-- **Messages:** the last 300 OCPP messages both ways, with a filter, full
-  JSON on click and a Copy button for sharing.
+  power, what ended them, transaction ID and ID tag), kept across restarts,
+  and the last 20 plug-ins that never got a session: when, for how long, who
+  plugged in, and whether auto re-plug gave up on it or it was unplugged
+  first.
+- **Messages:** the last 300 OCPP messages both ways, kept across restarts
+  (with a marker where the add-on restarted), with a filter, full JSON on
+  click and a Copy button for sharing.
 - **Provider:** what your provider has set: charging limits, charging
   profiles drawn as a timeline, the local authorisation list and every
   configuration key.

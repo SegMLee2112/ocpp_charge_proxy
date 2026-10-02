@@ -173,11 +173,22 @@ class ChargePoint(BaseChargePoint):
             "ConnectorPhaseRotation": ("1.RST", True),
             "GetConfigurationMaxKeys": ("50", True),
         }
+        # Start delay / ramp-up: set on the web page (saved), else the
+        # values passed in (the add-on options of earlier versions)
+        saved_ramp = persistence.load_ramp_setting()
+        if isinstance(saved_ramp, dict):
+            try:
+                start_delay_s = float(saved_ramp.get("start_delay_s", start_delay_s))
+                ramp_up_s = float(saved_ramp.get("ramp_up_s", ramp_up_s))
+            except (TypeError, ValueError):
+                pass
         self._charger_sim = ChargerSimulator(
             current_amps=current_amps,
             start_delay_s=start_delay_s,
             ramp_up_s=ramp_up_s,
         )
+        self._shared_state.start_delay_s = self._charger_sim.start_delay_s
+        self._shared_state.ramp_up_s = self._charger_sim.ramp_up_s
         # Current: the HA setting is the charger's maximum (like a real
         # Wallbox's max-current setting). The provider's chargingALimitConn1
         # can lower it but never raise it; the charger uses the lower of the two.
@@ -195,9 +206,10 @@ class ChargePoint(BaseChargePoint):
             self._shared_state, lambda: self._heartbeat_interval,
         )
         # For the web GUI: every OCPP frame, and the charging sessions
-        self.message_log = MessageLog()
         data_dir = getattr(persistence, "data_dir", None)
-        self.sessions = SessionLog(data_dir if isinstance(data_dir, str) else None)
+        data_dir = data_dir if isinstance(data_dir, str) else None
+        self.message_log = MessageLog(data_dir=data_dir)
+        self.sessions = SessionLog(data_dir)
         self._inflight_calls: set[asyncio.Future] = set()
         self._drain_lock = asyncio.Lock()
         loaded = persistence.load_offline_queue()
@@ -242,12 +254,16 @@ class ChargePoint(BaseChargePoint):
             rated_power_w=self._charger_sim.rated_power_kw * 1000
         )
 
-    def set_plugged_in(self, plugged_in: bool) -> None:
-        """Record the Plugged In switch, saved so it survives a restart."""
+    def set_plugged_in(self, plugged_in: bool, source: Optional[str] = None) -> None:
+        """Record the Plugged In switch, saved so it survives a restart.
+
+        `source` (e.g. "schedule", "auto re-plug", "Home Assistant") is kept
+        with plug-ins that never got a session, for the Sessions tab."""
         self._shared_state.plugged_in = plugged_in
         if plugged_in != self._plugged_in:
             self._plugged_in = plugged_in
             self._persistence.save_plugged_in(plugged_in)
+            self.sessions.plugged(plugged_in, source)
 
     # --- For the web GUI -------------------------------------------------
 
@@ -608,6 +624,18 @@ class ChargePoint(BaseChargePoint):
         self._shared_state.current_amps_setting = self._max_current_amps
         self._shared_state.current_amps_effective = effective
         self._shared_state.current_amps_provider_limit = self._server_limit_amps
+
+    def set_ramp(self, start_delay_s: float, ramp_up_s: float) -> None:
+        """Simulated car start-up: seconds before it draws current, then seconds
+        to ramp to full power (0-60 each). Saved; applies from the next start."""
+        delay, ramp = float(start_delay_s), float(ramp_up_s)
+        if not (0 <= delay <= 60 and 0 <= ramp <= 60):
+            raise ValueError("Start delay and ramp-up must be 0 to 60 seconds")
+        self._charger_sim.set_ramp(delay, ramp)
+        self._persistence.save_ramp_setting({"start_delay_s": delay, "ramp_up_s": ramp})
+        self._shared_state.start_delay_s = delay
+        self._shared_state.ramp_up_s = ramp
+        logger.info("Start delay %gs, ramp-up %gs", delay, ramp)
 
     def set_max_current(self, amps: int) -> None:
         """The HA current setting: the charger's maximum, remembered across restarts."""
@@ -1194,7 +1222,7 @@ class ChargePoint(BaseChargePoint):
         if charging_profile:
             self._profile_scheduler.set_profile(charging_profile)
 
-        self.set_plugged_in(True)
+        self.set_plugged_in(True, "provider")
         self._pending_id_tag = id_tag
         asyncio.create_task(self._do_start_transaction())
         return call_result.RemoteStartTransactionPayload(
@@ -1480,7 +1508,7 @@ class ChargePoint(BaseChargePoint):
                 reason=Reason.unlock_command,
             ))
 
-        self.set_plugged_in(False)
+        self.set_plugged_in(False, "provider")
         self.state = ChargePointStatus.available
         self._shared_state.state = self.state
 
@@ -1506,7 +1534,7 @@ class ChargePoint(BaseChargePoint):
         else:
             self.state = ChargePointStatus.available
             self._shared_state.state = self.state
-            self.set_plugged_in(False)
+            self.set_plugged_in(False, "provider")
             self._zero_power_state()
             await self.send_status()
 

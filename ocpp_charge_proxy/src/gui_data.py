@@ -48,12 +48,69 @@ def _parse_iso(value) -> Optional[datetime.datetime]:
 
 
 class MessageLog:
-    """Every OCPP frame, newest last, numbered so the GUI can ask for new ones."""
+    """Every OCPP frame, newest last, numbered so the GUI can ask for new ones.
 
-    def __init__(self, size: int = MESSAGE_LOG_SIZE) -> None:
+    With a data_dir the log is kept in messages.json across restarts: saved
+    every SAVE_INTERVAL_S seconds when something changed (not on every frame,
+    to spare the SD card) and at shutdown. A "restart" marker is added when
+    the add-on starts. A power cut loses at most the last minute.
+    """
+
+    SAVE_INTERVAL_S = 60
+
+    def __init__(self, size: int = MESSAGE_LOG_SIZE, data_dir: Optional[str] = None) -> None:
         self._entries: deque[dict] = deque(maxlen=size)
         self._seq = 0
         self._actions: dict[str, str] = {}  # uid -> action of the call it answers
+        self._path = os.path.join(data_dir, "messages.json") if data_dir else None
+        self._dirty = False
+        self._load()
+
+    def _load(self) -> None:
+        if not self._path:
+            return
+        for path in (self._path, self._path + ".bak"):
+            try:
+                with open(path, encoding="utf-8") as f:
+                    data = json.load(f)
+                entries = [e for e in data.get("messages") or [] if isinstance(e, dict) and "seq" in e]
+                self._entries.extend(entries[-self._entries.maxlen:])
+                self._seq = max([int(data.get("last_seq") or 0)] + [int(e["seq"]) for e in entries])
+                break
+            except FileNotFoundError:
+                continue
+            except Exception:
+                logger.warning("Message log %s is unreadable", path)
+        if self._entries:
+            self._seq += 1
+            self._entries.append({
+                "seq": self._seq, "timestamp": _now_iso(), "direction": None,
+                "type": "restart", "message_id": "", "action": None, "summary": "", "payload": None,
+            })
+            self._dirty = True
+
+    def save(self) -> None:
+        """Write the log if it changed since the last save."""
+        if not self._path or not self._dirty:
+            return
+        try:
+            tmp = self._path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"last_seq": self._seq, "messages": list(self._entries)}, f, default=str)
+                f.flush()
+                os.fsync(f.fileno())
+            if os.path.exists(self._path):
+                os.replace(self._path, self._path + ".bak")
+            os.replace(tmp, self._path)
+            self._dirty = False
+        except Exception:
+            logger.warning("Could not save the message log", exc_info=True)
+
+    async def save_loop(self) -> None:
+        import asyncio
+        while True:
+            await asyncio.sleep(self.SAVE_INTERVAL_S)
+            self.save()
 
     @property
     def last_seq(self) -> int:
@@ -95,6 +152,7 @@ class MessageLog:
                 "summary": summarise_command(action, payload) if entry_type == "call" else "",
                 "payload": payload,
             })
+            self._dirty = True
         except Exception:
             logger.debug("Could not log OCPP frame", exc_info=True)
 
@@ -111,13 +169,19 @@ class SessionLog:
 
     The current session is saved too, so one cut short by a power cut is
     still closed (reason PowerLoss) after the restart.
+
+    Plug-ins that never got a session are kept too (type "no_session"): from
+    Plugged In turning on until it's turned off again with no session having
+    started, with who plugged in / unplugged. The last `size` of each kind are
+    kept.
     """
 
     def __init__(self, data_dir: Optional[str], size: int = SESSION_HISTORY_SIZE) -> None:
         self._path = os.path.join(data_dir, "sessions.json") if data_dir else None
         self._size = size
         self.current: Optional[dict] = None
-        self.history: list[dict] = []  # newest first
+        self.history: list[dict] = []  # newest first, sessions and no-session plug-ins
+        self.plug: Optional[dict] = None  # plugged in, waiting for a session: {plugged_at, plugged_by}
         self._load()
 
     def _load(self) -> None:
@@ -129,7 +193,10 @@ class SessionLog:
                     data = json.load(f)
                 current = data.get("current")
                 self.current = current if isinstance(current, dict) else None
-                self.history = [s for s in data.get("history") or [] if isinstance(s, dict)][: self._size]
+                plug = data.get("plug")
+                self.plug = plug if isinstance(plug, dict) else None
+                self.history = [s for s in data.get("history") or [] if isinstance(s, dict)]
+                self._trim()
                 return
             except FileNotFoundError:
                 continue
@@ -142,7 +209,7 @@ class SessionLog:
         try:
             tmp = self._path + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({"current": self.current, "history": self.history}, f)
+                json.dump({"current": self.current, "plug": self.plug, "history": self.history}, f)
                 f.flush()
                 os.fsync(f.fileno())
             if os.path.exists(self._path):
@@ -151,7 +218,45 @@ class SessionLog:
         except Exception:
             logger.warning("Could not save session history", exc_info=True)
 
+    def _trim(self) -> None:
+        """Keep the newest `size` sessions and the newest `size` no-session plug-ins."""
+        counts = {"session": 0, "no_session": 0}
+        kept = []
+        for entry in self.history:
+            kind = "no_session" if entry.get("type") == "no_session" else "session"
+            counts[kind] += 1
+            if counts[kind] <= self._size:
+                kept.append(entry)
+        self.history = kept
+
+    def plugged(self, plugged_in: bool, source: Optional[str] = None, timestamp: Optional[str] = None) -> None:
+        """Plugged In changed. Unplugged with no session since plugging in: a
+        no-session entry with who unplugged (and why, for a re-plug)."""
+        ts = timestamp or _now_iso()
+        if plugged_in:
+            if self.plug is None and self.current is None:
+                self.plug = {"plugged_at": ts, "plugged_by": source}
+                self._save()
+            return
+        if self.plug is None:
+            return
+        plug, self.plug = self.plug, None
+        if self.current is None:
+            start, stop = _parse_iso(plug.get("plugged_at")), _parse_iso(ts)
+            self.history.insert(0, {
+                "type": "no_session",
+                "start": plug.get("plugged_at"),
+                "stop": ts,
+                "duration_s": int((stop - start).total_seconds()) if start and stop else None,
+                "plugged_by": plug.get("plugged_by"),
+                "unplugged_by": source,
+                "reason": "replugged" if source == "auto re-plug" else "unplugged",
+            })
+            self._trim()
+        self._save()
+
     def start(self, transaction_id, id_tag, meter_start_wh: int, timestamp: Optional[str] = None) -> None:
+        self.plug = None  # a session started: this plug-in worked
         self.current = {
             "transaction_id": transaction_id,
             "id_tag": id_tag,
@@ -189,8 +294,8 @@ class SessionLog:
         start, stop = _parse_iso(session["start"]), _parse_iso(session["stop"])
         session["duration_s"] = int((stop - start).total_seconds()) if start and stop else None
         self.history.insert(0, session)
-        del self.history[self._size:]
         self.current = None
+        self._trim()
         self._save()
 
     def snapshot(self, energy_register_wh: Optional[int] = None) -> dict:
@@ -206,7 +311,15 @@ class SessionLog:
                 current["duration_s"] = int(
                     (datetime.datetime.now(datetime.timezone.utc) - start).total_seconds()
                 )
-        return {"current": current, "history": list(self.history)}
+        waiting = None
+        if self.plug is not None:
+            waiting = dict(self.plug)
+            start = _parse_iso(waiting.get("plugged_at"))
+            if start:
+                waiting["duration_s"] = int(
+                    (datetime.datetime.now(datetime.timezone.utc) - start).total_seconds()
+                )
+        return {"current": current, "waiting": waiting, "history": list(self.history)}
 
 
 # --- Power history for the chart ---------------------------------------------

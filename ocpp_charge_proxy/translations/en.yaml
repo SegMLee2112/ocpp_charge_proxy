@@ -40,32 +40,6 @@ configuration:
       Seed the energy meter with this value in watt-hours. Useful when
       migrating from an existing charger. Set to 0 for a fresh install.
       This value is applied once on startup and then cleared.
-  start_delay_s:
-    name: Start Delay (s)
-    description: >-
-      Seconds after StartTransaction before the simulated car begins drawing
-      current, like a real car. Set to 0 to start instantly.
-  ramp_up_s:
-    name: Ramp-up Time (s)
-    description: >-
-      Seconds for power to rise from 0 to full after the start delay.
-      Set to 0 to jump straight to full power.
-  replug_enabled:
-    name: Auto Re-plug
-    description: >-
-      If your provider hasn't started a session a while after the car is
-      plugged in, unplug for 30 seconds and plug back in. Can also be changed
-      in the add-on's web page (a change there is kept until you change this
-      option).
-  replug_after_min:
-    name: Re-plug After (minutes)
-    description: >-
-      Minutes plugged in with no session before re-plugging.
-  replug_attempts:
-    name: Re-plug Tries
-    description: >-
-      How many times to re-plug before giving up, until the car is next
-      unplugged or a session starts. 0 never re-plugs.
   log_level:
     name: Log Level
     description: >-

@@ -9,9 +9,9 @@
   plug back in, up to `attempts` times. The count resets when a session
   starts or when the car is unplugged by anything else.
 
-Settings are saved in /data/automation.json. The re-plug settings start from
-the add-on options; a change made in the GUI is kept until the add-on
-option itself is changed (like the current setting).
+Settings are saved in /data/automation.json and set on the web page
+(Settings tab for re-plug). Until they're saved, re-plug uses the defaults
+(or re-plug options left from add-on versions before 2.0.3).
 """
 
 from __future__ import annotations
@@ -150,9 +150,9 @@ class Automation:
             except ValueError:
                 logger.warning("Ignoring invalid schedule entry %r", raw)
         self.entries = entries
-        # GUI re-plug settings win until the add-on options change
+        # Saved re-plug settings (set on the web page) win over the defaults
         replug = data.get("replug")
-        if isinstance(replug, dict) and data.get("replug_option") == self._options.as_dict():
+        if isinstance(replug, dict):
             try:
                 self.replug = self._valid_replug({**self.replug, **replug})
             except ValueError:
@@ -167,7 +167,6 @@ class Automation:
                 json.dump({
                     "schedule": {"enabled": self.schedule_enabled, "entries": self.entries},
                     "replug": self.replug,
-                    "replug_option": self._options.as_dict(),
                 }, f, indent=1)
                 f.flush()
                 os.fsync(f.fileno())
@@ -295,7 +294,7 @@ class Automation:
             return False
         return True
 
-    async def run_replug(self, unplug: Callable[[], Awaitable[None]], plug: Callable[[], Awaitable[None]],
+    async def run_replug(self, unplug: Callable[..., Awaitable[None]], plug: Callable[..., Awaitable[None]],
                          wait_s: float = REPLUG_WAIT_S) -> None:
         self.attempts_used += 1
         logger.warning(
@@ -304,9 +303,9 @@ class Automation:
         )
         self.replugging = True
         try:
-            await unplug()
+            await unplug(source="auto re-plug")
             await asyncio.sleep(wait_s)
-            await plug()
+            await plug(source="auto re-plug")
         finally:
             self.replugging = False
             self.last_replug = self._clock()
@@ -349,7 +348,6 @@ class Automation:
                 "last_run": self.last_run,
             },
             "replug": self.replug_status(),
-            "replug_option": self._options.as_dict(),
         }
 
     def publish(self, shared_state) -> None:
@@ -374,7 +372,7 @@ async def automation_loop(
                     "entry_id": entry["id"], "action": entry["action"],
                     "timestamp": _iso_from_epoch(automation._clock()),
                 }
-                await (plug() if entry["action"] == "plug" else unplug())
+                await (plug if entry["action"] == "plug" else unplug)(source="schedule")
             if automation.replug_due(
                 # Plugged In and waiting (Preparing); not e.g. Unavailable
                 plugged_in=bool(shared_state.plugged_in) and shared_state.state == "Preparing",

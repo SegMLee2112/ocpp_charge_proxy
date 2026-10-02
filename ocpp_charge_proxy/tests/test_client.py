@@ -1388,3 +1388,27 @@ def test_held_messages_info(mock_connection):
     held = cp.held_messages_info()
     assert held and held[-1]["action"] == "StopTransaction"
     assert "transaction 4242" in held[-1]["summary"]
+
+def test_start_delay_and_ramp_set_and_saved(mock_connection, tmp_path):
+    from src.persistence import Persistence
+    cp = ChargePoint(id="CP001", connection=mock_connection, persistence=Persistence(data_dir=str(tmp_path)),
+                     start_delay_s=3, ramp_up_s=5)
+    assert (cp._shared_state.start_delay_s, cp._shared_state.ramp_up_s) == (3, 5)
+    cp.set_ramp(0, 10)
+    assert (cp._charger_sim.start_delay_s, cp._charger_sim.ramp_up_s) == (0, 10)
+    again = ChargePoint(id="CP001", connection=mock_connection, persistence=Persistence(data_dir=str(tmp_path)),
+                        start_delay_s=3, ramp_up_s=5)
+    assert (again._charger_sim.start_delay_s, again._charger_sim.ramp_up_s) == (0, 10)
+    with pytest.raises(ValueError):
+        cp.set_ramp(61, 0)
+
+
+def test_unplugged_without_session_shows_in_history(mock_connection, tmp_path):
+    from src.persistence import Persistence
+    cp = make_cp(mock_connection, Persistence(data_dir=str(tmp_path)))
+    cp.set_plugged_in(True, "schedule")
+    cp.set_plugged_in(True, "provider")  # no change: ignored
+    cp.set_plugged_in(False, "web page")
+    entry = cp.sessions.history[0]
+    assert entry["type"] == "no_session"
+    assert (entry["plugged_by"], entry["unplugged_by"]) == ("schedule", "web page")

@@ -120,7 +120,7 @@
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--divider); vertical-align: top; }
   th { font-weight: 500; color: var(--text2); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .table-wrap { overflow-x: auto; }
   .chart-wrap { position: relative; height: 240px; }
   canvas { display: block; width: 100%; height: 100%; }
@@ -130,11 +130,14 @@
   .legend i { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
   .legend i.dash { border-top-style: dashed; }
   /* Messages */
+  tr.no-session td { color: var(--text2); }
+  .msg-restart { display: flex; align-items: center; gap: 10px; padding: 8px 4px; font-size: 12px; color: var(--text2); }
+  .msg-restart::before, .msg-restart::after { content: ""; flex: 1; border-top: 1px dashed var(--divider); }
   .msg-tools { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
   .msg-tools label { display: inline-flex; gap: 5px; align-items: center; font-size: 13px; color: var(--text2); cursor: pointer; }
   .msgs { font-size: 13px; max-height: 70vh; overflow-y: auto; border-top: 1px solid var(--divider); }
   .msg { border-bottom: 1px solid var(--divider); }
-  .msg > summary { list-style: none; display: grid; grid-template-columns: 96px 22px minmax(120px, max-content) 1fr; gap: 8px; padding: 6px 4px; cursor: pointer; align-items: baseline; }
+  .msg > summary { list-style: none; display: grid; grid-template-columns: max-content 22px minmax(120px, max-content) 1fr; gap: 8px; padding: 6px 4px; cursor: pointer; align-items: baseline; }
   .msg > summary::-webkit-details-marker { display: none; }
   .msg > summary:hover { background: var(--hover); }
   .msg .t { color: var(--text2); font-variant-numeric: tabular-nums; }
@@ -246,11 +249,11 @@
       <h2>Recent sessions</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Started</th><th class="num">Duration</th><th class="num">Energy</th><th class="num">Peak</th><th>Ended by</th><th class="num">Tx</th></tr></thead>
+          <thead><tr><th>Started</th><th class="num">Duration</th><th class="num">Energy</th><th class="num">Peak</th><th>Ended by</th><th class="num">Transaction ID</th><th>ID tag</th></tr></thead>
           <tbody id="s-rows"></tbody>
         </table>
       </div>
-      <div class="note">The last 20 sessions are kept, across restarts.</div>
+      <div class="note">The last 20 sessions and the last 20 plug-ins that never got a session are kept, across restarts.</div>
     </div>
   </section>
 
@@ -265,7 +268,7 @@
         <button class="btn small" id="m-copy">Copy</button>
       </div>
       <div class="msgs" id="m-list"></div>
-      <div class="note"><span id="m-count">0</span> shown · newest at the top · the last 300 frames are kept (cleared on restart). ↑ sent, ↓ received.</div>
+      <div class="note"><span id="m-count">0</span> shown · newest at the top · the last 300 frames are kept, across restarts. ↑ sent, ↓ received.</div>
     </div>
   </section>
 
@@ -342,6 +345,16 @@
         </div>
       </div>
       <div class="card">
+        <h2>Simulated car</h2>
+        <div class="note" style="margin:0 0 10px">How the simulated car starts drawing power after a session starts or resumes, like a real car. Not used when power comes from your power sensor.</div>
+        <div class="row"><div class="grow">Start delay<div class="note" style="margin:0">Seconds before it draws any current</div></div>
+          <span class="ctl"><input type="number" id="c-delay" min="0" max="60" step="0.5" aria-label="Start delay in seconds"> s</span></div>
+        <div class="row"><div class="grow">Ramp-up<div class="note" style="margin:0">Seconds to rise from 0 to full power</div></div>
+          <span class="ctl"><input type="number" id="c-ramp" min="0" max="60" step="0.5" aria-label="Ramp-up in seconds"> s</span></div>
+        <div class="row" style="justify-content:flex-end"><button class="btn small primary" id="c-ramp-save">Save</button></div>
+        <div class="note">0 and 0 = full power straight away. Changes apply from the next start or resume.</div>
+      </div>
+      <div class="card">
         <h2>Auto re-plug<span class="spacer"></span>
           <label class="switch"><input type="checkbox" id="a-rp-on" aria-label="Auto re-plug on"><span></span></label>
         </h2>
@@ -356,7 +369,7 @@
         </div>
         <div class="row" style="justify-content:flex-end"><button class="btn small primary" id="a-rp-save">Save</button></div>
         <div class="note">If your provider hasn't started a session this long after Plugged In turns on, the add-on unplugs for 30 seconds and plugs back in.
-          <span id="a-rp-option"></span></div>
+  </div>
       </div>
     </div>
     <div class="section-title">Home Assistant and your sensors</div>
@@ -452,6 +465,12 @@ function dateTime(iso) {
   return d.toDateString() === today.toDateString() ? `Today ${t}` : `${d.toLocaleDateString([], {day: 'numeric', month: 'short'})} ${t}`;
 }
 const hm = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '—';
+function msgTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toDateString() === new Date().toDateString() ? time(iso)
+    : `${d.toLocaleDateString([], {day: 'numeric', month: 'short'})} ${time(iso)}`;
+}
 const ago = (iso) => iso ? dur((Date.now() - new Date(iso)) / 1000) + ' ago' : '—';
 const kv = (rows) => rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('');
 const stateClass = (s) => 's-' + String(s || '').replace(/[^A-Za-z]/g, '');
@@ -596,6 +615,10 @@ function renderState(s) {
     ? 'Your power sensor is set: it replaces this on its next change'
     : 'Report this power instead of the simulation';
 
+  if (document.activeElement !== $('c-delay') && document.activeElement !== $('c-ramp') && !rampDirty) {
+    if (s.start_delay_s != null) $('c-delay').value = s.start_delay_s;
+    if (s.ramp_up_s != null) $('c-ramp').value = s.ramp_up_s;
+  }
   renderCommand('o-rx', s.last_command_received);
   renderCommand('o-txcmd', s.last_command_sent);
   if (activeTab === 'overview') refreshSessionCard();
@@ -632,6 +655,13 @@ function confirmInline(input) {
   toast('This ends the charging session — switch off again to confirm');
   return false;
 }
+let rampDirty = false;
+['c-delay', 'c-ramp'].forEach((id) => $(id).addEventListener('input', () => { rampDirty = true; }));
+$('c-ramp-save').onclick = async () => {
+  const delay = parseFloat($('c-delay').value), ramp = parseFloat($('c-ramp').value);
+  if (!(delay >= 0 && delay <= 60) || !(ramp >= 0 && ramp <= 60)) { toast('Use 0–60 seconds for both'); return; }
+  if (await post('ramp', {start_delay_s: delay, ramp_up_s: ramp})) { rampDirty = false; toast(`Start delay ${delay}s, ramp-up ${ramp}s`); }
+};
 $('c-power-set').onclick = async () => {
   const v = parseFloat($('c-power').value);
   if (isNaN(v) || v < 0) { toast('Enter a power in kW'); return; }
@@ -657,7 +687,7 @@ async function refreshSessionCard() {
 function drawSessionCard() {
   const c = sessionsData && sessionsData.current;
   if (!c) {
-    const last = sessionsData && sessionsData.history && sessionsData.history[0];
+    const last = sessionsData && (sessionsData.history || []).find((x) => x.type !== 'no_session');
     $('o-session').innerHTML = '<div class="empty">No session' + (state && state.plugged_in ? ' — waiting for your provider to start one' : '') + '</div>' +
       (last ? `<div class="sub">Last: ${dateTime(last.start)} · ${num(last.energy_kwh, 2)} kWh · ${dur(last.duration_s)} · ${esc(last.reason || '')}</div>` : '');
     return;
@@ -807,21 +837,35 @@ window.addEventListener('resize', () => drawChart());
 // ---------- Sessions ----------
 async function refreshSessions() {
   try { sessionsData = await api('sessions'); } catch (e) { return; }
-  const h = sessionsData.history || [];
+  const all = sessionsData.history || [];
+  const h = all.filter((s) => s.type !== 'no_session');
+  const failed = all.filter((s) => s.type === 'no_session');
   const rows = [];
+  const by = (src) => src ? ` <span class="muted">· plugged in by ${esc(src)}</span>` : '';
   if (sessionsData.current) {
     const c = sessionsData.current;
-    rows.push(`<tr><td>${dateTime(c.start)} <span class="chip ok">charging now</span></td><td class="num">${dur(c.duration_s)}</td><td class="num">${num(c.energy_kwh, 2)} kWh</td><td class="num">${num(c.peak_power_kw, 1)} kW</td><td class="muted">—</td><td class="num">${esc(c.transaction_id)}</td></tr>`);
+    rows.push(`<tr><td>${dateTime(c.start)} <span class="chip ok">charging now</span></td><td class="num">${dur(c.duration_s)}</td><td class="num">${num(c.energy_kwh, 2)} kWh</td><td class="num">${num(c.peak_power_kw, 1)} kW</td><td class="muted">—</td><td class="num">${esc(c.transaction_id)}</td><td><code>${esc(c.id_tag || '—')}</code></td></tr>`);
+  } else if (sessionsData.waiting) {
+    const w = sessionsData.waiting;
+    rows.push(`<tr><td>${dateTime(w.plugged_at)} <span class="chip warn">waiting for a session</span></td><td class="num">${dur(w.duration_s)}</td><td class="num muted">—</td><td class="num muted">—</td><td class="muted">Plugged in${w.plugged_by ? ' by ' + esc(w.plugged_by) : ''}, no session yet</td><td class="num muted">—</td><td class="muted">—</td></tr>`);
   }
-  for (const s of h) {
-    rows.push(`<tr><td>${dateTime(s.start)}</td><td class="num">${dur(s.duration_s)}</td><td class="num">${num(s.energy_kwh, 2)} kWh</td><td class="num">${num(s.peak_power_kw, 1)} kW</td><td>${esc(reasonText(s.reason))}</td><td class="num">${esc(s.transaction_id)}</td></tr>`);
+  for (const s of all) {
+    if (s.type === 'no_session') {
+      const why = s.reason === 'replugged'
+        ? 'No session from your provider: re-plugged'
+        : `Unplugged before a session started${s.unplugged_by ? ' (' + esc(s.unplugged_by) + ')' : ''}`;
+      rows.push(`<tr class="no-session"><td>${dateTime(s.start)} <span class="chip">no session</span></td><td class="num">${dur(s.duration_s)}</td><td class="num muted">—</td><td class="num muted">—</td><td>${why}${by(s.plugged_by)}</td><td class="num muted">—</td><td class="muted">—</td></tr>`);
+    } else {
+      rows.push(`<tr><td>${dateTime(s.start)}</td><td class="num">${dur(s.duration_s)}</td><td class="num">${num(s.energy_kwh, 2)} kWh</td><td class="num">${num(s.peak_power_kw, 1)} kW</td><td>${esc(reasonText(s.reason))}</td><td class="num">${esc(s.transaction_id)}</td><td><code>${esc(s.id_tag || '—')}</code></td></tr>`);
+    }
   }
-  $('s-rows').innerHTML = rows.join('') || '<tr><td colspan="6" class="empty">No sessions yet. They appear here once your provider starts one.</td></tr>';
+  $('s-rows').innerHTML = rows.join('') || '<tr><td colspan="7" class="empty">No sessions yet. They appear here once your provider starts one.</td></tr>';
   const total = h.reduce((a, s) => a + (s.energy_kwh || 0), 0);
   const week = h.filter((s) => Date.now() - new Date(s.start) < 7 * 86400e3).reduce((a, s) => a + (s.energy_kwh || 0), 0);
   const avg = h.length ? total / h.length : null;
   $('s-totals').innerHTML = [
     ['Sessions kept', h.length],
+    ['Plug-ins with no session', failed.length],
     ['Energy (last 7 days)', num(week, 1) + ' kWh'],
     ['Energy (all kept)', num(total, 1) + ' kWh'],
     ['Average session', avg === null ? '—' : num(avg, 1) + ' kWh'],
@@ -861,13 +905,14 @@ function drawMessages() {
   const list = visibleMessages().slice().reverse();
   $('m-count').textContent = list.length;
   $('m-list').innerHTML = list.map((m) => {
+    if (m.type === 'restart') return `<div class="msg-restart"><span>Add-on restarted · ${dateTime(m.timestamp)}</span></div>`;
     const arrow = m.direction === 'sent' ? '↑' : '↓';
     const label = m.type === 'call' ? m.action : `${m.action || '?'} ${m.type === 'error' ? 'error' : 'reply'}`;
     let summary = m.summary || '';
     if (m.type === 'result') { const st = m.payload && (m.payload.status || (m.payload.idTagInfo && m.payload.idTagInfo.status)); summary = st || (Object.keys(m.payload || {}).length ? '' : 'OK'); }
     if (m.type === 'error') summary = `${m.payload.errorCode} ${m.payload.errorDescription || ''}`;
     return `<details class="msg ${m.type}" data-seq="${m.seq}" ${open.has(String(m.seq)) ? 'open' : ''}>
-      <summary><span class="t">${time(m.timestamp)}</span><span class="d ${m.direction}" title="${m.direction}">${arrow}</span><span class="a">${esc(label)}</span><span class="s">${esc(summary)}</span></summary>
+      <summary><span class="t">${msgTime(m.timestamp)}</span><span class="d ${m.direction}" title="${m.direction}">${arrow}</span><span class="a">${esc(label)}</span><span class="s">${esc(summary)}</span></summary>
       <pre>${esc(JSON.stringify(m.payload, null, 2))}</pre><div class="sub" style="margin:-4px 0 8px 4px">id ${esc(m.message_id)}</div></details>`;
   }).join('') || '<div class="empty">No messages match.</div>';
 }
@@ -1060,8 +1105,6 @@ async function refreshAutomation(force) {
     $('a-rp-after').value = d.replug.after_min; $('a-rp-tries').value = d.replug.attempts;
   }
   $('a-rp-on').checked = d.replug.enabled;
-  const o = d.replug_option;
-  $('a-rp-option').textContent = `Add-on options: ${o.enabled ? 'on' : 'off'}, ${o.after_min} min, ${o.attempts} tries. A change here is kept until you change those options.`;
   drawReplugStatus(d.replug);
 }
 function drawReplugStatus(r) {

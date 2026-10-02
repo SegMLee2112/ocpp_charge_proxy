@@ -45,8 +45,8 @@ In, Power, Energy and Current). No integration or HACS needed.
 
 - **Realistic charging start.** After `StartTransaction` the simulated car
   waits a few seconds before drawing current, then ramps up to full power
-  (`start_delay_s`, default 3s, and `ramp_up_s`, default 5s), instead of
-  jumping straight to full power.
+  (start delay, default 3s, and ramp-up, default 5s, set on the Settings
+  tab), instead of jumping straight to full power.
 - **Charging taper near full.** With a SoC sensor for reporting set, power
   stays at full up to 90% SoC, then tapers to 30% of full power at 100%, like
   a real car's charge curve.
@@ -111,8 +111,7 @@ sensors live through Home Assistant's API.
   tab).
 - **Auto re-plug.** If your provider hasn't started a session 10 minutes
   after plugging in, the add-on unplugs for 30 seconds and plugs back in, up
-  to 3 times. Minutes and tries are add-on options and can be changed on the
-  Settings tab.
+  to 3 times. On/off, minutes and tries are on the Settings tab.
 
 ### Diagnostics
 
@@ -122,15 +121,17 @@ sensors live through Home Assistant's API.
     session; and a chart of power, current (with your max and the provider limit) or
     SoC over the last 30 minutes to 6 hours.
   - **Sessions:** the last 20 charging sessions (energy, duration, peak
-    power, what ended them), kept across restarts.
-  - **Messages:** the last 300 OCPP messages both ways, with a filter, full
-    JSON on click and a Copy button for sharing.
+    power, what ended them, transaction ID and ID tag), and plug-ins that
+    never got a session with the reason, kept across restarts.
+  - **Messages:** the last 300 OCPP messages both ways, kept across
+    restarts, with a filter, full JSON on click and a Copy button for
+    sharing.
   - **Provider:** what your provider has set: charging limits, charging
     profiles drawn as a timeline, the local authorisation list and every
     configuration key.
   - **Automation:** the plug-in schedule (below).
   - **Settings:** controls for Plugged In, max current, a power override and
-    a test SoC; auto re-plug; and your power, SoC and car plugged in sensors
+    a test SoC; the simulated car's start delay and ramp-up; auto re-plug; and your power, SoC and car plugged in sensors
     and auto plug-in, with live values (power source, reporting SoC,
     monitored SoC) and the add-on's Home Assistant entities.
   - **Health:** version, uptime, reconnects and the last drop's reason,
@@ -153,8 +154,8 @@ sensors live through Home Assistant's API.
 4. Start the add-on
 
 See the [add-on documentation][docs] for all add-on options, including the
-start delay and ramp-up, the starting current, and seeding the energy
-register when migrating from a real charger.
+starting current and seeding the energy register when migrating from a real
+charger. Everything else is set on the add-on's web page (Settings tab).
 
 ## Step 2: Pick your sensors (optional)
 

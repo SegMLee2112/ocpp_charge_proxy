@@ -192,11 +192,11 @@ def _scenario(fake, steps):
     state = SharedState(power_kw=1.37, current_a=5.96, energy_kwh=6612.5, plugged_in=False)
     calls = []
 
-    async def plug():
+    async def plug(source=None):
         calls.append("plug")
         state.plugged_in = True
 
-    async def unplug():
+    async def unplug(source=None):
         calls.append("unplug")
         state.plugged_in = False
 

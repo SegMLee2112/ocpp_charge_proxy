@@ -26,6 +26,7 @@ def create_api_app(
     on_set_soc: Callable[[float | None], Awaitable[None]] | None = None,
     gui=None,
     automation=None,
+    on_set_ramp: Callable[[float, float], None] | None = None,
     ha_link=None,
 ) -> web.Application:
     app = web.Application()
@@ -40,6 +41,7 @@ def create_api_app(
     app["gui"] = gui  # src.gui_data.GuiSources, or None (GUI tabs then empty)
     app["automation"] = automation  # src.automation.Automation, or None
     app["ha_link"] = ha_link  # src.ha_link.HaLink, or None
+    app["on_set_ramp"] = on_set_ramp
     # Open /api/events streams: "integration" (HA) and "gui" (the web page)
     app["event_clients"] = {"integration": 0, "gui": 0}
     app.on_shutdown.append(_close_event_streams)
@@ -54,6 +56,7 @@ def create_api_app(
     app.router.add_post("/api/current", handle_current)
     app.router.add_post("/api/power", handle_power)
     app.router.add_post("/api/soc", handle_soc)
+    app.router.add_post("/api/ramp", handle_ramp)
     app.router.add_get("/api/events", handle_events)
     # Web GUI only
     app.router.add_get("/api/messages", handle_messages)
@@ -159,6 +162,21 @@ async def handle_soc(request: web.Request) -> web.Response:
             status=400,
         )
     await on_set_soc(soc)
+    return web.json_response({"status": "ok"})
+
+
+async def handle_ramp(request: web.Request) -> web.Response:
+    """Simulated car start-up: {"start_delay_s": 0-60, "ramp_up_s": 0-60}."""
+    on_set_ramp = request.app["on_set_ramp"]
+    if on_set_ramp is None:
+        return web.json_response({"status": "error", "message": "Not supported"}, status=501)
+    try:
+        body = await request.json()
+        on_set_ramp(float(body["start_delay_s"]), float(body["ramp_up_s"]))
+    except (KeyError, TypeError, ValueError, AttributeError, json.JSONDecodeError) as err:
+        message = str(err) if isinstance(err, ValueError) and "60" in str(err) else (
+            "Send JSON: {\"start_delay_s\": 0-60, \"ramp_up_s\": 0-60}")
+        return web.json_response({"status": "error", "message": message}, status=400)
     return web.json_response({"status": "ok"})
 
 

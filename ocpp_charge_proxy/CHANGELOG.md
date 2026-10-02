@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.0.3
+
+- **Start delay and ramp-up are now set on the web page** (Settings tab, new
+  Simulated car card) instead of the add-on configuration. If you'd changed
+  them from the defaults (3s and 5s), set them again there.
+- **Auto re-plug is no longer in the add-on configuration**: turn it on/off
+  and set the minutes and tries on the Settings tab. Changes you made there
+  are kept; if you'd only changed them in the add-on configuration, set them
+  again on the Settings tab (defaults: on, 10 minutes, 3 tries).
+- **Plug-ins that never got a session are on the Sessions tab:** when
+  Plugged In turns on but is turned off again before your provider starts a
+  session, a "no session" row shows when, for how long, who plugged in
+  (web page, Home Assistant, schedule, car plugged in sensor, auto plug-in,
+  auto re-plug) and why it ended: re-plugged by auto re-plug because no
+  session came, or unplugged before a session started (and by whom). A
+  plug-in still waiting for a session shows at the top. The last 20 of these
+  are kept, separately from the last 20 sessions.
+- **The Messages tab is kept across restarts** (saved in
+  `/data/messages.json` every minute and when the add-on stops), with an
+  "Add-on restarted" line where each restart happened. Messages from an
+  earlier day show their date.
+
+## 2.0.2
+
+- The Sessions tab shows each session's transaction ID and ID tag.
+
 ## 2.0.1
 
 - **New Settings tab** on the web page: the controls (Plugged In, max

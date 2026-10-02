@@ -124,7 +124,7 @@ async def run() -> None:
     stop_task = asyncio.create_task(stop_event.wait())
 
     # --- Command callbacks for the API ---
-    async def do_plug():
+    async def do_plug(source: str = "web page"):
         from ocpp.v16.enums import ChargePointStatus as CPS
         if cp is None:
             return
@@ -133,18 +133,18 @@ async def run() -> None:
             return
         cp.state = CPS.preparing
         shared_state.state = cp.state
-        cp.set_plugged_in(True)
+        cp.set_plugged_in(True, source)
         try:
             await cp.send_status()
         except Exception:
             logger.warning("Failed to send status after plug", exc_info=True)
 
-    async def do_unplug():
+    async def do_unplug(source: str = "web page"):
         from ocpp.v16.enums import ChargePointStatus as CPS
         if cp is None:
             return
         # Set unplugged state immediately so the integration sees it
-        cp.set_plugged_in(False)
+        cp.set_plugged_in(False, source)
         shared_state.state = CPS.available
         if cp._transaction_id is not None:
             # Bug 3 fix: pass final_state so _do_stop_transaction doesn't clobber
@@ -233,6 +233,7 @@ async def run() -> None:
         )),
         asyncio.create_task(automation_loop(automation, shared_state, do_plug, do_unplug)),
         asyncio.create_task(ha_link.run()),
+        asyncio.create_task(cp.message_log.save_loop()),
     ]
     notified_server = False
 
@@ -243,6 +244,7 @@ async def run() -> None:
         gui=gui,
         automation=automation,
         ha_link=ha_link,
+        on_set_ramp=cp.set_ramp,
     )
     runner = web.AppRunner(api_app)
     await runner.setup()
@@ -310,6 +312,7 @@ async def run() -> None:
         except Exception:
             logger.debug("Couldn't mark the sensors unavailable", exc_info=True)
         await _cancel_all(charger_tasks)
+        cp.message_log.save()  # keep the Messages tab across the restart
         await runner.cleanup()
         logger.info("OCPP Charge Proxy stopped")
 

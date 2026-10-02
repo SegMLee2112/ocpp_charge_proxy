@@ -27,7 +27,7 @@ class Fake:
     async def set_soc(self, soc):
         self.soc.append(soc)
 
-    async def plug(self):
+    async def plug(self, source=None):
         self.plugs += 1
         self.state.plugged_in = True
 

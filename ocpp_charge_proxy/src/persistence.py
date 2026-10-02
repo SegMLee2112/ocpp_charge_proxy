@@ -13,6 +13,7 @@ _QUEUE_FILE = "offline_queue.json"
 _TRANSACTION_FILE = "active_transaction.json"
 _CURRENT_FILE = "current_setting.json"
 _PLUG_FILE = "plugged_in.json"
+_RAMP_FILE = "ramp_setting.json"
 
 
 class Persistence:
@@ -130,6 +131,14 @@ class Persistence:
 
     def save_current_setting(self, setting: dict) -> None:
         self._write(_CURRENT_FILE, "current", setting)
+
+    def load_ramp_setting(self) -> dict | None:
+        """Start delay / ramp-up set on the web page: {"start_delay_s", "ramp_up_s"}."""
+        setting = self._read(_RAMP_FILE, "ramp", None)
+        return setting if isinstance(setting, dict) else None
+
+    def save_ramp_setting(self, setting: dict) -> None:
+        self._write(_RAMP_FILE, "ramp", setting)
 
     def load_plugged_in(self) -> bool:
         """Whether the car was plugged in at the last save (the cable stays in across a restart)."""

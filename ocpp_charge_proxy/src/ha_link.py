@@ -211,11 +211,11 @@ class HaLink:
             action = self.plug_sync.from_ha(state.get("state") if state else None, bool(self._shared.plugged_in))
             if action == "plug":
                 logger.info("%s turned on in Home Assistant: plugging in", entity_id)
-                await self._safe_plug()
+                await self._safe_plug("Home Assistant")
             elif action == "unplug" and self._unplug is not None:
                 logger.info("%s turned off in Home Assistant: unplugging", entity_id)
                 try:
-                    await self._unplug()
+                    await self._unplug(source="Home Assistant")
                 except Exception:
                     logger.warning("Couldn't unplug", exc_info=True)
         if entity_id and entity_id == s["power_entity"]:
@@ -226,18 +226,18 @@ class HaLink:
         if entity_id and entity_id == s["plug_entity"]:
             if self.car_connected.should_plug(state.get("state") if state else None, plugged_in):
                 logger.info("%s turned on: switching Plugged In on", entity_id)
-                await self._safe_plug()
+                await self._safe_plug("car plugged in sensor")
                 plugged_in = True
         if entity_id and self.auto_plug.enabled and entity_id == self.monitor_entity:
             soc = soc_value(state)
             if self.auto_plug.should_plug(soc, plugged_in):
                 logger.info("Car SoC %.0f%% dropped below %d%%: switching Plugged In on", soc, s["auto_plug_soc"])
-                if not await self._safe_plug():
+                if not await self._safe_plug("auto plug-in (low SoC)"):
                     self.auto_plug.armed = True  # try again on the next reading
 
-    async def _safe_plug(self) -> bool:
+    async def _safe_plug(self, source: str) -> bool:
         try:
-            await self._plug()
+            await self._plug(source=source)
             return True
         except Exception:
             logger.warning("Couldn't plug in", exc_info=True)

@@ -268,3 +268,21 @@ async def test_sensor_settings_endpoints(aiohttp_client, shared_state, mock_comm
     data = await (await client.get("/api/sensors/entities")).json()
     assert data == {"entities": [], "available": False}
 
+@pytest.mark.asyncio
+async def test_post_ramp(aiohttp_client, shared_state, mock_commands):
+    calls = []
+
+    def set_ramp(delay, ramp):
+        if delay > 60:
+            raise ValueError("Start delay and ramp-up must be 0 to 60 seconds")
+        calls.append((delay, ramp))
+
+    app = create_api_app(
+        shared_state, on_plug=mock_commands["plug"], on_unplug=mock_commands["unplug"],
+        on_set_current=mock_commands["set_current"], on_set_ramp=set_ramp,
+    )
+    client = await aiohttp_client(app)
+    assert (await client.post("/api/ramp", json={"start_delay_s": 2, "ramp_up_s": 8})).status == 200
+    assert calls == [(2.0, 8.0)]
+    assert (await client.post("/api/ramp", json={"start_delay_s": 99, "ramp_up_s": 0})).status == 400
+    assert (await client.post("/api/ramp", json={"start_delay_s": 1})).status == 400

@@ -59,6 +59,19 @@ class ChargerSimulator:
     def current_amps(self) -> int:
         return self._current_amps
 
+    @property
+    def start_delay_s(self) -> float:
+        return self._start_delay_s
+
+    @property
+    def ramp_up_s(self) -> float:
+        return self._ramp_up_s
+
+    def set_ramp(self, start_delay_s: float, ramp_up_s: float) -> None:
+        """Change the start delay / ramp-up (applies from the next start or resume)."""
+        self._start_delay_s = max(0.0, float(start_delay_s))
+        self._ramp_up_s = max(0.0, float(ramp_up_s))
+
     @current_amps.setter
     def current_amps(self, value: int) -> None:
         if value not in VALID_CURRENT_SETTINGS:
