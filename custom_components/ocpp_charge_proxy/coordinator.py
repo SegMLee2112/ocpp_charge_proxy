@@ -202,6 +202,9 @@ class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
                         continue
                     resp.raise_for_status()
                     backoff = 5
+                    # The add-on may have just (re)started without our sensor
+                    # values; send them now rather than at the next change/poll
+                    self.hass.async_create_task(self._push_entity_values())
                     async for raw in resp.content:
                         line = raw.decode("utf-8", "replace").strip()
                         if not line.startswith("data:"):

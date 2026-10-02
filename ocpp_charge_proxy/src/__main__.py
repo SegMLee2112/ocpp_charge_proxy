@@ -160,7 +160,7 @@ async def run() -> None:
 
     async def do_set_power(power_kw: float | None):
         if cp is not None:
-            cp._power_override = power_kw
+            cp.set_power_override(power_kw)
 
     async def do_set_soc(soc: float | None):
         if cp is not None:

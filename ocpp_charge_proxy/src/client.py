@@ -632,8 +632,15 @@ class ChargePoint(BaseChargePoint):
         self._shared_state.power_kw = 0.0
         self._shared_state.current_a = 0.0
         self._shared_state.power_offered_kw = 0.0
-        self._shared_state.power_source = "simulated"
-        self._shared_state.power_entity_value = None
+        # power_source / power_entity_value describe the configuration (is a
+        # power entity in use?), not whether power is flowing, so they're left
+        # alone here; see set_power_override.
+
+    def set_power_override(self, power_kw: Optional[float]) -> None:
+        """Real power from the integration's power entity (kW), or None for the simulation."""
+        self._power_override = power_kw
+        self._shared_state.power_source = "simulated" if power_kw is None else "entity"
+        self._shared_state.power_entity_value = power_kw
 
     def _set_heartbeat_interval(self, seconds: int) -> None:
         """Apply a new heartbeat interval and keep the reported config in sync."""

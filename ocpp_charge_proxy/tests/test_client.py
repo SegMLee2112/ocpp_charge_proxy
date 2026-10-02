@@ -1247,3 +1247,18 @@ def test_ha_max_current_remembered_across_restart(tmp_path):
 
     # Changing the add-on option is an explicit choice and takes over again
     assert _starting_current(SimpleNamespace(current_amps=20), persistence) == 20
+
+
+# --- 0.9.7: Power Source reflects the configuration, charging or not ---
+
+
+def test_power_source_shows_entity_while_idle(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.set_power_override(0.0)  # a power entity reading 0 W while not charging
+    cp.refresh_live_power()
+    _run(cp.send_meter_values())  # idle reading zeroes power...
+    assert cp._shared_state.power_kw == 0.0
+    assert cp._shared_state.power_source == "entity"  # ...but not the source
+    assert cp._shared_state.power_entity_value == 0.0
+    cp.set_power_override(None)  # entity unset / unavailable
+    assert cp._shared_state.power_source == "simulated"

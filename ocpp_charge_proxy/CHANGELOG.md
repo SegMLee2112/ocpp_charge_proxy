@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.7
+
+- Fix: after an add-on restart, the power and SoC sensor values weren't sent
+  to the add-on until the sensor changed or the integration next polled (every
+  5 minutes while push updates are working), so the add-on ran on the
+  simulation in the meantime. Toggling a switch forced a refresh, which is
+  why it came right then. The integration now re-sends both as soon as it
+  reconnects to the add-on.
+- Fix: **Power Source** only showed `entity` while charging and reset to
+  `simulated` whenever the charger was idle, even with a power sensor set.
+  It now shows whether a power sensor value is in use (`entity`) or not
+  (`simulated`), charging or not.
+
 ## 0.9.6
 
 - New integration option: **plug in automatically when the car's SoC drops
