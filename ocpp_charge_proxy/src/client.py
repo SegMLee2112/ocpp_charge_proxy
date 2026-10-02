@@ -759,7 +759,8 @@ class ChargePoint(BaseChargePoint):
             # so capture the energy delivered so far now.
             self._checkpoint_energy()
             asyncio.create_task(self._do_stop_transaction(
-                final_state=ChargePointStatus.available
+                final_state=ChargePointStatus.available,
+                reason=Reason.unlock_command,
             ))
 
         self._shared_state.plugged_in = False
@@ -776,7 +777,10 @@ class ChargePoint(BaseChargePoint):
         logger.info("Reset requested: type=%s", type)
 
         if self._transaction_id is not None:
-            await self._do_stop_transaction(final_state=ChargePointStatus.available)
+            await self._do_stop_transaction(
+                final_state=ChargePointStatus.available,
+                reason=Reason.hard_reset if type == ResetType.hard else Reason.soft_reset,
+            )
 
         self._profile_scheduler.clear_profile()
 

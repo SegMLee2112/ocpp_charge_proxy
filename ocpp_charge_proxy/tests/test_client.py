@@ -342,3 +342,55 @@ def test_unlock_connector_captures_energy_before_state_change(mock_connection, m
 
     stop = [r for r in sent if isinstance(r, _call.StopTransactionPayload)][0]
     assert 7400 <= stop.meter_stop <= 7600
+
+
+# --- StopTransaction reasons ---
+
+from ocpp.v16.enums import Reason as _Reason
+
+
+def _stop_reason_after(cp, coro_factory):
+    cp.call, sent = _call_recorder()
+    cp.state = ChargePointStatus.charging
+    cp._charger_sim.start_charging()
+    cp._transaction_id = 4242
+
+    async def scenario():
+        await coro_factory()
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(scenario())
+    loop.close()
+    return [r for r in sent if isinstance(r, _call.StopTransactionPayload)][0].reason
+
+
+def test_remote_stop_reason_is_remote(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    assert _stop_reason_after(
+        cp, lambda: cp.on_remote_stop_transaction(transaction_id=4242)
+    ) == _Reason.remote
+
+
+def test_unlock_connector_reason(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    assert _stop_reason_after(
+        cp, lambda: cp.on_unlock_connector(connector_id=1)
+    ) == _Reason.unlock_command
+
+
+def test_soft_reset_reason(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    assert _stop_reason_after(cp, lambda: cp.on_reset(type="Soft")) == _Reason.soft_reset
+
+
+def test_unplug_reason_is_ev_disconnected(mock_connection, mock_persistence):
+    """What do_unplug in __main__ passes when HA unplugs the car."""
+    cp = make_cp(mock_connection, mock_persistence)
+    assert _stop_reason_after(
+        cp, lambda: cp._do_stop_transaction(
+            final_state=ChargePointStatus.available,
+            reason=_Reason.ev_disconnected,
+        )
+    ) == _Reason.ev_disconnected

@@ -130,7 +130,10 @@ async def run() -> None:
         shared_state.state = CPS.available
         if cp._transaction_id is not None:
             # Bug 3 fix: pass final_state so _do_stop_transaction doesn't clobber
-            await cp._do_stop_transaction(final_state=CPS.available)
+            from ocpp.v16.enums import Reason
+            await cp._do_stop_transaction(
+                final_state=CPS.available, reason=Reason.ev_disconnected,
+            )
         cp.state = CPS.available
         shared_state.state = cp.state
         try:
