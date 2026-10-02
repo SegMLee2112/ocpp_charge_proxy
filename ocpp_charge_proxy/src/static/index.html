@@ -127,6 +127,20 @@
   .section-title { font-size: 13px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 -4px; }
   .picker { display: block; width: 100%; min-width: 0; }
   .picker select, .picker input { width: 100%; max-width: 100%; }
+  /* sensor pickers: type to filter */
+  .combo { position: relative; display: block; }
+  .combo input, .picker input[type="text"] { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--divider);
+    border-radius: 8px; padding: 6px 30px 6px 10px; box-sizing: border-box; text-overflow: ellipsis; }
+  .combo::after { content: ''; position: absolute; right: 12px; top: 50%; margin-top: -3px; pointer-events: none;
+    border: 5px solid transparent; border-top-color: var(--text2); border-bottom: 0; }
+  .combo-list { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; margin: 0; padding: 4px 0; list-style: none;
+    max-height: 280px; overflow-y: auto; background: var(--card); border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.25), 0 0 0 1px var(--divider); }
+  .combo-list li { padding: 6px 10px; cursor: pointer; overflow-wrap: anywhere; }
+  .combo-list li .sub { color: var(--text2); font-size: 12px; }
+  .combo-list li.active { background: var(--hover); box-shadow: inset 3px 0 0 var(--primary); }
+  .combo-list li.sel { font-weight: 600; }
+  .combo-list li.empty { color: var(--text2); cursor: default; }
   .seg.days button { padding: 6px 9px; min-width: 30px; }
   input[type="time"] { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--divider); border-radius: 8px; padding: 5px 8px; }
   .switch { position: relative; width: 44px; height: 24px; flex: none; }
@@ -1196,10 +1210,6 @@ function discardSettings() {
   if (state) { $('c-delay').value = state.start_delay_s; $('c-ramp').value = state.ramp_up_s; }
   updateSaveBar(); refreshSimulation(true); refreshAutomation(false);
 }
-function entityLabel(e) {
-  const val = e.state == null ? '' : ` — ${e.state}${e.unit ? ' ' + e.unit : ''}`;
-  return `${e.name} (${e.entity_id})${val}`;
-}
 function drawPickers() {
   const all = $('sim-all').checked;
   document.querySelectorAll('#tab-settings .picker').forEach((span) => {
@@ -1218,13 +1228,70 @@ function drawPickers() {
       const known = sim.entities.find((e) => e.entity_id === value);
       list = [known || {entity_id: value, name: value, state: null}, ...list];
     }
-    span.innerHTML = `<select data-key="${key}" aria-label="${key}">
-      <option value="">${esc(span.dataset.none || 'None')}</option>
-      ${list.map((e) => `<option value="${esc(e.entity_id)}" ${e.entity_id === value ? 'selected' : ''}>${esc(entityLabel(e))}</option>`).join('')}
-    </select>` + (!all && !list.length ? '<div class="note">No matching sensors. Tick "Show all sensors" below.</div>' : '');
+    if (span.contains(document.activeElement)) return;  // don't redraw while someone is typing
+    const none = span.dataset.none || 'None';
+    const opts = [{value: '', label: none, sub: ''}, ...list.map((e) => ({
+      value: e.entity_id, label: e.name || e.entity_id,
+      sub: e.entity_id + (e.state == null ? '' : ` · ${e.state}${e.unit ? ' ' + e.unit : ''}`),
+    }))];
+    span.innerHTML = `<div class="combo"><input type="text" data-combo="${key}" role="combobox" aria-autocomplete="list"
+      aria-expanded="false" aria-controls="cl-${key}" aria-label="${key}" placeholder="Type to search…" autocomplete="off" spellcheck="false">
+      <ul class="combo-list" id="cl-${key}" role="listbox" hidden></ul></div>`
+      + (!all && !list.length ? '<div class="note">No matching sensors. Tick "Show all sensors" below.</div>' : '');
+    setupCombo(span.querySelector('.combo'), key, opts);
   });
   $('sim-auto').checked = !!sim.edit.auto_plug;
   if (document.activeElement !== $('sim-auto-soc')) $('sim-auto-soc').value = sim.edit.auto_plug_soc;
+}
+// A text box that filters the list as you type (every word must match the
+// name, entity ID or reading). Arrow keys + Enter, or click, to choose.
+function setupCombo(box, key, opts) {
+  const input = box.querySelector('input'), ul = box.querySelector('ul');
+  let shown = [], active = -1;
+  const current = () => opts.find((o) => o.value === (sim.edit[key] || '')) || {value: sim.edit[key], label: sim.edit[key], sub: ''};
+  const showValue = () => { const c = current(); input.value = c.value ? `${c.label} (${c.value})` : ''; input.placeholder = c.value ? 'Type to search…' : c.label; };
+  const close = () => { ul.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); };
+  const setActive = (i) => {
+    active = i;
+    ul.querySelectorAll('li[role="option"]').forEach((li, n) => li.classList.toggle('active', n === i));
+    const li = ul.querySelector(`#co-${key}-${i}`);
+    if (li) { input.setAttribute('aria-activedescendant', li.id); li.scrollIntoView({block: 'nearest'}); }
+  };
+  const draw = (q) => {
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    shown = opts.filter((o, n) => (n === 0 && !words.length) || (n > 0 && words.every((w) => (o.label + ' ' + o.sub).toLowerCase().includes(w))));
+    const sel = sim.edit[key] || '';
+    ul.innerHTML = shown.length ? shown.map((o, n) => `<li role="option" id="co-${key}-${n}" data-n="${n}" aria-selected="${o.value === sel}"
+      class="${o.value === sel ? 'sel' : ''}">${esc(o.label)}${o.sub ? `<div class="sub">${esc(o.sub)}</div>` : ''}</li>`).join('')
+      : '<li class="empty">No sensors match</li>';
+    ul.hidden = false; input.setAttribute('aria-expanded', 'true');
+    setActive(shown.length ? Math.max(0, shown.findIndex((o) => o.value === sel)) : -1);
+  };
+  const choose = (o) => {
+    if ((sim.edit[key] || '') !== o.value) { sim.edit[key] = o.value; simSetDirty(true); }
+    close(); showValue(); input.blur();
+  };
+  input.addEventListener('focus', () => { input.value = ''; draw(''); });
+  input.addEventListener('input', () => draw(input.value));
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      if (ul.hidden) { draw(input.value); return; }
+      if (shown.length) setActive((active + (ev.key === 'ArrowDown' ? 1 : shown.length - 1)) % shown.length);
+    } else if (ev.key === 'Enter') {
+      ev.preventDefault();
+      if (active >= 0 && shown[active]) choose(shown[active]);
+      else if (/^[a-z_]+\.[a-z0-9_]+$/.test(input.value.trim())) choose({value: input.value.trim()});  // typed an entity ID
+    } else if (ev.key === 'Escape') { close(); showValue(); input.blur(); }
+  });
+  input.addEventListener('blur', () => { close(); showValue(); });
+  // mousedown, not click: it fires before the input loses focus
+  ul.addEventListener('mousedown', (ev) => {
+    const li = ev.target.closest('li[data-n]');
+    ev.preventDefault();
+    if (li) choose(shown[+li.dataset.n]);
+  });
+  showValue();
 }
 function entityState(ent) {
   if (!ent) return '<span class="muted">Not set</span>';

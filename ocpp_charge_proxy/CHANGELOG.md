@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.1.8
+
+- The web page is no longer cached by the browser, so an update shows
+  straight away. Before, the browser could keep showing the previous
+  version's page (e.g. the "All good" badge instead of the 2.1.3 status dot)
+  until a hard refresh (Ctrl+F5).
+
+## 2.1.7
+
+- The sensor lists on the Settings tab can be searched: click one and type
+  part of a sensor's name, entity ID or reading to narrow the list. Use the
+  arrow keys and Enter, or click, to choose. Esc leaves it unchanged.
+
 ## 2.1.6
 
 - Quieter add-on log: the web page's routine requests (it refreshes every

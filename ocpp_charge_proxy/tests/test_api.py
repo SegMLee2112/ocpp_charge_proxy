@@ -287,3 +287,12 @@ async def test_post_ramp(aiohttp_client, shared_state, mock_commands):
     assert calls == [(2.0, 8.0)]
     assert (await client.post("/api/ramp", json={"start_delay_s": 99, "ramp_up_s": 0})).status == 400
     assert (await client.post("/api/ramp", json={"start_delay_s": 1})).status == 400
+
+
+@pytest.mark.asyncio
+async def test_index_is_never_cached(client):
+    resp = await client.get("/")
+    assert resp.status == 200
+    assert "no-store" in resp.headers["Cache-Control"]
+    assert "Last-Modified" not in resp.headers and "ETag" not in resp.headers
+    assert "OCPP Charge Proxy" in await resp.text()

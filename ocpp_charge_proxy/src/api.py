@@ -80,7 +80,14 @@ def create_api_app(
 async def handle_index(request: web.Request) -> web.Response:
     static_dir: Path = request.app["static_dir"]
     index = static_dir / "index.html"
-    return web.FileResponse(index)
+    # Never cached: after an update the browser (or HA's ingress) must not
+    # keep showing the old page. It's small and only loaded when opened.
+    return web.Response(
+        body=index.read_bytes(),
+        content_type="text/html",
+        charset="utf-8",
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
 
 
 async def handle_get_state(request: web.Request) -> web.Response:
