@@ -114,9 +114,8 @@ Both are installed from this repository.
   connection, state, power, energy, current, SoC, transaction, held messages,
   last heartbeat and last commands.
 - **Quieter logs.** OCPP messages are logged at `info`, except Heartbeats
-  (every 10s with Octopus) and idle meter readings (every 60s when not
-  charging), which only show at `debug`. Clock-aligned readings and readings
-  during a session stay at `info`.
+  (every 10s with Octopus) and periodic meter readings (every 60s), which only
+  show at `debug`. Clock-aligned readings (every 15 min) stay at `info`.
 
 ## Step 1: Install the Add-on
 

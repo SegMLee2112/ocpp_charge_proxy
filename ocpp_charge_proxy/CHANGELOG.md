@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.4
+
+- Quieter logs during charging: periodic meter readings in a session (every
+  60s with Octopus) and the replies to them are now logged at DEBUG too, like
+  idle ones. Clock-aligned readings (every 15 min) stay at INFO, in a session
+  or not.
+
 ## 1.0.3
 
 - **SoC Source** is renamed **Reporting SoC** (matching "SoC sensor for

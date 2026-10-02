@@ -54,20 +54,21 @@ def _reading(uid, context="Sample.Periodic", transaction_id=None):
     return [2, uid, "MeterValues", payload]
 
 
-def test_idle_periodic_meter_values_hidden_at_info(monkeypatch):
+def test_periodic_meter_values_hidden_at_info(monkeypatch):
+    """Idle and in-session periodic readings, and their replies."""
     monkeypatch.setattr(logging.getLogger(), "level", logging.INFO)
     f = DemoteRoutineMessages()
-    assert f.filter(_record("send", _reading("mv1"))) is False
-    assert f.filter(_record("receive", [3, "mv1", {}])) is False
+    for uid, frame in (("idle", _reading("idle")), ("tx", _reading("tx", transaction_id=1))):
+        assert f.filter(_record("send", frame)) is False
+        assert f.filter(_record("receive", [3, uid, {}])) is False
 
 
-def test_clock_aligned_and_session_meter_values_still_shown(monkeypatch):
+def test_clock_aligned_meter_values_still_shown(monkeypatch):
     monkeypatch.setattr(logging.getLogger(), "level", logging.INFO)
     f = DemoteRoutineMessages()
     for uid, frame in (
         ("clk", _reading("clk", context="Sample.Clock")),  # every 15 min
-        ("tx", _reading("tx", transaction_id=1)),  # during a session
-        ("txclk", _reading("txclk", context="Sample.Clock", transaction_id=1)),
+        ("txclk", _reading("txclk", context="Sample.Clock", transaction_id=1)),  # in a session
     ):
         rec = _record("send", frame)
         assert f.filter(rec) is True and rec.levelname == "INFO"

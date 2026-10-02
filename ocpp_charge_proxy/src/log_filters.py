@@ -6,18 +6,18 @@ import json
 import logging
 
 # OCPP actions whose send/receive lines are routine noise at INFO (shown with
-# log_level: debug). MeterValues only counts when it's an idle periodic
-# reading; see _routine_meter_values.
+# log_level: debug). MeterValues only counts when it's a periodic reading;
+# see _routine_meter_values.
 DEBUG_ONLY_ACTIONS = frozenset({"Heartbeat", "MeterValues"})
 
 
 def _routine_meter_values(payload) -> bool:
-    """An idle periodic reading: no transaction, every value Sample.Periodic.
+    """A periodic reading (every MeterValueSampleInterval), in a session or not.
 
-    Readings during a session (with a transactionId) and clock-aligned ones
-    (Sample.Clock, every ClockAlignedDataInterval) stay at INFO.
+    Clock-aligned readings (Sample.Clock, every ClockAlignedDataInterval) stay
+    at INFO.
     """
-    if not isinstance(payload, dict) or payload.get("transactionId") is not None:
+    if not isinstance(payload, dict):
         return False
     contexts = {
         sv.get("context", "Sample.Periodic")  # OCPP default context
@@ -28,7 +28,7 @@ def _routine_meter_values(payload) -> bool:
 
 
 class DemoteRoutineMessages(logging.Filter):
-    """Show the ocpp library's Heartbeat and idle MeterValues lines at DEBUG, not INFO.
+    """Show the ocpp library's Heartbeat and periodic MeterValues lines at DEBUG, not INFO.
 
     The library logs every frame at INFO ("send [...]" / "receive message
     [...]"). This catches those calls and the server's reply to them (matched
