@@ -127,6 +127,7 @@
     <div class="details">
       <div class="detail"><div class="status-label">Power</div><div class="detail-value" id="power">—</div></div>
       <div class="detail"><div class="status-label">Energy</div><div class="detail-value" id="energy">—</div></div>
+      <div class="detail"><div class="status-label">Current</div><div class="detail-value" id="amps">—</div></div>
       <div class="detail"><div class="status-label">Car SoC</div><div class="detail-value" id="soc">—</div></div>
       <div class="detail"><div class="status-label">Transaction</div><div class="detail-value" id="tx">—</div></div>
       <div class="detail"><div class="status-label">Held messages</div><div class="detail-value" id="held">—</div></div>
@@ -182,6 +183,9 @@
         const power = Number(data.power_kw || 0);
         set('power', power.toFixed(2) + ' kW' + (data.power_source === 'entity' ? ' (sensor)' : ''));
         set('energy', Number(data.energy_kwh || 0).toLocaleString(undefined, {maximumFractionDigits: 1}) + ' kWh');
+        const eff = data.current_amps_effective ?? data.current_amps_setting;
+        const max = data.current_amps_setting;
+        set('amps', eff + ' A' + (eff < max ? ' (max ' + max + ' A, provider limit)' : ''));
         if (data.soc_percent === null || data.soc_percent === undefined) {
           set('soc', 'Not set', 'muted');
         } else {

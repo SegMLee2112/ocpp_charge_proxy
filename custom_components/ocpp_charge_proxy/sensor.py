@@ -49,6 +49,14 @@ SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
     ),
 )
 
+SOC_SOURCE_DESCRIPTION = SensorEntityDescription(
+    key="soc_source",
+    name="SoC Source",
+    icon="mdi:battery-sync",
+    device_class=SensorDeviceClass.ENUM,
+    options=["entity", "no reading", "not set"],
+)
+
 # OCPP traffic: state is the action name, details are attributes
 COMMAND_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
@@ -76,6 +84,7 @@ async def async_setup_entry(
     async_add_entities(
         [
             *(OCPPChargeProxySensor(coordinator, entry, desc) for desc in SENSOR_DESCRIPTIONS),
+            OCPPChargeProxySocSourceSensor(coordinator, entry, SOC_SOURCE_DESCRIPTION),
             *(OCPPChargeProxyCommandSensor(coordinator, entry, desc)
               for desc in COMMAND_SENSOR_DESCRIPTIONS),
         ]
@@ -127,4 +136,28 @@ class OCPPChargeProxyCommandSensor(OCPPChargeProxySensor):
             "status": record.get("status"),
             "payload": record.get("payload"),
             "response": record.get("response"),
+        }
+
+
+class OCPPChargeProxySocSourceSensor(OCPPChargeProxySensor):
+    """Where the SoC reported to the provider comes from, like Power Source.
+
+    entity:      a SoC sensor is set and has a value, which is being reported
+    no reading:  a SoC sensor is set but has no usable value, so none is sent
+    not set:     no SoC sensor; SoC is never reported and car-full is off
+    """
+
+    @property
+    def native_value(self) -> str:
+        if not self.coordinator.soc_entity:
+            return "not set"
+        if self.coordinator.data.get("soc_percent") is None:
+            return "no reading"
+        return "entity"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "entity_id": self.coordinator.soc_entity or None,
+            "soc_percent": self.coordinator.data.get("soc_percent"),
         }

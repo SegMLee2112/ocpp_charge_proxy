@@ -11,6 +11,7 @@ _ENERGY_FILE = "energy_register.json"
 _SERIAL_FILE = "serial_number.json"
 _QUEUE_FILE = "offline_queue.json"
 _TRANSACTION_FILE = "active_transaction.json"
+_CURRENT_FILE = "current_setting.json"
 
 
 class Persistence:
@@ -116,6 +117,14 @@ class Persistence:
 
     def save_active_transaction(self, transaction: dict | None) -> None:
         self._write(_TRANSACTION_FILE, "transaction", transaction)
+
+    def load_current_setting(self) -> dict | None:
+        """HA max current: {"amps": N, "option": add-on current_amps it was set under}."""
+        setting = self._read(_CURRENT_FILE, "current", None)
+        return setting if isinstance(setting, dict) and "amps" in setting else None
+
+    def save_current_setting(self, setting: dict) -> None:
+        self._write(_CURRENT_FILE, "current", setting)
 
     def load_serial_number(self) -> str:
         serial = self._read(_SERIAL_FILE, "serial", "")

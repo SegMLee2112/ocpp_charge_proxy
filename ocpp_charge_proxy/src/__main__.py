@@ -12,7 +12,7 @@ from aiohttp import web
 
 from src.api import create_api_app
 from src.client import ChargePoint
-from src.config import load_config
+from src.config import load_config, starting_current_amps
 from src.console import console_loop
 from src.persistence import Persistence
 from src.shared_state import SharedState
@@ -156,8 +156,7 @@ async def run() -> None:
 
     async def do_set_current(amps: int):
         if cp is not None:
-            cp._charger_sim.current_amps = amps
-            shared_state.current_amps_setting = amps
+            cp.set_max_current(amps)
 
     async def do_set_power(power_kw: float | None):
         if cp is not None:
@@ -178,7 +177,8 @@ async def run() -> None:
         id=config.chargepoint_id,
         connection=None,
         persistence=persistence,
-        current_amps=config.current_amps,
+        current_amps=starting_current_amps(config, persistence),
+        current_amps_option=config.current_amps,
         shared_state=shared_state,
         start_delay_s=config.start_delay_s,
         ramp_up_s=config.ramp_up_s,

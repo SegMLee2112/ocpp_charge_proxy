@@ -56,3 +56,18 @@ def load_config() -> Config:
         start_delay_s=_env_float("IO_START_DELAY_S", 3.0),
         ramp_up_s=_env_float("IO_RAMP_UP_S", 5.0),
     )
+
+
+def starting_current_amps(config: Config, persistence) -> int:
+    """The HA max current saved last time, unless the add-on option changed since.
+
+    Changing current_amps in the add-on configuration is an explicit choice, so
+    it takes over again; otherwise the setting made in Home Assistant is kept.
+    """
+    saved = persistence.load_current_setting()
+    if saved and saved.get("option") == config.current_amps:
+        try:
+            return int(saved["amps"])
+        except (TypeError, ValueError):
+            pass
+    return config.current_amps

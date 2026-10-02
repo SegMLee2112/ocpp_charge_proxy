@@ -32,7 +32,7 @@ from ocpp.v16.enums import (
     UpdateStatus,
 )
 
-from src.charger_sim import ChargerReading, ChargerSimulator
+from src.charger_sim import VALID_CURRENT_SETTINGS, ChargerReading, ChargerSimulator
 from src.charging_profile import ChargingProfileScheduler
 from src.meter_values import (
     build_charging_meter_values,
@@ -127,6 +127,7 @@ class ChargePoint(BaseChargePoint):
         shared_state: SharedState | None = None,
         start_delay_s: float = 0.0,
         ramp_up_s: float = 0.0,
+        current_amps_option: Optional[int] = None,
     ):
         super().__init__(id, connection)
         self.connector_id = 1
@@ -195,6 +196,13 @@ class ChargePoint(BaseChargePoint):
             start_delay_s=start_delay_s,
             ramp_up_s=ramp_up_s,
         )
+        # Current: the HA setting is the charger's maximum (like a real
+        # Wallbox's max-current setting). The provider's chargingALimitConn1
+        # can lower it but never raise it; the charger uses the lower of the two.
+        self._max_current_amps: int = self._charger_sim.current_amps
+        self._server_limit_amps: Optional[float] = None
+        self._current_amps_option = current_amps_option  # add-on option it was saved against
+        self._apply_current()
 
         # --- Offline message queue ---
         # Built with a live connection (tests, simple use) = already registered.
@@ -579,6 +587,41 @@ class ChargePoint(BaseChargePoint):
             data = self._stop_txn_data
             self._stop_txn_data = [data[0], *data[1:-1][1::2], data[-1]]
         self._save_active_transaction()
+
+    # --- Charging current -------------------------------------------------
+
+    def _effective_amps(self) -> int:
+        """Lower of the HA max and the provider limit, as a supported setting."""
+        limit = float(self._max_current_amps)
+        if self._server_limit_amps is not None:
+            limit = min(limit, self._server_limit_amps)
+        allowed = [a for a in VALID_CURRENT_SETTINGS if a <= limit + 1e-9]
+        return max(allowed) if allowed else VALID_CURRENT_SETTINGS[0]  # 6A minimum
+
+    def _apply_current(self) -> None:
+        effective = self._effective_amps()
+        if effective != self._charger_sim.current_amps:
+            self._charger_sim.current_amps = effective  # logs the change
+        self._shared_state.current_amps_setting = self._max_current_amps
+        self._shared_state.current_amps_effective = effective
+        self._shared_state.current_amps_provider_limit = self._server_limit_amps
+
+    def set_max_current(self, amps: int) -> None:
+        """The HA current setting: the charger's maximum, remembered across restarts."""
+        if amps not in VALID_CURRENT_SETTINGS:
+            raise ValueError(f"Invalid current setting {amps}A. Valid: {VALID_CURRENT_SETTINGS}")
+        self._max_current_amps = amps
+        self._persistence.save_current_setting({
+            "amps": amps, "option": self._current_amps_option,
+        })
+        self._apply_current()
+        if self._charger_sim.current_amps < amps:
+            logger.info(
+                "Max current set to %dA; provider limit keeps it at %dA",
+                amps, self._charger_sim.current_amps,
+            )
+        else:
+            logger.info("Max current set to %dA", amps)
 
     @property
     def energy_register_kwh(self) -> float:
@@ -1244,12 +1287,21 @@ class ChargePoint(BaseChargePoint):
             except ValueError:
                 logger.warning("Invalid MeterValueSampleInterval: %s, ignoring", value)
         elif key == "chargingALimitConn1":
-            amps = int(value)
+            # The provider's limit: can only lower the current below the HA max
             try:
-                self._charger_sim.current_amps = amps
-                self._shared_state.current_amps_setting = amps
+                limit = float(value)
+                if limit < 0:
+                    raise ValueError
             except ValueError:
-                logger.warning("Server set unsupported current %dA, ignoring", amps)
+                logger.warning("Invalid chargingALimitConn1: %s, ignoring", value)
+            else:
+                self._server_limit_amps = limit
+                self._apply_current()
+                if limit > self._max_current_amps:
+                    logger.info(
+                        "Provider limit %gA is above the HA max %dA: charging at %dA",
+                        limit, self._max_current_amps, self._charger_sim.current_amps,
+                    )
 
         return call_result.ChangeConfigurationPayload(
             status=ConfigurationStatus.accepted

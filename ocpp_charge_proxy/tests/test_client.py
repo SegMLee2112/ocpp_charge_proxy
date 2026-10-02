@@ -1176,3 +1176,74 @@ def test_held_messages_count_in_shared_state(mock_connection):
     _run(cp.send_meter_values())
     _run(cp.send_meter_values())
     assert cp._shared_state.held_messages == 2
+
+
+# --- 0.9.5: HA current is the max, provider can only lower it ---
+
+
+def _limit(cp, value):
+    return _run(cp.on_change_configuration(key="chargingALimitConn1", value=value))
+
+
+def test_provider_limit_cannot_raise_ha_max(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.set_max_current(16)
+    result = _limit(cp, "32")  # what Octopus sends at boot, start and stop
+    assert result.status == "Accepted"
+    assert _config_value(cp, "chargingALimitConn1") == "32"  # reported back as set
+    assert cp._charger_sim.current_amps == 16
+    assert cp._shared_state.current_amps_setting == 16
+    assert cp._shared_state.current_amps_effective == 16
+    assert cp._shared_state.current_amps_provider_limit == 32
+
+
+def test_provider_limit_can_lower_and_release(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.set_max_current(25)
+    _limit(cp, "10")
+    assert cp._charger_sim.current_amps == 10
+    assert cp._shared_state.current_amps_setting == 25  # the select keeps the HA value
+    _limit(cp, "32")
+    assert cp._charger_sim.current_amps == 25
+
+
+def test_provider_limit_snaps_down_to_supported_setting(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    _limit(cp, "18.5")
+    assert cp._charger_sim.current_amps == 16
+    _limit(cp, "3")  # below the 6A minimum
+    assert cp._charger_sim.current_amps == 6
+    _limit(cp, "abc")  # ignored, still accepted
+    assert cp._charger_sim.current_amps == 6
+
+
+def test_ha_max_change_respects_provider_limit(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    _limit(cp, "13")
+    cp.set_max_current(32)
+    assert cp._charger_sim.current_amps == 13
+    cp.set_max_current(10)
+    assert cp._charger_sim.current_amps == 10
+
+
+def test_invalid_ha_current_rejected(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    with pytest.raises(ValueError):
+        cp.set_max_current(15)
+
+
+def test_ha_max_current_remembered_across_restart(tmp_path):
+    from types import SimpleNamespace
+    from src.persistence import Persistence
+    from src.config import starting_current_amps as _starting_current
+    persistence = Persistence(data_dir=str(tmp_path))
+    config = SimpleNamespace(current_amps=32)
+    assert _starting_current(config, persistence) == 32  # fresh install: add-on option
+
+    cp = ChargePoint(id="CP", connection=None, persistence=persistence,
+                     current_amps=32, current_amps_option=32)
+    cp.set_max_current(16)
+    assert _starting_current(config, persistence) == 16  # restart: HA setting kept
+
+    # Changing the add-on option is an explicit choice and takes over again
+    assert _starting_current(SimpleNamespace(current_amps=20), persistence) == 20

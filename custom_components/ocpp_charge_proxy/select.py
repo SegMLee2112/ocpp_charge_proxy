@@ -40,6 +40,15 @@ class OCPPChargeProxyCurrentSelect(CoordinatorEntity[OCPPChargeProxyCoordinator]
         val = self.coordinator.data.get("current_amps_setting")
         return str(val) if val is not None else None
 
+    @property
+    def extra_state_attributes(self) -> dict:
+        """The setting is the max; the provider can lower the current below it."""
+        data = self.coordinator.data
+        return {
+            "effective_amps": data.get("current_amps_effective"),
+            "provider_limit_amps": data.get("current_amps_provider_limit"),
+        }
+
     async def async_select_option(self, option: str) -> None:
         """Set the charger current."""
         await self.coordinator.send_command("/api/current", {"amps": int(option)})

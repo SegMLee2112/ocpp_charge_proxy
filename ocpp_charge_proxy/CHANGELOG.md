@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.9.5
+
+- New integration sensor **SoC Source**, alongside Power Source. Shows where
+  the SoC sent to the provider comes from: `entity` (your car battery sensor
+  has a value and it's being reported), `no reading` (a sensor is set but has
+  no usable value right now, so no SoC is sent) or `not set` (no sensor: SoC
+  is never reported and car full is off). There is no simulated SoC, so the
+  proxy never makes one up. Attributes: `entity_id` and `soc_percent`.
+- Fix: the **Current Amps Setting** in Home Assistant was overwritten by the
+  provider. Octopus sends `chargingALimitConn1 = 32` at every boot, start and
+  stop, which reset the charger to 32 A. The HA setting is now the charger's
+  maximum, like a real Wallbox's max-current setting: the provider's limit can
+  lower the current below it but never raise it, and the charger uses the
+  lower of the two (snapped down to a supported setting, 6 A minimum). The
+  provider's value is still accepted and reported back to it. The select's
+  attributes show `effective_amps` and `provider_limit_amps`; the status page
+  shows the current in use.
+- The HA current setting is now remembered across add-on restarts
+  (`/data/current_setting.json`). The add-on's `current_amps` option is the
+  starting value; changing that option later takes over again.
+
 ## 0.9.4
 
 - Fix: crash-safe storage. The energy register (and the offline queue,

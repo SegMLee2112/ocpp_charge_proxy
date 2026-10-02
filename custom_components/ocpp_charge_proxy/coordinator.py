@@ -56,6 +56,11 @@ class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
         self._session = async_get_clientsession(hass)
         self.push_connected = False
 
+    @property
+    def soc_entity(self) -> str:
+        """Configured car battery (SoC) entity, or "" if not set."""
+        return self._soc_entity
+
     # --- Polling (fallback) ------------------------------------------------
 
     async def _async_update_data(self) -> dict:

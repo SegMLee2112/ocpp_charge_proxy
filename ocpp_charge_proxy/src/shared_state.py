@@ -16,7 +16,9 @@ class SharedState:
     frequency_hz: float = 50.0
     power_offered_kw: float = 0.0
     energy_kwh: float = 0.0
-    current_amps_setting: int = 32
+    current_amps_setting: int = 32  # HA max current (the select)
+    current_amps_effective: int = 32  # what the charger actually uses
+    current_amps_provider_limit: Optional[float] = None  # chargingALimitConn1
     transaction_id: Optional[int] = None
     connected_to_server: bool = False
     meter_interval: int = 60

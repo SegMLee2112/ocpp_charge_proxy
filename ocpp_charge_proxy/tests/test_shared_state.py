@@ -33,5 +33,6 @@ def test_to_dict_includes_all_fields():
         "meter_interval", "power_source", "power_entity_value",
         "server_config", "last_command_received", "last_command_sent",
         "soc_percent", "held_messages",
+        "current_amps_effective", "current_amps_provider_limit",
     }
     assert set(d.keys()) == expected_keys

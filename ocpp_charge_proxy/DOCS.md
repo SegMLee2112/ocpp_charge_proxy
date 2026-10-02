@@ -31,7 +31,7 @@ updates its state so Home Assistant automations can respond.
 | `charger_vendor` | `Wall Box Chargers` | Charger vendor reported in BootNotification |
 | `charger_serial` | Auto-generated | Charger serial number (generated on first boot if empty) |
 | `firmware_version` | `6.11.16` | Firmware version reported in BootNotification |
-| `current_amps` | `32` | Maximum charging current in amps (6/10/13/16/20/25/32) |
+| `current_amps` | `32` | Maximum charging current in amps (6/10/13/16/20/25/32). Starting value: once you change the current in Home Assistant that's remembered, until you change this option again |
 | `initial_energy_wh` | `0` | Seed the energy register (Wh). Set to your old charger's meter reading when migrating. Only applied if higher than the stored register (the meter never goes backwards); cleared after first boot. |
 | `start_delay_s` | `3` | Seconds after StartTransaction before the simulated car draws any current (also applied when resuming after a charging-profile pause). `0` = instant. |
 | `ramp_up_s` | `5` | Seconds for power to ramp linearly from 0 to full after the start delay. `0` = jump straight to full power. Not applied when power comes from a real power entity. |
@@ -130,12 +130,13 @@ Install the companion integration via HACS to get proper HA entities:
 | Entity | Type | Description |
 |--------|------|-------------|
 | Plugged In | Switch | Simulate car plugged in/unplugged |
-| Current Amps Setting | Select | Set charger current (6-32A) |
+| Current Amps Setting | Select | Charger's maximum current (6-32A), remembered across restarts. Your provider can lower the current below it but not raise it; attributes `effective_amps` and `provider_limit_amps` show what's in use |
 | State | Sensor | OCPP state (Available/Preparing/Charging/etc.) |
 | Power | Sensor | Current power draw (kW) |
 | Energy | Sensor | Cumulative energy (kWh, works with energy dashboard) |
 | Current | Sensor | Current draw (A) |
 | Power Source | Sensor | Whether using real entity or simulated values |
+| SoC Source | Sensor | `entity` (reporting your car battery sensor), `no reading` (sensor set but no value, nothing sent) or `not set` (no SoC reported, car full off) |
 | Connected to Server | Binary Sensor | Connected to OCPP server |
 | Last Command Received | Sensor (diagnostic) | Last OCPP command from your provider (e.g. `RemoteStartTransaction`). Attributes: `timestamp`, `payload`, `response`, `status` |
 | Last Command Sent | Sensor (diagnostic) | Last message sent to your provider, excluding Heartbeat and MeterValues. Same attributes, with the server's response |
