@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.0
+
+- New: realistic charging start. After StartTransaction (or resuming from a
+  charging-profile pause) the simulated car now waits `start_delay_s`
+  (default 3s) before drawing current, then ramps linearly to full power over
+  `ramp_up_s` (default 5s), instead of jumping straight to full power. Set
+  both to 0 for the old behaviour.
+- The energy register integrates over the delay and ramp exactly, so a 60s
+  meter interval spanning the start no longer bills the first few seconds at
+  full power.
+- Power from a real power entity (integration override) is unaffected, as it
+  already reflects the car's real ramp-up.
+
 ## 0.7.1
 
 - Fix: Home Assistant Energy dashboard spike after every add-on restart. The API

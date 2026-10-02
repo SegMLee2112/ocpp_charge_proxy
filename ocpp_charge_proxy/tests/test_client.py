@@ -563,3 +563,49 @@ def test_shared_state_energy_set_from_register_at_startup(mock_connection, mock_
         current_amps=32, shared_state=shared,
     )
     assert shared.energy_kwh == 5.0  # mock_persistence register is 5000 Wh
+
+
+# --- Start delay / ramp-up ---
+
+
+def test_energy_over_start_ramp_is_integrated(mock_connection, mock_persistence):
+    """A 60s interval spanning a 3s delay + 5s ramp bills 54.5s of full power."""
+    cp = ChargePoint(
+        id="CP001", connection=mock_connection, persistence=mock_persistence,
+        current_amps=32, start_delay_s=3, ramp_up_s=5,
+    )
+    cp.state = ChargePointStatus.charging
+    start_wh = cp._energy_register_wh
+    cp._checkpoint_energy()
+    cp._charger_sim.start_charging(now=cp._last_meter_time)
+    cp._charger_sim._charging_started_at -= 60
+    cp._last_meter_time -= 60
+    cp._take_reading()
+    added = cp._energy_register_wh - start_wh
+    # 7.27 kW * 54.5s ~= 110 Wh (vs ~121 Wh with no ramp); allow sim noise
+    assert 100 <= added <= 116
+
+
+def test_no_power_reported_during_start_delay(mock_connection, mock_persistence):
+    cp = ChargePoint(
+        id="CP001", connection=mock_connection, persistence=mock_persistence,
+        current_amps=32, start_delay_s=3, ramp_up_s=5,
+    )
+    cp.state = ChargePointStatus.charging
+    cp._checkpoint_energy()
+    cp._charger_sim.start_charging()
+    reading = cp._take_reading()
+    assert reading.power_kw == 0.0
+    assert cp._shared_state.power_kw == 0.0
+
+
+def test_power_override_ignores_simulated_ramp(mock_connection, mock_persistence):
+    cp = ChargePoint(
+        id="CP001", connection=mock_connection, persistence=mock_persistence,
+        current_amps=32, start_delay_s=3, ramp_up_s=5,
+    )
+    cp.state = ChargePointStatus.charging
+    cp._charger_sim.start_charging()
+    cp._power_override = 7.0
+    reading = cp._take_reading()
+    assert reading.power_kw == 7.0

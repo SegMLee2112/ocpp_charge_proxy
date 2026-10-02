@@ -17,6 +17,8 @@ class Config:
     initial_energy_wh: int
     log_level: str
     use_tls: bool = True
+    start_delay_s: float = 3.0  # car waits this long after StartTransaction
+    ramp_up_s: float = 5.0  # then ramps 0 -> full power over this long
 
     @property
     def websocket_url(self) -> str:
@@ -27,6 +29,15 @@ class Config:
     def redacted_url(self) -> str:
         scheme = "wss" if self.use_tls else "ws"
         return f"{scheme}://{self.chargepoint_id}:***@{self.server_hostname}/{self.chargepoint_id}"
+
+
+def _env_float(name: str, default: float) -> float:
+    """Non-negative float from the environment; blank/"null"/invalid -> default."""
+    raw = os.environ.get(name, "").strip()
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return default
 
 
 def load_config() -> Config:
@@ -42,4 +53,6 @@ def load_config() -> Config:
         initial_energy_wh=int(os.environ.get("IO_INITIAL_ENERGY_WH", "0")),
         log_level=os.environ.get("IO_LOG_LEVEL", "info"),
         use_tls=os.environ.get("IO_USE_TLS", "true").lower() != "false",
+        start_delay_s=_env_float("IO_START_DELAY_S", 3.0),
+        ramp_up_s=_env_float("IO_RAMP_UP_S", 5.0),
     )

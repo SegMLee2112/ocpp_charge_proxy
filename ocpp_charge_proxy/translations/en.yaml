@@ -39,6 +39,16 @@ configuration:
       Seed the energy meter with this value in watt-hours. Useful when
       migrating from an existing charger. Set to 0 for a fresh install.
       This value is applied once on startup and then cleared.
+  start_delay_s:
+    name: Start Delay (s)
+    description: >-
+      Seconds after StartTransaction before the simulated car begins drawing
+      current, like a real car. Set to 0 to start instantly.
+  ramp_up_s:
+    name: Ramp-up Time (s)
+    description: >-
+      Seconds for power to rise from 0 to full after the start delay.
+      Set to 0 to jump straight to full power.
   log_level:
     name: Log Level
     description: >-

@@ -180,6 +180,8 @@ async def run() -> None:
                     persistence=persistence,
                     current_amps=config.current_amps,
                     shared_state=shared_state,
+                    start_delay_s=config.start_delay_s,
+                    ramp_up_s=config.ramp_up_s,
                 )
 
                 # Start message loop first so incoming messages are handled

@@ -71,6 +71,8 @@ class ChargePoint(BaseChargePoint):
         persistence: Persistence,
         current_amps: int = 32,
         shared_state: SharedState | None = None,
+        start_delay_s: float = 0.0,
+        ramp_up_s: float = 0.0,
     ):
         super().__init__(id, connection)
         self.connector_id = 1
@@ -131,7 +133,11 @@ class ChargePoint(BaseChargePoint):
             "ConnectorPhaseRotation": ("1.RST", True),
             "GetConfigurationMaxKeys": ("50", True),
         }
-        self._charger_sim = ChargerSimulator(current_amps=current_amps)
+        self._charger_sim = ChargerSimulator(
+            current_amps=current_amps,
+            start_delay_s=start_delay_s,
+            ramp_up_s=ramp_up_s,
+        )
         self._profile_scheduler = ChargingProfileScheduler(
             rated_power_w=self._charger_sim.rated_power_kw * 1000
         )
@@ -287,7 +293,8 @@ class ChargePoint(BaseChargePoint):
         previous call. Returns None when not delivering power.
         """
         now = time.monotonic()
-        elapsed_hours = (now - self._last_meter_time) / 3600.0
+        prev = self._last_meter_time
+        elapsed_hours = (now - prev) / 3600.0
         self._last_meter_time = now
 
         if self.state != ChargePointStatus.charging:
@@ -296,13 +303,19 @@ class ChargePoint(BaseChargePoint):
             self._zero_power_state()
             return None
 
-        sim_reading = self._charger_sim.sample()
+        # Full-power reading, then apply the car's start delay / ramp-up
+        full_reading = self._charger_sim.sample_full()
+        sim_reading = self._charger_sim.scale(
+            full_reading, self._charger_sim.ramp_factor(now),
+        )
 
         # Use power override from integration if available
         real_power = self._power_override
         if real_power is not None:
-            # Clamp negatives to 0 (e.g. solar export), cap at charger max
-            capped_power = max(0.0, min(real_power, sim_reading.power_kw))
+            # Clamp negatives to 0 (e.g. solar export), cap at charger max.
+            # A real measured power already includes the car's own ramp-up,
+            # so the simulated delay/ramp isn't applied on top of it.
+            capped_power = max(0.0, min(real_power, full_reading.power_kw))
             current_a = round((capped_power * 1000) / sim_reading.voltage, 2) if capped_power > 0 else 0.0
             reading = ChargerReading(
                 power_kw=capped_power,
@@ -314,12 +327,16 @@ class ChargePoint(BaseChargePoint):
             )
             self._shared_state.power_source = "entity"
             self._shared_state.power_entity_value = real_power
+            energy_added_kwh = reading.power_kw * elapsed_hours
         else:
             reading = sim_reading
             self._shared_state.power_source = "simulated"
             self._shared_state.power_entity_value = None
+            # Integrate over the ramp rather than multiplying the whole interval
+            # by the instantaneous power, so the delay/ramp is billed exactly.
+            ramp_avg = self._charger_sim.average_ramp_factor(prev, now)
+            energy_added_kwh = full_reading.power_kw * ramp_avg * elapsed_hours
 
-        energy_added_kwh = reading.power_kw * elapsed_hours
         self._energy_register_wh += round(energy_added_kwh * 1000)
         self._persistence.save_energy_register_wh(self._energy_register_wh)
 

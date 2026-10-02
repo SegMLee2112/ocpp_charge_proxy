@@ -33,6 +33,8 @@ updates its state so Home Assistant automations can respond.
 | `firmware_version` | `6.11.16` | Firmware version reported in BootNotification |
 | `current_amps` | `32` | Maximum charging current in amps (6/10/13/16/20/25/32) |
 | `initial_energy_wh` | `0` | Seed the energy register (Wh). Set to your old charger's meter reading when migrating. Only applied if higher than the stored register (the meter never goes backwards); cleared after first boot. |
+| `start_delay_s` | `3` | Seconds after StartTransaction before the simulated car draws any current (also applied when resuming after a charging-profile pause). `0` = instant. |
+| `ramp_up_s` | `5` | Seconds for power to ramp linearly from 0 to full after the start delay. `0` = jump straight to full power. Not applied when power comes from a real power entity. |
 | `log_level` | `info` | Logging level (debug/info/warning/error) |
 
 ### Controlling your charger

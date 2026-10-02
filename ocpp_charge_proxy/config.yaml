@@ -1,6 +1,6 @@
 name: "OCPP Charge Proxy"
 description: "Virtual OCPP 1.7 chargepoint for smart tariff providers"
-version: "0.7.1"
+version: "0.8.0"
 slug: "ocpp_charge_proxy"
 url: "https://github.com/thewhale21/ocpp_charge_proxy"
 arch:
@@ -29,6 +29,8 @@ options:
   firmware_version: "6.11.16"
   current_amps: 32
   initial_energy_wh: 0
+  start_delay_s: 3
+  ramp_up_s: 5
   log_level: "info"
 schema:
   server_hostname: str
@@ -40,4 +42,6 @@ schema:
   firmware_version: str
   current_amps: "int(6,32)"
   initial_energy_wh: "int(0,)?"
+  start_delay_s: "float(0,60)?"
+  ramp_up_s: "float(0,60)?"
   log_level: list(debug|info|warning|error)

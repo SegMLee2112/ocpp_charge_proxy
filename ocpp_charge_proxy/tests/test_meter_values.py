@@ -184,3 +184,74 @@ def test_build_meter_values_uses_given_timestamp():
         timestamp="2026-10-01T15:15:00Z",
     )
     assert mv[0]["timestamp"] == "2026-10-01T15:15:00Z"
+
+# --- Start delay / ramp-up ---
+
+
+class _FakeClock:
+    def __init__(self, t: float = 1000.0):
+        self.t = t
+
+    def __call__(self) -> float:
+        return self.t
+
+
+def _ramp_sim(clock, delay=3.0, ramp=5.0):
+    from src.charger_sim import ChargerSimulator
+    return ChargerSimulator(current_amps=32, start_delay_s=delay, ramp_up_s=ramp, clock=clock)
+
+
+def test_charger_sim_no_power_during_start_delay():
+    clock = _FakeClock()
+    sim = _ramp_sim(clock)
+    sim.start_charging()
+    clock.t += 2.9
+    reading = sim.sample()
+    assert reading.power_kw == 0.0
+    assert reading.current_a == 0.0
+    assert reading.power_offered_kw > 0  # charger is offering, car not drawing yet
+
+
+def test_charger_sim_ramps_linearly_then_full():
+    clock = _FakeClock()
+    sim = _ramp_sim(clock)
+    sim.start_charging()
+    clock.t += 3.0 + 2.5  # halfway through the ramp
+    assert sim.ramp_factor() == 0.5
+    mid = [sim.sample().power_kw for _ in range(100)]
+    assert 3.4 <= sum(mid) / len(mid) <= 3.9
+    clock.t += 10
+    assert sim.ramp_factor() == 1.0
+    full = [sim.sample().power_kw for _ in range(100)]
+    assert 7.15 <= sum(full) / len(full) <= 7.40
+
+
+def test_charger_sim_average_ramp_factor():
+    clock = _FakeClock(0.0)
+    sim = _ramp_sim(clock)
+    sim.start_charging()
+    # Delay only -> 0; delay+ramp (8s) -> area 2.5s; 60s -> area 2.5 + 52
+    assert sim.average_ramp_factor(0.0, 3.0) == 0.0
+    assert abs(sim.average_ramp_factor(0.0, 8.0) - 2.5 / 8) < 1e-9
+    assert abs(sim.average_ramp_factor(0.0, 60.0) - 54.5 / 60) < 1e-9
+    assert sim.average_ramp_factor(100.0, 160.0) == 1.0
+
+
+def test_charger_sim_restart_repeats_delay_but_not_while_charging():
+    clock = _FakeClock()
+    sim = _ramp_sim(clock)
+    sim.start_charging()
+    clock.t += 20
+    sim.start_charging()  # already charging: no reset
+    assert sim.ramp_factor() == 1.0
+    sim.stop_charging()
+    sim.start_charging()  # resume after pause: delay again
+    assert sim.ramp_factor() == 0.0
+
+
+def test_charger_sim_zero_delay_and_ramp_is_instant():
+    clock = _FakeClock()
+    sim = _ramp_sim(clock, delay=0, ramp=0)
+    sim.start_charging()
+    assert sim.ramp_factor() == 1.0
+    assert sim.sample().power_kw > 6.5
