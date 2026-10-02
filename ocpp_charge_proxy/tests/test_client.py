@@ -1301,3 +1301,31 @@ def test_no_taper_without_soc_or_with_power_entity(mock_connection, mock_persist
     cp.set_power_override(7.0)  # a real power reading already includes the taper
     cp.refresh_live_power()
     assert cp._shared_state.power_kw == 7.0
+
+
+def test_plugged_in_survives_restart(tmp_path, mock_connection):
+    """The cable stays in across a restart: boot as Preparing, connector 0 Available."""
+    from src.persistence import Persistence
+    persistence = Persistence(data_dir=str(tmp_path))
+    first = make_cp(mock_connection, persistence)
+    first.set_plugged_in(True)
+
+    cp = make_cp(mock_connection, Persistence(data_dir=str(tmp_path)))
+    assert cp.state == ChargePointStatus.preparing
+    assert cp._shared_state.plugged_in is True
+    cp.call, sent = _boot_recorder()
+    _run(cp.send_boot_notification(model="M", vendor="V"))
+    statuses = [(r.connector_id, r.status) for r in sent if isinstance(r, _call.StatusNotificationPayload)]
+    assert statuses == [(0, ChargePointStatus.available), (1, ChargePointStatus.preparing)]
+
+    cp.set_plugged_in(False)
+    assert make_cp(mock_connection, Persistence(data_dir=str(tmp_path))).state == ChargePointStatus.available
+
+
+def test_connector_zero_never_reports_charging(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _boot_recorder()
+    cp._registered = True
+    cp.state = ChargePointStatus.charging
+    _run(cp._send_status_for_connector(0))
+    assert _statuses(sent) == [ChargePointStatus.available]

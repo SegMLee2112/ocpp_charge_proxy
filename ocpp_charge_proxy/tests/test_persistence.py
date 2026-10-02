@@ -104,3 +104,12 @@ def test_corrupt_main_never_overwrites_good_backup(tmp_path):
     p.save_energy_register_wh(30)
     assert '"energy_wh": 10' in (tmp_path / "energy_register.json.bak").read_text()
     assert p.load_energy_register_wh() == 30
+
+
+def test_plugged_in_round_trip(tmp_path):
+    p = Persistence(data_dir=str(tmp_path))
+    assert p.load_plugged_in() is False
+    p.save_plugged_in(True)
+    assert Persistence(data_dir=str(tmp_path)).load_plugged_in() is True
+    p.save_plugged_in(False)
+    assert p.load_plugged_in() is False

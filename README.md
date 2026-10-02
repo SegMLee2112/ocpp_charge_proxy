@@ -84,6 +84,8 @@ Both are installed from this repository.
   backup copy, so a power cut mid-write can't reset your meter to 0.
 - **Fast recovery.** After an add-on restart, Home Assistant reconnects
   within a few seconds and re-sends the power and SoC sensor values.
+  Plugged In is remembered, so a car left plugged in comes back as
+  `Preparing`, ready for your provider to start a new session.
 
 ### Works with your car in Home Assistant
 

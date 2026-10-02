@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.5
+
+- **Plugged In is remembered across an add-on restart**, like a cable left in
+  a real charger. A restart mid-session still ends the session (StopTransaction,
+  reason `Reboot`), but the charger now comes back as `Preparing` instead of
+  `Available`, so your provider can start a new session. Before, Plugged In
+  came back off and the car plugged in sensor didn't switch it back on, as it
+  only reacts to off to on.
+- The charger itself (connector 0) now always reports `Available` (or
+  `Unavailable`) as OCPP 1.6 requires, never `Preparing` or `Charging`.
+
 ## 1.0.4
 
 - Quieter logs during charging: periodic meter readings in a session (every

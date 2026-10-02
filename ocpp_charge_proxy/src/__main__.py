@@ -130,7 +130,7 @@ async def run() -> None:
             return
         cp.state = CPS.preparing
         shared_state.state = cp.state
-        shared_state.plugged_in = True
+        cp.set_plugged_in(True)
         try:
             await cp.send_status()
         except Exception:
@@ -141,7 +141,7 @@ async def run() -> None:
         if cp is None:
             return
         # Set unplugged state immediately so the integration sees it
-        shared_state.plugged_in = False
+        cp.set_plugged_in(False)
         shared_state.state = CPS.available
         if cp._transaction_id is not None:
             # Bug 3 fix: pass final_state so _do_stop_transaction doesn't clobber

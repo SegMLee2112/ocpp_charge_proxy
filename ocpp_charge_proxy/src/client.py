@@ -220,12 +220,28 @@ class ChargePoint(BaseChargePoint):
         self._stop_txn_aligned: list[str] = []
         self._stop_txn_data: list[dict] = []
 
+        # Plugged In survives a restart, like a cable left in a real charger:
+        # it boots as Preparing so the server can start a new session.
+        self._plugged_in = persistence.load_plugged_in() is True
+        self._shared_state.plugged_in = self._plugged_in
+        if self._plugged_in:
+            self.state = ChargePointStatus.preparing
+            self._shared_state.state = self.state
+            logger.info("Car was plugged in when the add-on stopped: starting as Preparing")
+
         # A transaction still saved as open means the last run never stopped
         # it (power cut, crash, SIGKILL): close it the way a real charger does.
         self._recover_interrupted_transaction()
         self._profile_scheduler = ChargingProfileScheduler(
             rated_power_w=self._charger_sim.rated_power_kw * 1000
         )
+
+    def set_plugged_in(self, plugged_in: bool) -> None:
+        """Record the Plugged In switch, saved so it survives a restart."""
+        self._shared_state.plugged_in = plugged_in
+        if plugged_in != self._plugged_in:
+            self._plugged_in = plugged_in
+            self._persistence.save_plugged_in(plugged_in)
 
     # --- Connection lifecycle -------------------------------------------
 
@@ -672,10 +688,16 @@ class ChargePoint(BaseChargePoint):
         if not self._registered:
             logger.debug("Offline: not sending StatusNotification")
             return
+        if status is None:
+            status = self.state
+            if connector_id == 0 and status != ChargePointStatus.unavailable:
+                # OCPP 1.6: the charger itself (connector 0) is only ever
+                # Available, Unavailable or Faulted, whatever the cable does.
+                status = ChargePointStatus.available
         request = call.StatusNotificationPayload(
             connector_id=connector_id,
             error_code=ChargePointErrorCode.no_error,
-            status=status or self.state,
+            status=status,
             timestamp=_now_iso(),
         )
         try:
@@ -1116,7 +1138,7 @@ class ChargePoint(BaseChargePoint):
         if charging_profile:
             self._profile_scheduler.set_profile(charging_profile)
 
-        self._shared_state.plugged_in = True
+        self.set_plugged_in(True)
         self._pending_id_tag = id_tag
         asyncio.create_task(self._do_start_transaction())
         return call_result.RemoteStartTransactionPayload(
@@ -1402,7 +1424,7 @@ class ChargePoint(BaseChargePoint):
                 reason=Reason.unlock_command,
             ))
 
-        self._shared_state.plugged_in = False
+        self.set_plugged_in(False)
         self.state = ChargePointStatus.available
         self._shared_state.state = self.state
 
@@ -1428,7 +1450,7 @@ class ChargePoint(BaseChargePoint):
         else:
             self.state = ChargePointStatus.available
             self._shared_state.state = self.state
-            self._shared_state.plugged_in = False
+            self.set_plugged_in(False)
             self._zero_power_state()
             await self.send_status()
 

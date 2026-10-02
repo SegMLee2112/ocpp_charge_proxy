@@ -12,6 +12,7 @@ _SERIAL_FILE = "serial_number.json"
 _QUEUE_FILE = "offline_queue.json"
 _TRANSACTION_FILE = "active_transaction.json"
 _CURRENT_FILE = "current_setting.json"
+_PLUG_FILE = "plugged_in.json"
 
 
 class Persistence:
@@ -125,6 +126,13 @@ class Persistence:
 
     def save_current_setting(self, setting: dict) -> None:
         self._write(_CURRENT_FILE, "current", setting)
+
+    def load_plugged_in(self) -> bool:
+        """Whether the car was plugged in at the last save (the cable stays in across a restart)."""
+        return self._read(_PLUG_FILE, "plugged_in", False) is True
+
+    def save_plugged_in(self, plugged_in: bool) -> None:
+        self._write(_PLUG_FILE, "plugged_in", bool(plugged_in))
 
     def load_serial_number(self) -> str:
         serial = self._read(_SERIAL_FILE, "serial", "")
