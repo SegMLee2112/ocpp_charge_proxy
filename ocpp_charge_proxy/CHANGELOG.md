@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.8
+
+- Quieter logs: Heartbeat messages (every 10s with Octopus) and the server's
+  replies to them are now logged at DEBUG instead of INFO, so they only show
+  with `log_level: debug`. All other OCPP messages are still logged at INFO.
+- Tests: fixed `test_power_source_shows_entity_while_idle` (0.9.7), which
+  sent a real message with no server to answer and timed out after 30s on CI.
+
 ## 0.9.7
 
 - Fix: after an add-on restart, the power and SoC sensor values weren't sent

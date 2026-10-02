@@ -14,6 +14,7 @@ from src.api import create_api_app
 from src.client import ChargePoint
 from src.config import load_config, starting_current_amps
 from src.console import console_loop
+from src import log_filters
 from src.persistence import Persistence
 from src.shared_state import SharedState
 
@@ -73,6 +74,7 @@ async def run() -> None:
         format=log_format,
         stream=sys.stdout,
     )
+    log_filters.install()  # Heartbeat lines at DEBUG, not INFO
 
     data_dir = os.environ.get("IO_DATA_DIR", "/data")
     os.makedirs(data_dir, exist_ok=True)

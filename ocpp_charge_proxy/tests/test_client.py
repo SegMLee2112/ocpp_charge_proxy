@@ -1254,6 +1254,7 @@ def test_ha_max_current_remembered_across_restart(tmp_path):
 
 def test_power_source_shows_entity_while_idle(mock_connection, mock_persistence):
     cp = make_cp(mock_connection, mock_persistence)
+    cp.call, _ = _call_recorder()  # no real server to answer the idle reading
     cp.set_power_override(0.0)  # a power entity reading 0 W while not charging
     cp.refresh_live_power()
     _run(cp.send_meter_values())  # idle reading zeroes power...
