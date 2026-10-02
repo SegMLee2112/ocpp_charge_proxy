@@ -74,3 +74,38 @@ def test_clock_aligned_meter_values_still_shown(monkeypatch):
         assert f.filter(rec) is True and rec.levelname == "INFO"
         reply = _record("receive", [3, uid, {}])
         assert f.filter(reply) is True and reply.levelname == "INFO"
+
+
+# --- 2.1.6: the web page's requests ---
+
+from src.log_filters import DemoteWebPageRequests as _DemoteWeb
+
+
+def _access(line):
+    return logging.LogRecord("aiohttp.access", logging.INFO, __file__, 1, line, (), None)
+
+
+def test_web_page_gets_hidden_at_info():
+    f = _DemoteWeb()
+    root = logging.getLogger()
+    old = root.level
+    root.setLevel(logging.INFO)
+    try:
+        assert not f.filter(_access('172.30.32.2 [x] "GET /api/state HTTP/1.1" 200 4893 "-" "Mozilla"'))
+        assert not f.filter(_access('172.30.32.2 [x] "GET / HTTP/1.1" 304 180 "-" "Mozilla"'))
+        assert f.filter(_access('172.30.32.2 [x] "POST /api/plug HTTP/1.1" 200 175 "-" "Mozilla"'))
+        assert f.filter(_access('172.30.32.2 [x] "GET /api/state HTTP/1.1" 500 10 "-" "Mozilla"'))
+    finally:
+        root.setLevel(old)
+
+
+def test_web_page_gets_shown_at_debug():
+    f = _DemoteWeb()
+    root = logging.getLogger()
+    old = root.level
+    root.setLevel(logging.DEBUG)
+    try:
+        rec = _access('172.30.32.2 [x] "GET /api/state HTTP/1.1" 200 4893 "-" "Mozilla"')
+        assert f.filter(rec) and rec.levelno == logging.DEBUG
+    finally:
+        root.setLevel(old)

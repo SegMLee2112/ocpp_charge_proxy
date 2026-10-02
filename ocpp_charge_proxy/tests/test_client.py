@@ -1412,3 +1412,49 @@ def test_unplugged_without_session_shows_in_history(mock_connection, tmp_path):
     entry = cp.sessions.history[0]
     assert entry["type"] == "no_session"
     assert (entry["plugged_by"], entry["unplugged_by"]) == ("schedule", "web page")
+
+
+# --- 2.1.5: status after a stop from the server ---
+
+
+def _statuses_after(cp, coro_factory):
+    cp._registered = True
+    cp.call, sent = _call_recorder()
+    cp.state = ChargePointStatus.charging
+    cp._charger_sim.start_charging()
+    cp._transaction_id = 4242
+
+    async def scenario():
+        await coro_factory()
+        for _ in range(5):
+            await asyncio.sleep(0)
+
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(scenario())
+    loop.close()
+    return [
+        "Stop" if isinstance(r, _call.StopTransactionPayload) else r.status
+        for r in sent
+        if isinstance(r, (_call.StatusNotificationPayload, _call.StopTransactionPayload))
+    ]
+
+
+def test_remote_stop_ends_in_preparing(mock_connection, mock_persistence):
+    """After RemoteStop the server is told the car is still plugged in."""
+    cp = make_cp(mock_connection, mock_persistence)
+    seq = _statuses_after(cp, lambda: cp.on_remote_stop_transaction(transaction_id=4242))
+    assert seq == [ChargePointStatus.finishing, "Stop", ChargePointStatus.preparing]
+    assert cp.state == ChargePointStatus.preparing
+
+
+def test_unlock_ends_in_available(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    seq = _statuses_after(cp, lambda: cp.on_unlock_connector(connector_id=1))
+    assert seq[-2:] == ["Stop", ChargePointStatus.available]
+
+
+def test_plain_stop_sends_no_extra_status(mock_connection, mock_persistence):
+    """Unplug and reset send their own status afterwards."""
+    cp = make_cp(mock_connection, mock_persistence)
+    seq = _statuses_after(cp, lambda: cp._do_stop_transaction(final_state=ChargePointStatus.available))
+    assert seq == [ChargePointStatus.finishing, "Stop"]

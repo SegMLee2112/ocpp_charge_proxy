@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.1.6
+
+- Quieter add-on log: the web page's routine requests (it refreshes every
+  few seconds while open) are now logged at debug level only. Plug, unplug
+  and settings changes, and any failed request, still show.
+- If the web page's live connection drops and the browser gives up on it,
+  the page now reopens it instead of polling every 5 seconds until reloaded.
+
+## 2.1.5
+
+- After the server stops a charge (RemoteStopTransaction), the charger now
+  tells it the car is still plugged in (**Preparing**) once StopTransaction
+  is done. Before, the last status the server saw was **Finishing**. After an
+  UnlockConnector the charger likewise reports **Available**.
+- Clearer log line when the server sets a current limit above your max:
+  "Provider limit 32A is above your max 6A: next charge will run at 6A" when
+  nothing is charging. It only sets the limit; it doesn't start a charge.
+
 ## 2.1.4
 
 - On the Sessions tab the current session can be clicked for its details

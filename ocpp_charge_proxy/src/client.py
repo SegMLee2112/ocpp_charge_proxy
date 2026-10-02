@@ -1152,8 +1152,13 @@ class ChargePoint(BaseChargePoint):
         self,
         final_state: ChargePointStatus = ChargePointStatus.preparing,
         reason: Reason = Reason.remote,
+        announce: bool = False,
     ) -> None:
-        """Stop the active transaction. final_state controls where we end up."""
+        """Stop the active transaction. final_state controls where we end up.
+
+        announce: also send a StatusNotification for final_state once
+        StopTransaction is done. Callers that send their own status
+        afterwards (unplug, reset) or are shutting down leave it off."""
         request = None
         handled = False
         try:
@@ -1209,6 +1214,13 @@ class ChargePoint(BaseChargePoint):
             # Bug 3 fix: use caller-specified final state
             self.state = final_state
             self._shared_state.state = self.state
+        if announce:
+            # Without this the server's last word from us is "Finishing",
+            # and it can't tell the car is still plugged in and idle.
+            try:
+                await self.send_status()
+            except Exception:
+                logger.warning("Status after stop not sent", exc_info=True)
 
     @on(Action.RemoteStartTransaction)
     async def on_remote_start_transaction(self, id_tag: str, charging_profile: dict = None, **kwargs):
@@ -1248,7 +1260,7 @@ class ChargePoint(BaseChargePoint):
                 "accepting anyway, single active transaction",
                 transaction_id, self._transaction_id,
             )
-        asyncio.create_task(self._do_stop_transaction())
+        asyncio.create_task(self._do_stop_transaction(announce=True))
         return call_result.RemoteStopTransactionPayload(
             status=RemoteStartStopStatus.accepted
         )
@@ -1359,9 +1371,12 @@ class ChargePoint(BaseChargePoint):
                 self._server_limit_amps = limit
                 self._apply_current()
                 if limit > self._max_current_amps:
+                    # Only a current limit: it doesn't start or stop anything
                     logger.info(
-                        "Provider limit %gA is above the HA max %dA: charging at %dA",
-                        limit, self._max_current_amps, self._charger_sim.current_amps,
+                        "Provider limit %gA is above your max %dA: %s at %dA",
+                        limit, self._max_current_amps,
+                        "charging" if self._transaction_id is not None else "next charge will run",
+                        self._charger_sim.current_amps,
                     )
 
         return call_result.ChangeConfigurationPayload(
@@ -1506,6 +1521,7 @@ class ChargePoint(BaseChargePoint):
             asyncio.create_task(self._do_stop_transaction(
                 final_state=ChargePointStatus.available,
                 reason=Reason.unlock_command,
+                announce=True,
             ))
 
         self.set_plugged_in(False, "provider")

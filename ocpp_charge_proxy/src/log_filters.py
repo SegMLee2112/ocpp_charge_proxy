@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 # OCPP actions whose send/receive lines are routine noise at INFO (shown with
 # log_level: debug). MeterValues only counts when it's a periodic reading;
@@ -75,5 +76,28 @@ class DemoteRoutineMessages(logging.Filter):
         return True
 
 
+# A successful GET from the web page: "GET /api/state HTTP/1.1" 200 ...
+_PAGE_GET = re.compile(r'"(?:GET|HEAD) \S+ HTTP/[\d.]+" (?:2\d\d|304) ')
+
+
+class DemoteWebPageRequests(logging.Filter):
+    """Show the web page's successful GETs (polling, refreshes) at DEBUG, not INFO.
+
+    The page asks for its data every few seconds while open, which buried
+    the OCPP lines in the add-on log. Commands (POST: plug, unplug, settings)
+    and failed requests stay at INFO.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.levelno != logging.INFO or not _PAGE_GET.search(record.getMessage()):
+            return True
+        if logging.getLogger().getEffectiveLevel() > logging.DEBUG:
+            return False
+        record.levelno = logging.DEBUG
+        record.levelname = logging.getLevelName(logging.DEBUG)
+        return True
+
+
 def install() -> None:
     logging.getLogger("ocpp").addFilter(DemoteRoutineMessages())
+    logging.getLogger("aiohttp.access").addFilter(DemoteWebPageRequests())

@@ -643,7 +643,12 @@ function startPush() {
     $('error').style.display = 'none';
     try { renderState(JSON.parse(ev.data)); } catch (e) {}
   };
-  es.onerror = () => { setLive('warn', 'Reconnecting…'); startPolling(); };
+  es.onerror = () => {
+    setLive('warn', 'Reconnecting…'); startPolling();
+    // The browser retries on its own unless the stream was refused (e.g.
+    // ingress hiccup): then it gives up, so open a new one shortly.
+    if (es.readyState === EventSource.CLOSED) { es = null; setTimeout(() => { if (!es) startPush(); }, 10000); }
+  };
 }
 async function pollState() {
   try {
@@ -657,7 +662,15 @@ async function pollState() {
 function startPolling() { if (!pollTimer) { pollState(); pollTimer = setInterval(pollState, 5000); } }
 function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
 // The stream sends at least every 10s: if it goes quiet, poll instead.
-setInterval(() => { if (lastEvent && Date.now() - lastEvent > 25000) { setLive('warn', 'Polling'); startPolling(); } }, 5000);
+setInterval(() => {
+  if (lastEvent && Date.now() - lastEvent > 25000) {
+    setLive('warn', 'Polling'); startPolling();
+    // A stream that's open but silent is stuck: start a new one
+    if (es && es.readyState !== EventSource.CONNECTING && Date.now() - lastEvent > 60000) {
+      es.close(); es = null; lastEvent = Date.now() - 25000; startPush();
+    }
+  }
+}, 5000);
 
 // ---------- Overview ----------
 function renderState(s) {
