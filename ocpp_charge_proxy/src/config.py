@@ -19,6 +19,9 @@ class Config:
     use_tls: bool = True
     start_delay_s: float = 3.0  # car waits this long after StartTransaction
     ramp_up_s: float = 5.0  # then ramps 0 -> full power over this long
+    replug_enabled: bool = True  # see src/automation.py
+    replug_after_min: int = 10
+    replug_attempts: int = 3
 
     @property
     def websocket_url(self) -> str:
@@ -40,6 +43,15 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _env_int(name: str, default: int, low: int, high: int) -> int:
+    """Whole number from the environment within [low, high]; blank/invalid -> default."""
+    raw = os.environ.get(name, "").strip()
+    try:
+        return min(high, max(low, int(float(raw))))
+    except ValueError:
+        return default
+
+
 def load_config() -> Config:
     return Config(
         server_hostname=os.environ["IO_SERVER_HOSTNAME"],
@@ -55,6 +67,9 @@ def load_config() -> Config:
         use_tls=os.environ.get("IO_USE_TLS", "true").lower() != "false",
         start_delay_s=_env_float("IO_START_DELAY_S", 3.0),
         ramp_up_s=_env_float("IO_RAMP_UP_S", 5.0),
+        replug_enabled=os.environ.get("IO_REPLUG_ENABLED", "true").strip().lower() not in ("false", "0", "no", "off"),
+        replug_after_min=_env_int("IO_REPLUG_AFTER_MIN", 10, 1, 240),
+        replug_attempts=_env_int("IO_REPLUG_ATTEMPTS", 3, 0, 20),
     )
 
 

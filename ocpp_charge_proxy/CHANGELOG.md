@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.2.0
+
+- **Plug-in schedule.** Switch Plugged In on or off at set times, on chosen
+  days, as many times a day as you like. Set it up on the new **Automation**
+  tab of the add-on's web page. Times are in your Home Assistant time zone.
+  New **Schedule** switch in Home Assistant turns the whole schedule on or off
+  (attributes: next action and time).
+- **Auto re-plug.** If your provider hasn't started a session 10 minutes
+  after Plugged In turns on, the add-on unplugs for 30 seconds and plugs back
+  in, up to 3 times, then gives up until the car is next unplugged or a
+  session starts. The minutes and tries are add-on options (Re-plug After,
+  Re-plug Tries) and can be changed on the Automation tab too. New **Auto
+  Re-plug** switch in Home Assistant, with its status as attributes. The
+  Overview tab shows when the next re-plug is due.
+- Settings are saved in `/data/automation.json`.
+
 ## 1.1.0
 
 - **New web GUI** (the add-on's page in the sidebar), with five tabs:

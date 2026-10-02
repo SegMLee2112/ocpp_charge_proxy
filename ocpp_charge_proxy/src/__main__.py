@@ -15,6 +15,7 @@ from src.client import ChargePoint
 from src.config import load_config, starting_current_amps
 from src.console import console_loop
 from src.gui_data import GuiSources, Health, PowerHistory, sample_loop
+from src.automation import Automation, ReplugOptions, automation_loop
 from src import log_filters
 from src.persistence import Persistence
 from src.shared_state import SharedState
@@ -188,6 +189,12 @@ async def run() -> None:
     )
     health = Health()
     history = PowerHistory()
+    automation = Automation(data_dir, ReplugOptions(
+        enabled=config.replug_enabled,
+        after_min=config.replug_after_min,
+        attempts=config.replug_attempts,
+    ))
+    automation.publish(shared_state)
 
     def _health_info() -> dict:
         info = health.snapshot()
@@ -212,6 +219,7 @@ async def run() -> None:
             history, shared_state, refresh=cp.refresh_live_power,
             on_sample=lambda s: cp.sessions.sample(s["power_kw"]),
         )),
+        asyncio.create_task(automation_loop(automation, shared_state, do_plug, do_unplug)),
     ]
     notified_server = False
 
@@ -220,6 +228,7 @@ async def run() -> None:
         on_refresh=cp.refresh_live_power,
         on_set_soc=do_set_soc,
         gui=gui,
+        automation=automation,
     )
     runner = web.AppRunner(api_app)
     await runner.setup()

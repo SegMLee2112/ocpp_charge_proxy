@@ -30,6 +30,10 @@ ADDON_STATE = {
     "last_heartbeat": None,
     "soc_percent": None,
     "held_messages": 0,
+    "schedule_enabled": False,
+    "schedule_next": None,
+    "replug": {"enabled": True, "after_min": 10, "attempts": 3, "status": "idle", "attempts_used": 0,
+               "waiting_since": None, "next_replug_at": None, "last_replug": None},
 }
 
 
@@ -39,6 +43,8 @@ def mock_addon(aioclient_mock, state=None):
     aioclient_mock.get(f"{URL}/api/events", status=404)
     for endpoint in ("plug", "unplug", "soc", "power", "current"):
         aioclient_mock.post(f"{URL}/api/{endpoint}", json={"status": "ok"})
+    for endpoint in ("schedule", "replug"):
+        aioclient_mock.post(f"{URL}/api/automation/{endpoint}", json={"status": "ok"})
 
 
 async def setup_integration(hass, aioclient_mock, options=None, state=None):

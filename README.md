@@ -103,6 +103,13 @@ Both are installed from this repository.
   once per drop, so unplugging by hand doesn't get undone.
 - **Push updates.** The add-on pushes its state to Home Assistant as it
   changes, so entities update within about a second (live power every 10s).
+- **Plug-in schedule.** Switch Plugged In on or off at set times and days,
+  as many times a day as you like, from the add-on's web page (Automation
+  tab). A **Schedule** switch in Home Assistant turns it all on or off.
+- **Auto re-plug.** If your provider hasn't started a session 10 minutes
+  after plugging in, the add-on unplugs for 30 seconds and plugs back in, up
+  to 3 times. Minutes and tries are add-on options and can be changed on the
+  Automation tab. An **Auto Re-plug** switch turns it on or off.
 
 ### Diagnostics
 
@@ -125,6 +132,7 @@ Both are installed from this repository.
   - **Provider:** what your provider has set: charging limits, charging
     profiles drawn as a timeline, the local authorisation list and every
     configuration key.
+  - **Automation:** a plug-in schedule and auto re-plug (below).
   - **Health:** version, uptime, reconnects and the last drop's reason,
     heartbeat and clock offset, whether the HA integration's push updates are
     connected, and any held messages.
@@ -186,6 +194,8 @@ All options are optional. Clear a field to stop using that sensor.
 | Entity | Type | Description |
 |--------|------|-------------|
 | Plugged In | Switch | Simulate car plugged in/unplugged |
+| Schedule | Switch | Turns the plug-in schedule (set up on the add-on's Automation tab) on or off. Attributes: `next_action`, `next_time` |
+| Auto Re-plug | Switch | Re-plug when your provider doesn't start a session. Attributes: `status` (`idle`, `waiting`, `replugging`, `gave_up`, `off`), `after_minutes`, `tries`, `tries_used`, `next_replug_at`, `last_replug` |
 | Current Amps Setting | Select | Charger's maximum current (6–32A), remembered across restarts. Your provider can lower the current below it but not raise it; attributes `effective_amps` and `provider_limit_amps` show what's in use |
 | OCPP Charge Proxy State | Sensor | OCPP state: `Available`, `Preparing`, `Charging`, `SuspendedEV`, `SuspendedEVSE`, `Finishing`, `Unavailable` |
 | Power | Sensor | Live power draw (kW) |

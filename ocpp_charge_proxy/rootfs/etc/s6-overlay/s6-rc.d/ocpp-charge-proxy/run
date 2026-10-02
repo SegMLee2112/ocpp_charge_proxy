@@ -16,6 +16,9 @@ export IO_CURRENT_AMPS=$(bashio::config 'current_amps')
 export IO_INITIAL_ENERGY_WH=$(bashio::config 'initial_energy_wh')
 export IO_START_DELAY_S=$(bashio::config 'start_delay_s' '3')
 export IO_RAMP_UP_S=$(bashio::config 'ramp_up_s' '5')
+export IO_REPLUG_ENABLED=$(bashio::config 'replug_enabled' 'true')
+export IO_REPLUG_AFTER_MIN=$(bashio::config 'replug_after_min' '10')
+export IO_REPLUG_ATTEMPTS=$(bashio::config 'replug_attempts' '3')
 export IO_LOG_LEVEL=$(bashio::config 'log_level')
 
 # Auto-generate serial number if empty, write back to config

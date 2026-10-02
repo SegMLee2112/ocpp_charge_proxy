@@ -204,3 +204,33 @@ async def test_event_streams_counted_by_client(aiohttp_client, shared_state, moc
         line = await resp.content.readline()
     assert app["event_clients"] == {"integration": 0, "gui": 1}
     resp.close()
+
+
+# --- 1.2.0: schedule and auto re-plug ---
+
+
+@pytest.mark.asyncio
+async def test_automation_endpoints(aiohttp_client, shared_state, mock_commands, tmp_path):
+    from src.automation import Automation
+    automation = Automation(str(tmp_path))
+    app = create_api_app(
+        shared_state, on_plug=mock_commands["plug"], on_unplug=mock_commands["unplug"],
+        on_set_current=mock_commands["set_current"], automation=automation,
+    )
+    client = await aiohttp_client(app)
+    data = await (await client.get("/api/automation")).json()
+    assert data["schedule"]["enabled"] is False and data["replug"]["after_min"] == 10
+    resp = await client.post("/api/automation/schedule", json={
+        "enabled": True, "entries": [{"time": "23:30", "action": "plug", "days": [0, 1]}],
+    })
+    assert resp.status == 200
+    assert shared_state.schedule_enabled is True
+    assert shared_state.schedule_next["action"] == "plug"
+    resp = await client.post("/api/automation/schedule", json={"entries": [{"time": "25:00", "action": "plug"}]})
+    assert resp.status == 400
+    assert len(automation.entries) == 1
+    resp = await client.post("/api/automation/replug", json={"after_min": 15, "attempts": 2})
+    assert (await resp.json())["replug"]["after_min"] == 15
+    assert shared_state.replug["attempts"] == 2
+    assert (await client.post("/api/automation/replug", json={"after_min": 0})).status == 400
+    assert (await client.post("/api/automation/replug", data="nope")).status == 400

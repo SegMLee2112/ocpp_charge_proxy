@@ -1,6 +1,6 @@
 name: "OCPP Charge Proxy"
 description: "Virtual OCPP 1.6 chargepoint for smart tariff providers"
-version: "1.1.0"
+version: "1.2.0"
 slug: "ocpp_charge_proxy"
 url: "https://github.com/thewhale21/ocpp_charge_proxy"
 arch:
@@ -31,6 +31,9 @@ options:
   initial_energy_wh: 0
   start_delay_s: 3
   ramp_up_s: 5
+  replug_enabled: true
+  replug_after_min: 10
+  replug_attempts: 3
   log_level: "info"
 schema:
   server_hostname: str
@@ -44,4 +47,7 @@ schema:
   initial_energy_wh: "int(0,)?"
   start_delay_s: "float(0,60)?"
   ramp_up_s: "float(0,60)?"
+  replug_enabled: bool?
+  replug_after_min: "int(1,240)?"
+  replug_attempts: "int(0,20)?"
   log_level: list(debug|info|warning|error)

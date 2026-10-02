@@ -35,6 +35,9 @@ updates its state so Home Assistant automations can respond.
 | `initial_energy_wh` | `0` | Seed the energy register (Wh). Set to your old charger's meter reading when migrating. Only applied if higher than the stored register (the meter never goes backwards); cleared after first boot. |
 | `start_delay_s` | `3` | Seconds after StartTransaction before the simulated car draws any current (also applied when resuming after a charging-profile pause). `0` = instant. |
 | `ramp_up_s` | `5` | Seconds for power to ramp linearly from 0 to full after the start delay. `0` = jump straight to full power. Not applied when power comes from a real power entity. |
+| `replug_enabled` | `true` | Auto re-plug: if your provider hasn't started a session `replug_after_min` minutes after Plugged In turns on, unplug for 30 seconds and plug back in |
+| `replug_after_min` | `10` | Minutes plugged in with no session before re-plugging (1–240) |
+| `replug_attempts` | `3` | Re-plug tries before giving up until the car is next unplugged or a session starts (0–20) |
 | `log_level` | `info` | Logging level (debug/info/warning/error). OCPP messages are logged at `info`, except Heartbeats and periodic meter readings (in a session or not), which only show at `debug`. Clock-aligned readings stay at `info` |
 
 ### Controlling your charger
@@ -68,6 +71,27 @@ own integration, reporting 0–100%. When set:
 Leave it unset (or clear it) and no SoC is reported and car-full never
 triggers. If the sensor becomes unavailable, SoC reporting pauses until it
 comes back.
+
+### Schedule and auto re-plug
+
+On the add-on's **Automation** tab:
+
+- **Schedule:** add as many times as you like, each with a time, the days
+  it runs on, and whether it plugs in or unplugs; turn single times or the
+  whole schedule on and off. Times are in your Home Assistant time zone. A
+  time missed while the add-on was stopped isn't run later. Unplugging
+  during a session ends the session. The **Schedule** switch in Home
+  Assistant turns the whole schedule on or off, e.g. from an automation.
+- **Auto re-plug:** Octopus sometimes doesn't start a session after you plug
+  in. When Plugged In has been on for `replug_after_min` minutes (default 10)
+  with no session and the add-on is connected, it unplugs, waits 30 seconds
+  and plugs back in, up to `replug_attempts` times (default 3). It then gives
+  up until the car is next unplugged or a session starts, and the wait starts
+  again after each re-plug. Changing the minutes or tries on the Automation
+  tab is kept until you change the add-on options themselves. The **Auto
+  Re-plug** switch in Home Assistant turns it on or off.
+
+Settings are saved in `/data/automation.json`.
 
 ## How it works
 
@@ -131,6 +155,8 @@ Install the companion integration via HACS to get proper HA entities:
 | Entity | Type | Description |
 |--------|------|-------------|
 | Plugged In | Switch | Simulate car plugged in/unplugged |
+| Schedule | Switch | Plug-in schedule on/off (attributes `next_action`, `next_time`) |
+| Auto Re-plug | Switch | Auto re-plug on/off (attributes `status`, `tries_used`, `next_replug_at`, ...) |
 | Current Amps Setting | Select | Charger's maximum current (6-32A), remembered across restarts. Your provider can lower the current below it but not raise it; attributes `effective_amps` and `provider_limit_amps` show what's in use |
 | OCPP Charge Proxy State | Sensor | OCPP state (Available/Preparing/Charging/etc.) |
 | Power | Sensor | Current power draw (kW) |
@@ -199,6 +225,7 @@ follows your Home Assistant theme.
 - **Provider:** what your provider has set: charging limits, charging
   profiles drawn as a timeline, the local authorisation list and every
   configuration key.
+- **Automation:** the plug-in schedule and auto re-plug (see below).
 - **Health:** version, uptime, reconnects and the last drop's reason,
   heartbeat and clock offset, whether the HA integration's push updates are
   connected, and any held messages.

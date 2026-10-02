@@ -36,6 +36,10 @@ class SharedState:
     soc_percent: Optional[float] = None
     # Transaction messages waiting to be sent (offline queue)
     held_messages: int = 0
+    # Plug-in schedule and auto re-plug (src/automation.py)
+    schedule_enabled: bool = False
+    schedule_next: Optional[dict] = None  # {time, action, entry_id}
+    replug: Optional[dict] = None  # {enabled, after_min, attempts, status, ...}
 
     def to_dict(self) -> dict:
         return asdict(self)

@@ -55,3 +55,17 @@ def test_config_redacted_url():
     )
     assert "secret" not in cfg.redacted_url
     assert "CP001" in cfg.redacted_url
+
+
+def test_replug_options_from_env():
+    env = {
+        "IO_SERVER_HOSTNAME": "h", "IO_CHARGEPOINT_ID": "c", "IO_PASSWORD": "p",
+        "IO_REPLUG_ENABLED": "false", "IO_REPLUG_AFTER_MIN": "15", "IO_REPLUG_ATTEMPTS": "99",
+    }
+    with patch.dict(os.environ, env, clear=False):
+        cfg = load_config()
+    assert cfg.replug_enabled is False and cfg.replug_after_min == 15
+    assert cfg.replug_attempts == 20  # clamped
+    with patch.dict(os.environ, {**env, "IO_REPLUG_ENABLED": "", "IO_REPLUG_AFTER_MIN": "null"}, clear=False):
+        cfg = load_config()
+    assert cfg.replug_enabled is True and cfg.replug_after_min == 10

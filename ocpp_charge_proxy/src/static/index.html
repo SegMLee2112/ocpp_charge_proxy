@@ -58,7 +58,9 @@
     min-width: 0;
   }
   .card.wide { grid-column: 1 / -1; }
-  .card h2 { font-size: 16px; font-weight: 500; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .card h2 { font-size: 16px; font-weight: 500; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card h2 .seg, .card h2 label { font-size: 13px; font-weight: 400; }
+  .ctl { display: inline-flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
   .card h2 .spacer { flex: 1; }
   .stack { display: grid; gap: 16px; }
   .label { font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; }
@@ -67,7 +69,7 @@
   .muted { color: var(--text2); }
   .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: var(--text2); flex: none; }
   .dot.ok { background: var(--ok); } .dot.err { background: var(--err); } .dot.warn { background: var(--warn); }
-  .hero { display: flex; gap: 24px; flex-wrap: wrap; align-items: center; }
+  .hero { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
   .hero .state { font-size: 30px; font-weight: 400; }
   .chip {
     display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px;
@@ -97,6 +99,8 @@
   .seg button { font: inherit; border: 0; background: none; color: var(--text); padding: 6px 11px; cursor: pointer; }
   .seg button + button { border-left: 1px solid var(--divider); }
   .seg button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
+  .seg.days button { padding: 6px 9px; min-width: 30px; }
+  input[type="time"] { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--divider); border-radius: 8px; padding: 5px 8px; }
   .switch { position: relative; width: 44px; height: 24px; flex: none; }
   .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; cursor: pointer; z-index: 1; }
   .switch span { position: absolute; inset: 0; background: var(--divider); border-radius: 999px; transition: background .15s; }
@@ -127,7 +131,7 @@
   .msg-tools label { display: inline-flex; gap: 5px; align-items: center; font-size: 13px; color: var(--text2); cursor: pointer; }
   .msgs { font-size: 13px; max-height: 70vh; overflow-y: auto; border-top: 1px solid var(--divider); }
   .msg { border-bottom: 1px solid var(--divider); }
-  .msg > summary { list-style: none; display: grid; grid-template-columns: 74px 22px minmax(120px, max-content) 1fr; gap: 8px; padding: 6px 4px; cursor: pointer; align-items: baseline; }
+  .msg > summary { list-style: none; display: grid; grid-template-columns: 96px 22px minmax(120px, max-content) 1fr; gap: 8px; padding: 6px 4px; cursor: pointer; align-items: baseline; }
   .msg > summary::-webkit-details-marker { display: none; }
   .msg > summary:hover { background: var(--hover); }
   .msg .t { color: var(--text2); font-variant-numeric: tabular-nums; }
@@ -147,7 +151,7 @@
   .empty { color: var(--text2); padding: 12px 0; }
   .error-banner { background: var(--err); color: #fff; padding: 8px 16px; text-align: center; font-size: 13px; display: none; }
   @media (max-width: 520px) {
-    .msg > summary { grid-template-columns: 62px 18px 1fr; }
+    .msg > summary { grid-template-columns: 90px 18px 1fr; }
     .msg .s { grid-column: 1 / -1; }
     .big { font-size: 22px; }
     .hero .state { font-size: 24px; }
@@ -166,6 +170,7 @@
     <button role="tab" data-tab="sessions">Sessions</button>
     <button role="tab" data-tab="messages">Messages</button>
     <button role="tab" data-tab="provider">Provider</button>
+    <button role="tab" data-tab="automation">Automation</button>
     <button role="tab" data-tab="health">Health</button>
   </nav>
 </header>
@@ -211,15 +216,15 @@
         <div class="row" style="margin-top:6px"><div class="seg" id="c-amps" role="group" aria-label="Max current"></div></div>
         <div class="row">
           <div class="grow"><div>Power override</div><div class="note" style="margin:0" id="c-power-note">Report this power instead of the simulation</div></div>
-          <input type="number" id="c-power" min="0" max="22" step="0.1" placeholder="kW" aria-label="Power override in kW">
+          <span class="ctl"><input type="number" id="c-power" min="0" max="22" step="0.1" placeholder="kW" aria-label="Power override in kW">
           <button class="btn small" id="c-power-set">Set</button>
-          <button class="btn small" id="c-power-clear">Clear</button>
+          <button class="btn small" id="c-power-clear">Clear</button></span>
         </div>
         <div class="row">
           <div class="grow"><div>SoC</div><div class="note" style="margin:0" id="c-soc-note">Test value reported to your provider</div></div>
-          <input type="number" id="c-soc" min="0" max="100" step="1" placeholder="%" aria-label="SoC in percent">
+          <span class="ctl"><input type="number" id="c-soc" min="0" max="100" step="1" placeholder="%" aria-label="SoC in percent">
           <button class="btn small" id="c-soc-set">Set</button>
-          <button class="btn small" id="c-soc-clear">Clear</button>
+          <button class="btn small" id="c-soc-clear">Clear</button></span>
         </div>
       </div>
 
@@ -310,6 +315,43 @@
     </div>
   </section>
 
+  <!-- ============ Automation ============ -->
+  <section id="tab-automation" class="stack" hidden>
+    <div class="card">
+      <h2>Schedule<span class="spacer"></span>
+        <span class="muted" style="font-size:13px;font-weight:400">On</span>
+        <label class="switch"><input type="checkbox" id="a-sched-on" aria-label="Schedule on"><span></span></label>
+      </h2>
+      <div class="sub" id="a-next" style="margin-bottom:12px"></div>
+      <div id="a-entries"></div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn small" id="a-add">+ Add a time</button>
+        <span class="grow"></span>
+        <span class="muted" id="a-dirty" style="font-size:12px"></span>
+        <button class="btn small" id="a-discard" disabled>Discard</button>
+        <button class="btn small primary" id="a-save" disabled>Save</button>
+      </div>
+      <div class="note" id="a-tz"></div>
+    </div>
+    <div class="card">
+      <h2>Auto re-plug<span class="spacer"></span>
+        <label class="switch"><input type="checkbox" id="a-rp-on" aria-label="Auto re-plug on"><span></span></label>
+      </h2>
+      <div id="a-rp-status" style="margin-bottom:12px"></div>
+      <div class="row">
+        <div class="grow">Re-plug after<div class="note" style="margin:0">Minutes plugged in with no session</div></div>
+        <span class="ctl"><input type="number" id="a-rp-after" min="1" max="240" step="1" aria-label="Re-plug after minutes"> min</span>
+      </div>
+      <div class="row">
+        <div class="grow">Tries<div class="note" style="margin:0">Before giving up until the car is next unplugged</div></div>
+        <span class="ctl"><input type="number" id="a-rp-tries" min="0" max="20" step="1" aria-label="Re-plug tries"></span>
+      </div>
+      <div class="row" style="justify-content:flex-end"><button class="btn small primary" id="a-rp-save">Save</button></div>
+      <div class="note">If your provider hasn't started a session this long after Plugged In turns on, the add-on unplugs for 30 seconds and plugs back in.
+        <span id="a-rp-option"></span></div>
+    </div>
+  </section>
+
   <!-- ============ Health ============ -->
   <section id="tab-health" class="stack" hidden>
     <div class="grid">
@@ -353,6 +395,7 @@ function dateTime(iso) {
   const t = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
   return d.toDateString() === today.toDateString() ? `Today ${t}` : `${d.toLocaleDateString([], {day: 'numeric', month: 'short'})} ${t}`;
 }
+const hm = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '—';
 const ago = (iso) => iso ? dur((Date.now() - new Date(iso)) / 1000) + ' ago' : '—';
 const kv = (rows) => rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('');
 const stateClass = (s) => 's-' + String(s || '').replace(/[^A-Za-z]/g, '');
@@ -398,7 +441,11 @@ function applyHaTheme() {
 // ---------- API ----------
 async function api(path, opts) {
   const r = await fetch('./api/' + path, opts);
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  if (!r.ok) {
+    let msg = `HTTP ${r.status}`;
+    try { const j = await r.json(); if (j.message) msg = j.message; } catch (e) {}
+    throw new Error(msg);
+  }
   return r.json();
 }
 async function post(path, body) {
@@ -463,6 +510,12 @@ function renderState(s) {
   if (s.plugged_in) chips.push('<span class="chip info">Plugged in</span>');
   if (s.held_messages) chips.push(`<span class="chip warn">${s.held_messages} held</span>`);
   if (s.power_source === 'entity') chips.push('<span class="chip">Power from sensor</span>');
+  if (s.schedule_enabled && s.schedule_next) chips.push(`<span class="chip">${s.schedule_next.action === 'plug' ? 'Plug in' : 'Unplug'} ${whenText(s.schedule_next.time)}</span>`);
+  const rp = s.replug || {};
+  if (rp.status === 'waiting' && rp.next_replug_at) chips.push(`<span class="chip warn">Re-plug ${hm(rp.next_replug_at)} if no session</span>`);
+  if (rp.status === 'replugging') chips.push('<span class="chip warn">Re-plugging…</span>');
+  if (rp.status === 'gave_up') chips.push('<span class="chip err">No session — re-plug gave up</span>');
+  if (activeTab === 'automation' && !auto.dirty) drawReplugStatus(rp);
   $('o-chips').innerHTML = chips.join(' ');
 
   $('o-power').textContent = num(s.power_kw, 2) + ' kW';
@@ -621,7 +674,9 @@ function drawChart() {
     ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
     ctx.fillText(fmtAxis(v) + (i === 4 ? ' ' + defs.unit : ''), L - 6, yy);
   }
-  const step = chart.range <= 1800 ? 300 : chart.range <= 3600 ? 600 : 3600;
+  // label spacing: at least ~70px between time labels
+  const steps = [300, 600, 900, 1800, 3600, 7200];
+  const step = steps.find((st) => st / chart.range * pw >= 70) || 7200;
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   for (let t = Math.ceil(t0 / step) * step; t <= now; t += step) {
     const d = new Date(t * 1000);
@@ -818,6 +873,113 @@ function drawConfig() {
 }
 $('p-only-server').addEventListener('change', drawConfig);
 
+// ---------- Automation ----------
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const auto = {data: null, entries: [], dirty: false};
+function whenText(iso) {
+  if (!iso) return '';
+  const d = new Date(iso), now = new Date();
+  const t = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+  const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
+  if (d.toDateString() === now.toDateString()) return `at ${t}`;
+  if (d.toDateString() === tomorrow.toDateString()) return `tomorrow ${t}`;
+  return `${d.toLocaleDateString([], {weekday: 'short'})} ${t}`;
+}
+async function refreshAutomation(force) {
+  let d;
+  try { d = await api('automation'); } catch (e) { return; }
+  auto.data = d;
+  if (!auto.dirty || force) { auto.entries = JSON.parse(JSON.stringify(d.schedule.entries)); setDirty(false); drawEntries(); }
+  $('a-sched-on').checked = d.schedule.enabled;
+  const n = d.schedule.next;
+  $('a-next').innerHTML = !d.schedule.enabled ? 'The schedule is off.' :
+    n ? `Next: <b>${n.action === 'plug' ? 'plug in' : 'unplug'}</b> ${esc(whenText(n.time))}` : 'Nothing scheduled.';
+  if (d.schedule.last_run) $('a-next').innerHTML += ` · last: ${d.schedule.last_run.action === 'plug' ? 'plugged in' : 'unplugged'} ${ago(d.schedule.last_run.timestamp)}`;
+  $('a-tz').textContent = `Times are in ${d.timezone} (add-on time now ${d.now ? d.now.slice(11, 16) : '—'}). A time missed while the add-on is stopped isn't caught up later. Unplugging during a session ends it.`;
+  if (document.activeElement !== $('a-rp-after') && document.activeElement !== $('a-rp-tries')) {
+    $('a-rp-after').value = d.replug.after_min; $('a-rp-tries').value = d.replug.attempts;
+  }
+  $('a-rp-on').checked = d.replug.enabled;
+  const o = d.replug_option;
+  $('a-rp-option').textContent = `Add-on options: ${o.enabled ? 'on' : 'off'}, ${o.after_min} min, ${o.attempts} tries. A change here is kept until you change those options.`;
+  drawReplugStatus(d.replug);
+}
+function drawReplugStatus(r) {
+  if (!r) return;
+  const tries = `${r.attempts_used} of ${r.attempts} tries used`;
+  const html = {
+    off: '<span class="chip">Off</span>',
+    idle: '<span class="chip ok">Ready</span> <span class="muted">Watching for the next plug-in</span>',
+    waiting: `<span class="chip warn">Waiting for a session</span> <span class="muted">since ${hm(r.waiting_since)}${r.next_replug_at ? ' · re-plug at ' + hm(r.next_replug_at) : ''} · ${tries}</span>`,
+    replugging: '<span class="chip warn">Re-plugging now</span>',
+    gave_up: `<span class="chip err">Gave up</span> <span class="muted">No session after ${r.attempts_used} re-plug${r.attempts_used === 1 ? '' : 's'}. Resets when the car is unplugged or a session starts.</span>`,
+  }[r.status] || '';
+  $('a-rp-status').innerHTML = html + (r.last_replug ? `<div class="sub">Last re-plug ${dateTime(r.last_replug)}</div>` : '');
+}
+function setDirty(v) {
+  auto.dirty = v; $('a-save').disabled = !v; $('a-discard').disabled = !v;
+  $('a-dirty').textContent = v ? 'Unsaved changes' : '';
+}
+function drawEntries() {
+  const rows = auto.entries.map((e, i) => `
+    <div class="row sched" data-i="${i}" style="padding:10px 0;border-top:1px solid var(--divider);margin-top:0">
+      <input type="time" value="${esc(e.time)}" data-f="time" aria-label="Time" required>
+      <select data-f="action" aria-label="Action">
+        <option value="plug" ${e.action === 'plug' ? 'selected' : ''}>Plug in</option>
+        <option value="unplug" ${e.action === 'unplug' ? 'selected' : ''}>Unplug</option>
+      </select>
+      <div class="seg days" role="group" aria-label="Days">${DAYS.map((d, n) =>
+        `<button data-day="${n}" aria-pressed="${e.days.includes(n)}" title="${d}">${d.slice(0, 2)}</button>`).join('')}</div>
+      <span class="grow"></span>
+      <label class="switch" title="Enabled"><input type="checkbox" data-f="enabled" ${e.enabled ? 'checked' : ''} aria-label="Enabled"><span></span></label>
+      <button class="btn small" data-del aria-label="Delete">Delete</button>
+    </div>`).join('');
+  $('a-entries').innerHTML = rows || '<div class="empty">No times yet. Add one, e.g. plug in at 23:30 and unplug at 07:00.</div>';
+}
+$('a-entries').addEventListener('click', (ev) => {
+  const row = ev.target.closest('.sched'); if (!row) return;
+  const e = auto.entries[Number(row.dataset.i)];
+  if (ev.target.dataset.day !== undefined) {
+    const d = Number(ev.target.dataset.day);
+    e.days = e.days.includes(d) ? e.days.filter((x) => x !== d) : [...e.days, d].sort();
+    if (!e.days.length) { e.days = [d]; toast('Pick at least one day'); }
+    drawEntries(); setDirty(true);
+  } else if (ev.target.hasAttribute('data-del')) {
+    auto.entries.splice(Number(row.dataset.i), 1); drawEntries(); setDirty(true);
+  }
+});
+$('a-entries').addEventListener('change', (ev) => {
+  const row = ev.target.closest('.sched'); if (!row) return;
+  const e = auto.entries[Number(row.dataset.i)], f = ev.target.dataset.f;
+  if (f === 'enabled') e.enabled = ev.target.checked; else if (f) e[f] = ev.target.value;
+  setDirty(true);
+});
+$('a-add').onclick = () => {
+  const last = auto.entries[auto.entries.length - 1];
+  auto.entries.push({time: last && last.action === 'plug' ? '07:00' : '23:30', action: last && last.action === 'plug' ? 'unplug' : 'plug', days: [0, 1, 2, 3, 4, 5, 6], enabled: true});
+  drawEntries(); setDirty(true);
+};
+$('a-discard').onclick = () => refreshAutomation(true);
+$('a-save').onclick = async () => {
+  if (auto.entries.some((e) => !/^\d{2}:\d{2}$/.test(e.time))) { toast('Every row needs a time'); return; }
+  if (await post('automation/schedule', {entries: auto.entries})) { toast('Schedule saved'); setDirty(false); refreshAutomation(true); }
+};
+$('a-sched-on').addEventListener('change', async (e) => {
+  if (auto.dirty && !(await post('automation/schedule', {entries: auto.entries}))) { e.target.checked = !e.target.checked; return; }
+  if (await post('automation/schedule', {enabled: e.target.checked})) { toast(e.target.checked ? 'Schedule on' : 'Schedule off'); setDirty(false); refreshAutomation(true); }
+  else e.target.checked = !e.target.checked;
+});
+$('a-rp-on').addEventListener('change', async (e) => {
+  if (await post('automation/replug', {enabled: e.target.checked})) { toast(e.target.checked ? 'Auto re-plug on' : 'Auto re-plug off'); refreshAutomation(); }
+  else e.target.checked = !e.target.checked;
+});
+$('a-rp-save').onclick = async () => {
+  const after = parseInt($('a-rp-after').value, 10), tries = parseInt($('a-rp-tries').value, 10);
+  if (!(after >= 1 && after <= 240) || !(tries >= 0 && tries <= 20)) { toast('Use 1–240 minutes and 0–20 tries'); return; }
+  if (await post('automation/replug', {after_min: after, attempts: tries})) { toast('Re-plug settings saved'); $('a-rp-after').blur(); $('a-rp-tries').blur(); refreshAutomation(); }
+};
+window.addEventListener('beforeunload', (e) => { if (auto.dirty) { e.preventDefault(); e.returnValue = ''; } });
+
 // ---------- Health ----------
 async function refreshHealth() {
   let h;
@@ -862,6 +1024,7 @@ function refreshTab(full) {
   else if (activeTab === 'sessions') refreshSessions();
   else if (activeTab === 'messages') refreshMessages();
   else if (activeTab === 'provider') refreshProvider();
+  else if (activeTab === 'automation') refreshAutomation(false);
   else if (activeTab === 'health') refreshHealth();
 }
 setInterval(() => {
@@ -876,6 +1039,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) refr
 applyHaTheme();
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { applyHaTheme(); drawChart(); });
 showTab((location.hash || '#overview').slice(1));
+window.addEventListener('hashchange', () => { const t = location.hash.slice(1); if (t && t !== activeTab) showTab(t); });
 refreshHistory(true);
 startPush();
 pollState();

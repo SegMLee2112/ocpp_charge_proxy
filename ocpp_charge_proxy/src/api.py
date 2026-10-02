@@ -25,6 +25,7 @@ def create_api_app(
     on_refresh: Callable[[], None] | None = None,
     on_set_soc: Callable[[float | None], Awaitable[None]] | None = None,
     gui=None,
+    automation=None,
 ) -> web.Application:
     app = web.Application()
     app["shared_state"] = shared_state
@@ -36,6 +37,7 @@ def create_api_app(
     app["on_set_soc"] = on_set_soc
     app["events_stop"] = asyncio.Event()
     app["gui"] = gui  # src.gui_data.GuiSources, or None (GUI tabs then empty)
+    app["automation"] = automation  # src.automation.Automation, or None
     # Open /api/events streams: "integration" (HA) and "gui" (the web page)
     app["event_clients"] = {"integration": 0, "gui": 0}
     app.on_shutdown.append(_close_event_streams)
@@ -57,6 +59,10 @@ def create_api_app(
     app.router.add_get("/api/history", handle_history)
     app.router.add_get("/api/provider", handle_provider)
     app.router.add_get("/api/health", handle_health)
+    # Schedule and auto re-plug
+    app.router.add_get("/api/automation", handle_automation)
+    app.router.add_post("/api/automation/schedule", handle_schedule)
+    app.router.add_post("/api/automation/replug", handle_replug)
 
     return app
 
@@ -285,3 +291,44 @@ async def handle_health(request: web.Request) -> web.Response:
 
 def _dumps(data) -> str:
     return json.dumps(data, default=str)
+
+
+# --- Schedule and auto re-plug ----------------------------------------------
+
+
+async def handle_automation(request: web.Request) -> web.Response:
+    automation = request.app["automation"]
+    if automation is None:
+        return _gui_unavailable()
+    return web.json_response(automation.snapshot(), dumps=_dumps)
+
+
+async def _automation_change(request: web.Request, apply) -> web.Response:
+    automation = request.app["automation"]
+    if automation is None:
+        return _gui_unavailable()
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError("Send a JSON object")
+        apply(automation, body)
+    except (ValueError, TypeError, json.JSONDecodeError) as err:
+        return web.json_response({"status": "error", "message": str(err)}, status=400)
+    automation.publish(request.app["shared_state"])
+    return web.json_response({"status": "ok", **automation.snapshot()}, dumps=_dumps)
+
+
+async def handle_schedule(request: web.Request) -> web.Response:
+    """{"enabled": bool} and/or {"entries": [{time, days, action, enabled}, ...]}."""
+    return await _automation_change(
+        request, lambda a, b: a.set_schedule(enabled=b.get("enabled"), entries=b.get("entries")),
+    )
+
+
+async def handle_replug(request: web.Request) -> web.Response:
+    """Any of {"enabled": bool, "after_min": N, "attempts": N}."""
+    return await _automation_change(
+        request, lambda a, b: a.set_replug(
+            enabled=b.get("enabled"), after_min=b.get("after_min"), attempts=b.get("attempts"),
+        ),
+    )

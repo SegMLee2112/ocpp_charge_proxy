@@ -116,3 +116,27 @@ async def test_reporting_soc_shows_value(hass, aioclient_mock):
     assert sensor.state == "64%"
     assert sensor.attributes["soc_percent"] == 64.0
     await unload(hass, entry)
+
+
+async def test_schedule_and_replug_switches(hass, aioclient_mock):
+    entry = await setup_integration(hass, aioclient_mock)
+    assert hass.states.get("switch.ocpp_charge_proxy_schedule").state == "off"
+    replug = hass.states.get("switch.ocpp_charge_proxy_auto_re_plug")
+    assert replug.state == "on" and replug.attributes["status"] == "idle"
+    await hass.services.async_call(
+        "switch", "turn_on", {"entity_id": "switch.ocpp_charge_proxy_schedule"}, blocking=True,
+    )
+    assert posted(aioclient_mock, "automation/schedule") == 1
+    await hass.services.async_call(
+        "switch", "turn_off", {"entity_id": "switch.ocpp_charge_proxy_auto_re_plug"}, blocking=True,
+    )
+    assert posted(aioclient_mock, "automation/replug") == 1
+    await unload(hass, entry)
+
+
+async def test_schedule_switch_unavailable_with_older_addon(hass, aioclient_mock):
+    old = {k: v for k, v in ADDON_STATE.items() if k not in ("schedule_enabled", "schedule_next", "replug")}
+    entry = await setup_integration(hass, aioclient_mock, state=old)
+    assert hass.states.get("switch.ocpp_charge_proxy_schedule").state == "unavailable"
+    assert hass.states.get("switch.ocpp_charge_proxy_auto_re_plug").state == "unavailable"
+    await unload(hass, entry)
