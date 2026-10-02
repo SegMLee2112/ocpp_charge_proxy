@@ -344,8 +344,8 @@ async def handle_replug(request: web.Request) -> web.Response:
 
 
 async def handle_get_sensors(request: web.Request) -> web.Response:
-    """Settings and live values. "configured": false until saved once (the
-    integration copies its old options across then)."""
+    """Settings, live values and the add-on's own HA entities.
+    "configured": false until saved once."""
     link = request.app["ha_link"]
     if link is None:
         return _gui_unavailable()
@@ -354,8 +354,7 @@ async def handle_get_sensors(request: web.Request) -> web.Response:
 
 async def handle_set_sensors(request: web.Request) -> web.Response:
     """Any of power_entity, soc_entity, plug_entity, auto_plug, auto_plug_entity,
-    auto_plug_soc. With ?only_if_unconfigured=1 nothing changes once saved
-    (used by the integration's one-off migration)."""
+    auto_plug_soc. With ?only_if_unconfigured=1 nothing changes once saved."""
     link = request.app["ha_link"]
     if link is None:
         return _gui_unavailable()

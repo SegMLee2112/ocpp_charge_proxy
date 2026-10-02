@@ -9,3 +9,7 @@ docs/
 tmp/
 .DS_Store
 .superpowers/
+.pytest_cache/
+
+# Files the Claude desktop app saves into this folder
+Claude outputs/

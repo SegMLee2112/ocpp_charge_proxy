@@ -1,35 +1,63 @@
 # Changelog
 
-## 1.2.0
+## 2.0.0
 
+> **Upgrading from 1.x? After updating, do these steps:**
+>
+> 1. **Remove the integration.** Settings > Devices & services > OCPP Charge
+>    Proxy > Delete, then remove OCPP Charge Proxy from HACS and restart Home
+>    Assistant. Until it's removed, the add-on leaves the Power, Energy and
+>    Current sensors alone.
+> 2. **Restart the add-on.** It creates its own entities:
+>    `input_boolean.ocpp_charge_proxy_plugged_in` and
+>    `sensor.ocpp_charge_proxy_power` / `_energy` / `_current`. Energy keeps
+>    its entity ID, so your Energy dashboard history carries on.
+> 3. **Pick your sensors again.** Open the add-on's web page, **Simulation**
+>    tab, and choose your power, SoC and car plugged in sensors and auto
+>    plug-in settings. They aren't copied from the integration.
+> 4. **Update your automations, scripts and dashboards:**
+>    - `switch.ocpp_charge_proxy_plugged_in` is now
+>      `input_boolean.ocpp_charge_proxy_plugged_in` (use
+>      `input_boolean.turn_on` / `turn_off`).
+>    - The State, Connected to Server, Last Heartbeat, Last Command, Power
+>      Source, Reporting SoC, Monitored SoC sensors and the Current Amps
+>      Setting select are gone; they're on the add-on's web page. For "is it
+>      charging?" use `sensor.ocpp_charge_proxy_power` above 0 (with simulated
+>      power).
+> 5. **Check your max current** on the web page's Overview tab (it's kept, but
+>    is now only set there).
+
+**The companion integration is gone: the add-on does everything itself.**
+
+- **Home Assistant entities from the add-on.** It creates a **Plugged In**
+  helper, `input_boolean.ocpp_charge_proxy_plugged_in` (turn it on/off to plug
+  in or unplug; it follows the add-on's own Plugged In), and keeps
+  `sensor.ocpp_charge_proxy_power`, `_energy` and `_current` up to date. Energy
+  keeps its entity ID, so the Energy dashboard history carries on. The sensors
+  are unavailable while the add-on is stopped. While the old integration is
+  still installed, the add-on leaves the sensors alone.
+- **Automations need updating:** `switch.ocpp_charge_proxy_plugged_in` is now
+  `input_boolean.ocpp_charge_proxy_plugged_in`, and the State, Connected to
+  Server, Last Heartbeat, Last Command and SoC/power-source sensors are gone
+  (they're on the add-on's web page). For "is it charging?", use the Power
+  sensor: it's above 0 while charging (with the simulated power).
+- **New Simulation tab: the add-on reads your sensors itself.** Pick your
+  power (W or kW), SoC and car plugged in sensors and set up auto plug-in from
+  lists of your HA sensors. The add-on follows them live through Home
+  Assistant's API. Pick them again after updating: the integration's settings
+  aren't copied across.
 - **Plug-in schedule.** Switch Plugged In on or off at set times, on chosen
-  days, as many times a day as you like. Set it up on the new **Automation**
-  tab of the add-on's web page. Times are in your Home Assistant time zone.
+  days, as many times a day as you like (Automation tab). Times are in your
+  Home Assistant time zone.
 - **Auto re-plug.** If your provider hasn't started a session 10 minutes
   after Plugged In turns on, the add-on unplugs for 30 seconds and plugs back
   in, up to 3 times, then gives up until the car is next unplugged or a
-  session starts. The minutes and tries are add-on options (Re-plug After,
-  Re-plug Tries) and can be changed on the Automation tab too. The Overview
-  tab shows when the next re-plug is due.
-- Settings are saved in `/data/automation.json`.
-- **Max current is now set only on the add-on's web page** (Overview tab).
-  The integration's **Current Amps Setting** select is removed (and cleaned
-  up from the entity registry); the add-on's Current Amps option is still
-  the starting value. Your current setting is kept.
-- **New Simulation tab: the add-on reads your sensors itself.** Pick your
-  power, SoC and car plugged in sensors and set up auto plug-in on the
-  add-on's web page, from lists of your HA sensors. The add-on follows them
-  live through Home Assistant's API (no integration needed for this). Power
-  sensors in kW now work as well as W. Your integration options are moved
-  across automatically on first start, and the integration's Configure
-  dialog is gone.
-- **The integration is now just Power, Energy, Current and Plugged In.**
-  OCPP Charge Proxy State, Connected to Server, Last Heartbeat, Last Command
-  Received / Sent, Power Source, Reporting SoC and Monitored SoC are shown on
-  the add-on's web page instead, and removed from HA (and from the entity
-  registry). Automations using the State sensor need changing: the Power
-  sensor is above 0 while the charger is charging.
-- The add-on and integration need to be updated together.
+  session starts. Re-plug After / Re-plug Tries are add-on options, and can be
+  changed on the Automation tab too. The Overview tab shows when the next
+  re-plug is due.
+- **Max current is set on the add-on's web page** (Overview tab). The Current
+  Amps option is still the starting value, and your current setting is kept.
+- Settings are saved in `/data/automation.json` and `/data/sensors.json`.
 
 ## 1.1.0
 

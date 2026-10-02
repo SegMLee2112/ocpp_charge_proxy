@@ -42,7 +42,7 @@ updates its state so Home Assistant automations can respond.
 
 ### Controlling your charger
 
-Use the companion integration's **Power** sensor to trigger automations when
+Use the **Power** sensor (`sensor.ocpp_charge_proxy_power`) to trigger automations when
 your provider starts or stops charging: with the simulated power, it's above
 0 while the charger is charging. For example, turn on a smart plug when it
 rises above 0 and off when it drops back to 0.
@@ -96,7 +96,8 @@ Settings are saved in `/data/automation.json`.
 1. The add-on connects to your provider's OCPP server via WebSocket
 2. It registers as a chargepoint (BootNotification)
 3. It sends periodic heartbeats and meter values
-4. When you "plug in" via the companion integration, it reports `Preparing`
+4. When you "plug in" (the Plugged In helper or the web page), it reports
+   `Preparing`
 5. Your provider creates a charge schedule and sends `RemoteStartTransaction`
 6. The proxy sends `StartTransaction`, reports `Charging`, and sends meter
    values while the simulated car ramps up to full power
@@ -138,30 +139,30 @@ with ChangeConfiguration:
 Long sessions are thinned to at most 100 readings, and the first and last are
 always kept.
 
-## Companion Integration
+## Home Assistant entities
 
-Install the companion integration via HACS for the charger's Power, Energy
-(Energy dashboard) and Current sensors and the Plugged In switch:
-
-1. Add this repository to HACS as a custom repository (Integration category)
-2. Install "OCPP Charge Proxy" from HACS
-3. Restart Home Assistant
-4. The integration should auto-discover the add-on. If not, go to
-   Settings > Devices & Services > Add Integration > OCPP Charge Proxy
-
-### Entities provided
+The add-on creates its own entities (no integration needed):
 
 | Entity | Type | Description |
 |--------|------|-------------|
-| Plugged In | Switch | Simulate car plugged in/unplugged |
-| Power | Sensor | Current power draw (kW) |
-| Energy | Sensor | Cumulative energy (kWh, works with energy dashboard) |
-| Current | Sensor | Current draw (A) |
+| `input_boolean.ocpp_charge_proxy_plugged_in` | Helper (toggle) | Plugged In: turn on/off to plug in or unplug. Kept in step with the add-on's own Plugged In |
+| `sensor.ocpp_charge_proxy_power` | Sensor | Current power draw (kW) |
+| `sensor.ocpp_charge_proxy_energy` | Sensor | Cumulative energy (kWh, works with the Energy dashboard) |
+| `sensor.ocpp_charge_proxy_current` | Sensor | Current draw (A) |
 
-Everything else is on the add-on's web page. Your power, SoC and car plugged
-in sensors and auto plug-in are set up on its **Simulation** tab (settings
-from an older integration are moved there automatically); the add-on reads
-those sensors itself through Home Assistant's API.
+- The sensors are posted by the add-on, so they can't be renamed in the UI and
+  aren't grouped under a device. They show as unavailable while the add-on is
+  stopped, and come back when it (or Home Assistant) restarts.
+- The Plugged In helper is a normal helper. While the add-on is stopped,
+  toggling it does nothing, and it's set back to the add-on's value when the
+  add-on starts.
+- If the old OCPP Charge Proxy integration (1.x) is still installed, the
+  add-on leaves the sensors alone until you remove it (Settings > Devices &
+  services). `sensor.ocpp_charge_proxy_energy` keeps its entity ID, so its
+  Energy dashboard history carries on.
+- Your power, SoC and car plugged in sensors and auto plug-in are set up on
+  the web page's **Simulation** tab; the add-on reads them through Home
+  Assistant's API.
 
 ## Web GUI
 
@@ -184,8 +185,7 @@ follows your Home Assistant theme.
   SoC).
 - **Automation:** the plug-in schedule and auto re-plug (see below).
 - **Health:** version, uptime, reconnects and the last drop's reason,
-  heartbeat and clock offset, whether the HA integration's push updates are
-  connected, and any held messages.
+  heartbeat and clock offset, the Home Assistant link, and any held messages.
 
 ## Getting your OCPP credentials
 

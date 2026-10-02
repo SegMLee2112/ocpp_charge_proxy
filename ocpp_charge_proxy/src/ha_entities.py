@@ -1,0 +1,124 @@
+"""The add-on's own Home Assistant entities (no integration needed).
+
+- Plugged In: an input_boolean helper the add-on creates
+  (input_boolean.ocpp_charge_proxy_plugged_in). Turning it on/off in HA
+  plugs in / unplugs; the add-on keeps it in step with its own Plugged In
+  (web page, schedule, auto plug-in...). The add-on is the source of truth:
+  while it's stopped the helper can be toggled but nothing happens, and it's
+  set back when the add-on reconnects.
+- Power, Energy and Current: posted as sensor states
+  (sensor.ocpp_charge_proxy_power / _energy / _current), with the device and
+  state classes the Energy dashboard needs. They're "unavailable" while the
+  add-on is stopped, and re-posted when it (or HA) restarts.
+
+Kept free of I/O so the decisions can be tested on their own; HaLink does the
+talking.
+"""
+
+from __future__ import annotations
+
+from typing import Optional
+
+HELPER_ID = "ocpp_charge_proxy_plugged_in"
+HELPER_NAME = "OCPP Charge Proxy Plugged In"
+HELPER_ICON = "mdi:ev-plug-type2"
+INTEGRATION_DOMAIN = "ocpp_charge_proxy"  # the old companion integration
+
+LIVE_INTERVAL_S = 10  # power / current posted at most this often
+REFRESH_S = 300  # everything re-posted at least this often
+
+SENSORS = {
+    "power_kw": ("sensor.ocpp_charge_proxy_power", {
+        "friendly_name": "OCPP Charge Proxy Power", "unit_of_measurement": "kW",
+        "device_class": "power", "state_class": "measurement", "icon": "mdi:ev-station",
+    }, 3),
+    "energy_kwh": ("sensor.ocpp_charge_proxy_energy", {
+        "friendly_name": "OCPP Charge Proxy Energy", "unit_of_measurement": "kWh",
+        "device_class": "energy", "state_class": "total_increasing", "icon": "mdi:ev-station",
+    }, 3),
+    "current_a": ("sensor.ocpp_charge_proxy_current", {
+        "friendly_name": "OCPP Charge Proxy Current", "unit_of_measurement": "A",
+        "device_class": "current", "state_class": "measurement", "icon": "mdi:ev-station",
+    }, 2),
+}
+LIVE_KEYS = {"power_kw", "current_a"}
+
+
+class PluggedInSync:
+    """Keeps the input_boolean and the add-on's Plugged In in step."""
+
+    def __init__(self) -> None:
+        self.entity_id: Optional[str] = None
+        self.synced: Optional[bool] = None  # last value both sides agreed on (None: not yet)
+
+    def reset(self) -> None:
+        self.synced = None
+
+    def from_ha(self, state: Optional[str], plugged_in: bool) -> Optional[str]:
+        """The helper changed in HA. Returns "plug"/"unplug" to act on, or None.
+
+        The first reading after (re)connecting isn't a command: the add-on's
+        own value wins and is pushed to HA (see to_ha)."""
+        if state not in ("on", "off"):
+            return None
+        wanted = state == "on"
+        if self.synced is None:
+            return None  # to_ha() sets HA to the add-on's value
+        if wanted == self.synced:
+            return None  # our own update coming back
+        self.synced = wanted
+        if wanted == plugged_in:
+            return None
+        return "plug" if wanted else "unplug"
+
+    def to_ha(self, ha_state: Optional[str], plugged_in: bool) -> Optional[bool]:
+        """Returns the value to set the helper to, or None if it's in step."""
+        if ha_state not in ("on", "off"):
+            return None  # helper not seen yet
+        if self.synced is None or plugged_in != self.synced:
+            self.synced = plugged_in
+            if (ha_state == "on") != plugged_in:
+                return plugged_in
+        return None
+
+
+class SensorPublisher:
+    """Decides which sensor states to post."""
+
+    def __init__(self) -> None:
+        self.sent: dict[str, object] = {}
+        self.sent_at: dict[str, float] = {}
+
+    def reset(self) -> None:
+        self.sent.clear()
+        self.sent_at.clear()
+
+    def due(self, shared_state, now: float) -> list[tuple[str, str, dict]]:
+        out = []
+        for key, (entity_id, attrs, digits) in SENSORS.items():
+            value = round(float(getattr(shared_state, key) or 0.0), digits)
+            last, at = self.sent.get(key), self.sent_at.get(key, 0.0)
+            changed = value != last
+            if key in LIVE_KEYS and changed and last is not None and now - at < LIVE_INTERVAL_S:
+                changed = False  # live values: at most every LIVE_INTERVAL_S
+            if changed or now - at >= REFRESH_S:
+                self.sent[key], self.sent_at[key] = value, now
+                out.append((entity_id, str(value), attrs))
+        return out
+
+    @staticmethod
+    def unavailable() -> list[tuple[str, str, dict]]:
+        return [(entity_id, "unavailable", attrs) for entity_id, attrs, _ in SENSORS.values()]
+
+
+def integration_entities(registry: list[dict]) -> list[str]:
+    """Entities still owned by the old companion integration."""
+    return sorted(e.get("entity_id", "") for e in registry if e.get("platform") == INTEGRATION_DOMAIN)
+
+
+def helper_entity_id(registry: list[dict], helper_id: str = HELPER_ID) -> str:
+    """The helper's entity ID (the user may have renamed it)."""
+    for e in registry:
+        if e.get("platform") == "input_boolean" and e.get("unique_id") == helper_id:
+            return e.get("entity_id") or f"input_boolean.{helper_id}"
+    return f"input_boolean.{helper_id}"

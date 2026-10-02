@@ -10,9 +10,6 @@ ocpp_charge_proxy/                    # HA add-on (Docker container)
   CHANGELOG.md                        # User-facing changelog
   DOCS.md                             # Add-on documentation (shown in HA)
 
-custom_components/ocpp_charge_proxy/  # HA integration (HACS)
-  manifest.json                       # Integration metadata — contains the version
-
 .github/workflows/
   builder.yaml                        # Builds and pushes Docker images on push to master
   lint.yaml                           # Runs HA add-on linter
@@ -21,14 +18,7 @@ custom_components/ocpp_charge_proxy/  # HA integration (HACS)
 
 ## Version Numbers
 
-The add-on and integration versions **must stay in sync**:
-
-| File | Field | Example |
-|------|-------|---------|
-| `ocpp_charge_proxy/config.yaml` | `version` | `"0.1.0"` |
-| `custom_components/ocpp_charge_proxy/manifest.json` | `version` | `"0.1.0"` |
-
-Both use [semver](https://semver.org/):
+The version is in `ocpp_charge_proxy/config.yaml` (`version`). It uses [semver](https://semver.org/):
 - **Patch** (0.1.1) — bug fixes
 - **Minor** (0.2.0) — new features, backward compatible
 - **Major** (1.0.0) — breaking changes
@@ -44,14 +34,11 @@ Both use [semver](https://semver.org/):
    - Description of changes
    ```
 
-3. **Bump both versions** — they must match:
-   - `ocpp_charge_proxy/config.yaml` → `version: "0.2.0"`
-   - `custom_components/ocpp_charge_proxy/manifest.json` → `"version": "0.2.0"`
+3. **Bump the version** in `ocpp_charge_proxy/config.yaml` → `version: "0.2.0"`
 
 4. **Commit**:
    ```bash
-   git add ocpp_charge_proxy/config.yaml ocpp_charge_proxy/CHANGELOG.md \
-          custom_components/ocpp_charge_proxy/manifest.json
+   git add ocpp_charge_proxy/config.yaml ocpp_charge_proxy/CHANGELOG.md
    git commit -m "release: v0.2.0"
    ```
 
@@ -82,9 +69,9 @@ Both use [semver](https://semver.org/):
 ## How Users Get Updates
 
 - **Add-on:** HA Supervisor checks the `version` in `config.yaml` against the installed version. When it changes, the user sees an update notification.
-- **Integration:** HACS checks the `version` in `manifest.json`. Users update via HACS > Integrations.
 
-Both update independently but should always be the same version to avoid confusion.
+There's no separate integration (since 2.0.0): the add-on creates its own
+Home Assistant entities.
 
 ## Development Setup
 
@@ -106,7 +93,6 @@ python -m pytest tests/ -v
 
 1. Push changes to GitHub
 2. In HA: **Settings > Add-ons > OCPP Charge Proxy > Rebuild**
-3. For the integration: **HACS > Integrations > OCPP Charge Proxy > Redownload**, then restart HA
 
 ## Security Score
 

@@ -1,7 +1,6 @@
 # OCPP Charge Proxy
 
 [![License][license-shield]](LICENSE.md)
-[![HACS][hacs-shield]][hacs-url]
 
 ![Supports aarch64 Architecture][aarch64-shield]
 ![Supports amd64 Architecture][amd64-shield]
@@ -36,12 +35,9 @@ Should work with any OCPP 1.6J provider that accepts chargepoint connections.
 It's developed and tested against Octopus Energy, presenting itself as a
 Wallbox Pulsar Plus.
 
-It consists of two components:
-
-- **Add-on** — runs the OCPP client (Docker container managed by HA Supervisor)
-- **Integration** (HACS) — exposes entities for automations, dashboards, and the energy dashboard
-
-Both are installed from this repository.
+It's a single add-on: it runs the OCPP client, has its own web page in the
+Home Assistant sidebar, and creates its own Home Assistant entities (Plugged
+In, Power, Energy and Current). No integration or HACS needed.
 
 ## Features
 
@@ -104,8 +100,12 @@ sensors live through Home Assistant's API.
   charge. It can watch a different SoC sensor from the one reported to your
   provider (e.g. for a car that may be away from home), and only triggers
   once per drop, so unplugging by hand doesn't get undone.
-- **Push updates.** The add-on pushes its state to the integration as it
-  changes, so entities update within about a second (live power every 10s).
+- **Home Assistant entities, no integration needed.** The add-on creates a
+  **Plugged In** helper (`input_boolean.ocpp_charge_proxy_plugged_in`): turn
+  it on or off to plug in or unplug, and it follows the add-on's own Plugged
+  In. It also keeps **Power**, **Energy** (for the Energy dashboard) and
+  **Current** sensors up to date. The sensors show as unavailable while the
+  add-on is stopped.
 - **Plug-in schedule.** Switch Plugged In on or off at set times and days,
   as many times a day as you like, from the add-on's web page (Automation
   tab).
@@ -134,8 +134,7 @@ sensors live through Home Assistant's API.
     monitored SoC.
   - **Automation:** a plug-in schedule and auto re-plug (below).
   - **Health:** version, uptime, reconnects and the last drop's reason,
-    heartbeat and clock offset, whether the HA integration's push updates are
-    connected, and any held messages.
+    heartbeat and clock offset, the Home Assistant link, and any held messages.
 - **Quieter logs.** OCPP messages are logged at `info`, except Heartbeats
   (every 10s with Octopus) and periodic meter readings (every 60s), which only
   show at `debug`. Clock-aligned readings (every 15 min) stay at `info`.
@@ -157,28 +156,24 @@ See the [add-on documentation][docs] for all add-on options, including the
 start delay and ramp-up, the starting current, and seeding the energy
 register when migrating from a real charger.
 
-## Step 2: Install the Integration (HACS)
+## Step 2: Pick your sensors (optional)
 
-The integration gives Home Assistant the charger's **Power**, **Energy**
-(for the Energy dashboard) and **Current** sensors and the **Plugged In**
-switch, and auto-discovers the add-on. Everything else is on the add-on's
-web page.
+On the add-on's web page (sidebar), open the **Simulation** tab to pick your
+power, SoC and car plugged in sensors and set up auto plug-in.
 
-1. Add this repository to HACS as a **custom repository** (category: Integration):
+### Upgrading from 1.x (with the integration)
 
-   [![Add to HACS][hacs-badge]][hacs-add-url]
+1. Remove the integration: **Settings > Devices & services > OCPP Charge
+   Proxy > Delete**, then remove it from HACS
+2. Restart the add-on. It creates its own entities. `sensor.ocpp_charge_proxy_energy`
+   keeps the same entity ID, so its Energy dashboard history carries on
+3. Pick your sensors again on the **Simulation** tab
+4. Update automations that used `switch.ocpp_charge_proxy_plugged_in` to use
+   `input_boolean.ocpp_charge_proxy_plugged_in`. The charger state and other
+   details are now on the add-on's web page
 
-   Or manually: **HACS > Integrations > ... > Custom repositories** and add
-   this repository URL.
-
-2. Install **OCPP Charge Proxy** from HACS
-3. Restart Home Assistant
-4. The integration should auto-discover the add-on. If not, go to
-   **Settings > Devices & Services > Add Integration** and search for
-   "OCPP Charge Proxy"
-5. Optionally pick your power, SoC and car sensors on the add-on's web page
-   (**Simulation** tab). Settings from an older integration are moved there
-   automatically.
+Until the integration is removed, the add-on leaves the sensors alone (its
+Simulation tab says so).
 
 ### Simulation tab options
 
@@ -194,21 +189,28 @@ All optional. Choose "None" to stop using a sensor.
 
 ### Entities provided
 
+The add-on creates these in Home Assistant:
+
 | Entity | Type | Description |
 |--------|------|-------------|
-| Plugged In | Switch | Simulate car plugged in/unplugged |
-| Power | Sensor | Live power draw (kW) |
-| Energy | Sensor | Cumulative energy (kWh, Energy dashboard compatible) |
-| Current | Sensor | Current draw (A) |
+| `input_boolean.ocpp_charge_proxy_plugged_in` | Helper (toggle) | Plugged In: turn on/off to plug in or unplug. Kept in step with the add-on |
+| `sensor.ocpp_charge_proxy_power` | Sensor | Live power draw (kW) |
+| `sensor.ocpp_charge_proxy_energy` | Sensor | Cumulative energy (kWh, Energy dashboard compatible) |
+| `sensor.ocpp_charge_proxy_current` | Sensor | Current draw (A) |
 
-The charger state, OCPP connection, heartbeat, commands and sensor details
-are on the add-on's web page.
+The sensors are updated by the add-on rather than an integration, so they
+can't be renamed in the UI and aren't grouped under a device, and they show as
+unavailable while the add-on is stopped. The Plugged In helper is a normal
+helper you can rename. If the add-on is stopped, toggling it does nothing and
+it's set back when the add-on starts. The charger state, OCPP connection,
+heartbeat, commands and sensor details are on the add-on's web page.
 
 ## Usage
 
 1. Start the add-on and verify it connects (its web page in the sidebar
    shows the charger state and the OCPP connection)
-2. Turn on **Plugged In** to simulate connecting a car (or let the car
+2. Turn on **Plugged In** (the helper, or on the add-on's web page) to
+   simulate connecting a car (or let the car
    connected sensor or auto plug-in do it)
 3. Set a departure time and charge amount in your provider's app
 4. Your provider will schedule charging and send start/stop commands
@@ -255,14 +257,10 @@ automation:
 Tests run in CI on every push. To run them locally:
 
 ```bash
-# Add-on (from the ocpp_charge_proxy folder)
 cd ocpp_charge_proxy
 pip install -r requirements.txt pytest pytest-asyncio pytest-aiohttp
 python -m pytest tests/ -v
 
-# Integration, against a real Home Assistant core (from the repository root)
-pip install pytest-homeassistant-custom-component
-python -m pytest tests/ -v -o asyncio_mode=auto
 ```
 
 ## Documentation
@@ -275,10 +273,6 @@ readings, charger migration and getting your OCPP credentials. The
 [aarch64-shield]: https://img.shields.io/badge/aarch64-yes-green.svg
 [amd64-shield]: https://img.shields.io/badge/amd64-yes-green.svg
 [license-shield]: https://img.shields.io/badge/license-MIT-blue.svg
-[hacs-shield]: https://img.shields.io/badge/HACS-Custom-41BDF5.svg
-[hacs-url]: https://github.com/hacs/integration
-[hacs-badge]: https://my.home-assistant.io/badges/hacs_repository.svg
-[hacs-add-url]: https://my.home-assistant.io/redirect/hacs_repository/?owner=thewhale21&repository=ocpp_charge_proxy&category=integration
 [docs]: ocpp_charge_proxy/DOCS.md
 [repository-badge]: https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg
 [repository-url]: https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fthewhale21%2Focpp_charge_proxy

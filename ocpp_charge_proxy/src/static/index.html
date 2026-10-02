@@ -321,6 +321,11 @@
   <!-- ============ Simulation ============ -->
   <section id="tab-simulation" class="stack" hidden>
     <div class="card" id="sim-link"></div>
+    <div class="card">
+      <h2>Home Assistant entities</h2>
+      <div class="note" style="margin:0 0 10px">The add-on creates these itself. The sensors show as unavailable while the add-on is stopped.</div>
+      <dl class="kv" id="sim-entities"></dl>
+    </div>
     <div class="grid">
       <div class="card">
         <h2>Power</h2>
@@ -977,6 +982,14 @@ function drawSimulation() {
     !d.available ? '<span class="chip err">Not available</span><span class="muted">' + esc(d.error || '') + '</span>'
     : d.connected ? '<span class="chip ok">Connected</span><span class="muted">Following your sensors live</span>'
     : '<span class="chip warn">Connecting…</span><span class="muted">' + esc(d.error || '') + '</span>'}</div>`;
+  const e = d.ha_entities || {};
+  const sensorList = (e.sensors || []).map((id) => `<code>${esc(id)}</code>`).join('<br>');
+  $('sim-entities').innerHTML = (e.integration_conflict && e.integration_conflict.length
+    ? `<dt>Old integration</dt><dd><span class="chip err">Still installed</span><div class="sub">Remove the OCPP Charge Proxy integration in Settings › Devices &amp; services, then restart this add-on. Until then the sensors below aren't updated by the add-on.</div></dd>` : '') + kv([
+    ['Plugged In', e.plugged_in ? `<code>${esc(e.plugged_in)}</code> <span class="muted">(helper, toggle it to plug in / unplug)</span>`
+      : `<span class="chip warn">Not set up</span>${e.error ? '<div class="sub">' + esc(e.error) + '</div>' : ''}`],
+    ['Sensors', sensorList + (e.publishing ? ' <div><span class="chip ok">Updating</span></div>' : ' <div><span class="chip">Not updating</span></div>')],
+  ]);
   const socTxt = (entity, soc) => !entity ? 'not set' : soc == null ? 'no reading' : `${Math.round(soc * 10) / 10}%`;
   $('sim-power').innerHTML = kv([
     ['Power source', d.power.source === 'entity' ? '<span class="chip ok">Your power sensor</span>' : '<span class="chip">Simulated</span>'],
@@ -1151,7 +1164,6 @@ async function refreshHealth() {
   ]) : '<div class="empty">None yet</div>';
   const streams = h.event_streams || {};
   $('h-ha').innerHTML = kv([
-    ['Integration', streams.integration > 0 ? '<span class="chip ok">Push updates connected</span>' : '<span class="chip warn">Not connected</span><div class="sub">Polling, or the integration isn\'t set up</div>'],
     ['Pages open', String(streams.gui || 0)],
     ['Sensor link', !h.home_assistant ? '—' : !h.home_assistant.available ? '<span class="chip err">Not available</span>'
       : h.home_assistant.connected ? '<span class="chip ok">Connected</span>' : `<span class="chip warn">Not connected</span><div class="sub">${esc(h.home_assistant.error || '')}</div>`],

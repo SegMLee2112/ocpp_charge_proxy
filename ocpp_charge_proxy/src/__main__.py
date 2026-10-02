@@ -196,12 +196,15 @@ async def run() -> None:
         attempts=config.replug_attempts,
     ))
     automation.publish(shared_state)
-    # Your HA sensors (power, SoC, car plugged in, auto plug-in): Simulation tab
+    # Your HA sensors (power, SoC, car plugged in, auto plug-in: Simulation
+    # tab) and the add-on's own HA entities (Plugged In helper, Power, Energy,
+    # Current)
     ha_link = HaLink(
         data_dir, shared_state,
         set_power=cp.set_power_override,
         set_soc=do_set_soc,
         plug=do_plug,
+        unplug=do_unplug,
     )
 
     def _health_info() -> dict:
@@ -301,6 +304,11 @@ async def run() -> None:
           await _graceful_shutdown(cp)
     finally:
         stop_task.cancel()
+        try:
+            # Power / Energy / Current show as unavailable while stopped
+            await asyncio.wait_for(ha_link.shutdown(), 5)
+        except Exception:
+            logger.debug("Couldn't mark the sensors unavailable", exc_info=True)
         await _cancel_all(charger_tasks)
         await runner.cleanup()
         logger.info("OCPP Charge Proxy stopped")

@@ -1,5 +1,4 @@
 # https://developers.home-assistant.io/docs/add-ons/configuration#add-on-dockerfile
-# v0.2.0 - companion integration + API server
 ARG BUILD_FROM
 FROM $BUILD_FROM
 

@@ -206,7 +206,7 @@ async def test_event_streams_counted_by_client(aiohttp_client, shared_state, moc
     resp.close()
 
 
-# --- 1.2.0: schedule and auto re-plug ---
+# --- 2.0.0: schedule and auto re-plug ---
 
 
 @pytest.mark.asyncio
@@ -236,7 +236,7 @@ async def test_automation_endpoints(aiohttp_client, shared_state, mock_commands,
     assert (await client.post("/api/automation/replug", data="nope")).status == 400
 
 
-# --- 1.2.0: your HA sensors ---
+# --- 2.0.0: your HA sensors ---
 
 
 @pytest.mark.asyncio
