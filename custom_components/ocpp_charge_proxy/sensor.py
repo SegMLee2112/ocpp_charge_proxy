@@ -52,7 +52,8 @@ SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
     ),
 )
 
-# key stays "soc_source" so the entity keeps its ID (sensor.ocpp_charge_proxy_soc_source)
+# key stays "soc_source" (the unique ID), so existing installs keep their entity
+# ID sensor.ocpp_charge_proxy_soc_source; new installs get ..._reporting_soc
 SOC_SOURCE_DESCRIPTION = SensorEntityDescription(
     key="soc_source",
     name="Reporting SoC",

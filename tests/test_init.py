@@ -8,8 +8,8 @@ async def test_entities_created(hass, aioclient_mock):
     assert hass.states.get("sensor.ocpp_charge_proxy_state").state == "Available"
     assert hass.states.get("sensor.ocpp_charge_proxy_state").name == "OCPP Charge Proxy State"
     assert hass.states.get("sensor.ocpp_charge_proxy_power_source").state == "simulated"
-    assert hass.states.get("sensor.ocpp_charge_proxy_soc_source").state == "not set"
-    assert hass.states.get("sensor.ocpp_charge_proxy_soc_source").name == "OCPP Charge Proxy Reporting SoC"
+    assert hass.states.get("sensor.ocpp_charge_proxy_reporting_soc").state == "not set"
+    assert hass.states.get("sensor.ocpp_charge_proxy_reporting_soc").name == "OCPP Charge Proxy Reporting SoC"
     assert hass.states.get("sensor.ocpp_charge_proxy_monitored_soc").state == "not set"
     assert hass.states.get("switch.ocpp_charge_proxy_plugged_in").state == "off"
     assert hass.states.get("select.ocpp_charge_proxy_current_amps_setting").state == "16"
@@ -112,7 +112,7 @@ async def test_reporting_soc_shows_value(hass, aioclient_mock):
     hass.states.async_set("sensor.car_soc", "64")
     reporting = {**ADDON_STATE, "soc_percent": 64.0}
     entry = await setup_integration(hass, aioclient_mock, {"soc_entity": "sensor.car_soc"}, state=reporting)
-    sensor = hass.states.get("sensor.ocpp_charge_proxy_soc_source")
+    sensor = hass.states.get("sensor.ocpp_charge_proxy_reporting_soc")
     assert sensor.state == "64%"
     assert sensor.attributes["soc_percent"] == 64.0
     await unload(hass, entry)
