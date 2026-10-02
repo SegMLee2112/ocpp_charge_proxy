@@ -53,9 +53,9 @@ virtual chargepoint could physically deliver at its current setting.
 
 If not configured, the proxy uses a realistic power simulation.
 
-### Car battery (SoC) entity
+### SoC sensor for reporting
 
-You can also set a **car battery (SoC) sensor**, for example from your car's
+You can also set a **SoC sensor for reporting**, for example from your car's
 own integration, reporting 0–100%. When set:
 
 - The car's state of charge is sent to your provider whenever it asks for
@@ -137,11 +137,11 @@ Install the companion integration via HACS to get proper HA entities:
 | Energy | Sensor | Cumulative energy (kWh, works with energy dashboard) |
 | Current | Sensor | Current draw (A) |
 | Power Source | Sensor (diagnostic) | Whether using real entity or simulated values |
-| SoC Source | Sensor (diagnostic) | `entity` (reporting your car battery sensor), `no reading` (sensor set but no value, nothing sent) or `not set` (no SoC reported, car full off) |
+| SoC Source | Sensor (diagnostic) | `entity` (reporting your SoC sensor), `no reading` (sensor set but no value, nothing sent) or `not set` (no SoC reported, car full off) |
 | Connected to Server | Binary Sensor | Connected to OCPP server |
 | Last Command Received | Sensor (diagnostic) | Last OCPP command from your provider (e.g. `RemoteStartTransaction`). Attributes: `timestamp`, `summary`, `status`, `round_trip_ms`, `message_id`, `payload`, `response`, `recent` (last 10) |
 | Last Command Sent | Sensor (diagnostic) | Last message sent to your provider, excluding Heartbeat and MeterValues. Same attributes, with the server's response |
-| Monitored SoC | Sensor (diagnostic) | SoC (%) that auto plug-in watches. Attributes: `entity_id`, `source`, `auto_plug`, `threshold`, `armed` |
+| Monitored SoC | Sensor (diagnostic) | Where auto plug-in's SoC comes from: `entity`, `no reading` or `not set` (like SoC Source). Attributes: `soc_percent`, `entity_id`, `source`, `auto_plug`, `threshold`, `armed` |
 | Last Heartbeat | Sensor (diagnostic) | When your provider last answered a Heartbeat. Attributes: `round_trip_ms`, `interval_s`, `server_time`, `clock_offset_s` |
 
 ### Integration options
@@ -150,27 +150,27 @@ In the integration's settings (Configure), you can optionally set:
 
 - a **power sensor**, reporting power in watts (W), such as your battery
   charge power or grid demand sensor;
-- a **car battery (SoC) sensor**, reporting the car's charge in %.
+- a **SoC sensor for reporting**, reporting the car's charge in %.
 
 Clear a field to stop using that sensor.
 
-You can also turn on **Plug in automatically when the car's SoC drops low**
+You can also turn on **Plug in automatically when the SoC drops low**
 and choose the threshold (default 30%). When the SoC drops below it, Plugged
 In is switched on so your provider can schedule a charge. It triggers once
 per drop: unplugging by hand while the SoC is still low won't plug it back
 in, and it re-arms once the SoC is back above the threshold.
 
 If your car has a "charging cable connected" (or similar) binary sensor, you
-can set it as the **car connected sensor**: when it changes from off to on,
+can set it as the **car plugged in sensor**: when it changes from off to on,
 Plugged In is switched on. It never switches Plugged In off, so unplug with
 the switch or an automation as usual. Unavailable/unknown readings in between
 are ignored, and it doesn't plug in on the first reading after a restart. The
 switch stays usable by hand, and it works alongside auto plug-in.
 
-With a car battery (SoC) sensor set, the simulated power also **tapers** above
+With a SoC sensor for reporting set, the simulated power also **tapers** above
 90% SoC, down to 30% of full power at 100%, as a real car's does.
 
-By default auto plug-in watches the car battery (SoC) sensor above. You can pick a
+By default auto plug-in watches the reporting SoC sensor above. You can pick a
 different **SoC sensor to watch for auto plug-in** instead. That sensor is
 only watched, never reported to your provider, which is useful if the car
 may be away from home: you can watch its SoC without it being sent as the

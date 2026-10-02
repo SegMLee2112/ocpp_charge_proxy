@@ -51,7 +51,7 @@ Both are installed from this repository.
   waits a few seconds before drawing current, then ramps up to full power
   (`start_delay_s`, default 3s, and `ramp_up_s`, default 5s), instead of
   jumping straight to full power.
-- **Charging taper near full.** With a car battery (SoC) sensor set, power
+- **Charging taper near full.** With a SoC sensor for reporting set, power
   stays at full up to 90% SoC, then tapers to 30% of full power at 100%, like
   a real car's charge curve.
 - **Accurate energy meter.** The energy register counts exactly what was
@@ -89,12 +89,12 @@ Both are installed from this repository.
 
 - **Power sensor (optional).** Report real power (e.g. from a smart plug or
   your actual charger) to your provider instead of the simulation.
-- **Car battery (SoC) sensor (optional).** Report your car's state of charge
+- **SoC sensor for reporting (optional).** Report your car's state of charge
   to your provider, and enable car full and the charging taper.
-- **Car connected sensor (optional).** Pick a binary sensor, such as your
+- **Car plugged in sensor (optional).** Pick a binary sensor, such as your
   car's "charging cable connected", and **Plugged In** switches on
   automatically when it turns on. It never unplugs; that stays up to you.
-- **Auto plug-in (optional).** Switch Plugged In on when the car's SoC drops
+- **Auto plug-in (optional).** Switch Plugged In on when the SoC drops
   below a threshold you choose (default 30%), so your provider can schedule a
   charge. It can watch a different SoC sensor from the one reported to your
   provider (e.g. for a car that may be away from home), and only triggers
@@ -161,10 +161,10 @@ All options are optional. Clear a field to stop using that sensor.
 | Option | What it does |
 |--------|--------------|
 | **Power sensor** | A sensor reporting power in watts. Its value is reported to your provider instead of the simulated power (capped at what the charger could deliver at its current setting). |
-| **Car battery (SoC) sensor** | A sensor reporting the car's charge in %. Sent to your provider in meter values while a car is plugged in, and enables car full and the charging taper. |
-| **Car connected sensor** | A binary sensor (e.g. your car's "charging cable connected"). When it changes from off to on, Plugged In is switched on. It never switches Plugged In off, so unplug with the switch or an automation as usual. Unavailable/unknown readings in between are ignored, and it doesn't plug in on the first reading after a restart. The switch stays usable by hand, and it works alongside auto plug-in. |
-| **Plug in automatically when the car's SoC drops low** | Switches Plugged In on once when the watched SoC drops below the threshold. Re-arms once the SoC is back at or above it. Doesn't trigger on the first reading after a restart, or if already plugged in. |
-| **SoC sensor to watch for auto plug-in** | Watch this sensor for auto plug-in instead of the car battery sensor above. It's never reported to your provider. |
+| **SoC sensor for reporting** | A sensor reporting the car's charge in %. Sent to your provider in meter values while a car is plugged in, and enables car full and the charging taper. |
+| **Car plugged in sensor** | A binary sensor (e.g. your car's "charging cable connected"). When it changes from off to on, Plugged In is switched on. It never switches Plugged In off, so unplug with the switch or an automation as usual. Unavailable/unknown readings in between are ignored, and it doesn't plug in on the first reading after a restart. The switch stays usable by hand, and it works alongside auto plug-in. |
+| **Plug in automatically when the SoC drops low** | Switches Plugged In on once when the watched SoC drops below the threshold. Re-arms once the SoC is back at or above it. Doesn't trigger on the first reading after a restart, or if already plugged in. |
+| **SoC sensor to watch for auto plug-in** | Watch this sensor for auto plug-in instead of the reporting SoC sensor above. It's never reported to your provider. |
 | **Plug in below this SoC** | The auto plug-in threshold (1–99%, default 30%). |
 
 ### Entities provided
@@ -179,8 +179,8 @@ All options are optional. Clear a field to stop using that sensor.
 | Current | Sensor | Current draw (A) |
 | Connected to Server | Binary Sensor | Connected to your provider's OCPP server |
 | Power Source | Sensor (diagnostic) | `entity` (your power sensor is in use) or `simulated` |
-| SoC Source | Sensor (diagnostic) | `entity` (reporting your car battery sensor), `no reading` (sensor set but no value, nothing sent) or `not set` (no SoC reported, car full off) |
-| Monitored SoC | Sensor (diagnostic) | The SoC (%) auto plug-in watches. Attributes: `entity_id`, `source`, `auto_plug`, `threshold`, `armed` |
+| SoC Source | Sensor (diagnostic) | `entity` (reporting your SoC sensor), `no reading` (sensor set but no value, nothing sent) or `not set` (no SoC reported, car full off) |
+| Monitored SoC | Sensor (diagnostic) | Where auto plug-in's SoC comes from: `entity`, `no reading` or `not set` (like SoC Source). Attributes: `soc_percent`, `entity_id`, `source`, `auto_plug`, `threshold`, `armed` |
 | Last Heartbeat | Sensor (diagnostic) | When your provider last answered a Heartbeat. Attributes: `round_trip_ms`, `interval_s`, `server_time`, `clock_offset_s` |
 | Last Command Received | Sensor (diagnostic) | Last OCPP command from your provider (e.g. `RemoteStartTransaction`). Attributes: `timestamp`, `summary`, `status`, `round_trip_ms`, `message_id`, `payload`, `response`, `recent` (last 10) |
 | Last Command Sent | Sensor (diagnostic) | Last message sent to your provider, excluding Heartbeat and MeterValues. Same attributes, with your provider's response |

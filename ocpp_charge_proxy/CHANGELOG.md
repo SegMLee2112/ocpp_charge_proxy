@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.2
+
+- **Monitored SoC** now shows where auto plug-in's SoC comes from, with the
+  same states as SoC Source: `entity` (a sensor is being watched and has a
+  value), `no reading` (a sensor is set but has no usable value) or `not set`
+  (no sensor to watch). It previously showed the SoC itself, so it read
+  "unknown" whenever there was nothing to watch. The SoC is now the
+  `soc_percent` attribute, alongside `entity_id`, `source`, `auto_plug`,
+  `threshold` and `armed`.
+- Clearer option names in the integration's settings: "Car battery (SoC)
+  sensor" is now **SoC sensor for reporting to your OCPP provider**, "Car
+  connected sensor" is now **Car plugged in sensor**, and "Plug in
+  automatically when the car's SoC drops low" is now **Plug in automatically
+  when the SoC drops low**. Only the labels changed: saved settings are kept.
+
 ## 1.0.1
 
 - Quieter logs: idle meter readings (the periodic one every 60s with Octopus

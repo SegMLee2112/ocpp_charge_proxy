@@ -64,9 +64,9 @@ SOC_SOURCE_DESCRIPTION = SensorEntityDescription(
 MONITORED_SOC_DESCRIPTION = SensorEntityDescription(
     key="monitored_soc",
     name="Monitored SoC",
-    device_class=SensorDeviceClass.BATTERY,
-    state_class=SensorStateClass.MEASUREMENT,
-    native_unit_of_measurement="%",
+    icon="mdi:battery-sync",
+    device_class=SensorDeviceClass.ENUM,
+    options=["entity", "no reading", "not set"],  # same states as SoC Source
     entity_category=EntityCategory.DIAGNOSTIC,
 )
 
@@ -233,7 +233,12 @@ class OCPPChargeProxyStateSensor(OCPPChargeProxySensor):
 
 
 class OCPPChargeProxyMonitoredSocSensor(OCPPChargeProxySensor):
-    """The SoC that auto plug-in watches (the monitor sensor, else the reported SoC sensor)."""
+    """Where auto plug-in's SoC comes from, like SoC Source does for the reported one.
+
+    entity:      a sensor is being watched and has a value (in soc_percent)
+    no reading:  a sensor is set but has no usable value right now
+    not set:     no sensor to watch (no monitor sensor and no reported SoC sensor)
+    """
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -249,14 +254,19 @@ class OCPPChargeProxyMonitoredSocSensor(OCPPChargeProxySensor):
         self.async_write_ha_state()
 
     @property
-    def native_value(self):
-        return self.coordinator.monitored_soc()
+    def native_value(self) -> str:
+        if not self.coordinator.monitored_soc_entity:
+            return "not set"
+        if self.coordinator.monitored_soc() is None:
+            return "no reading"
+        return "entity"
 
     @property
     def extra_state_attributes(self) -> dict:
         auto_plug = self.coordinator.auto_plug
         return {
             "entity_id": self.coordinator.monitored_soc_entity or None,
+            "soc_percent": self.coordinator.monitored_soc(),
             "source": self.coordinator.monitored_soc_source,
             "auto_plug": auto_plug.enabled,
             "threshold": auto_plug.threshold,

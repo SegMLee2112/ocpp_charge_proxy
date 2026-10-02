@@ -9,6 +9,7 @@ async def test_entities_created(hass, aioclient_mock):
     assert hass.states.get("sensor.ocpp_charge_proxy_state").name == "OCPP Charge Proxy State"
     assert hass.states.get("sensor.ocpp_charge_proxy_power_source").state == "simulated"
     assert hass.states.get("sensor.ocpp_charge_proxy_soc_source").state == "not set"
+    assert hass.states.get("sensor.ocpp_charge_proxy_monitored_soc").state == "not set"
     assert hass.states.get("switch.ocpp_charge_proxy_plugged_in").state == "off"
     assert hass.states.get("select.ocpp_charge_proxy_current_amps_setting").state == "16"
     assert hass.states.get("binary_sensor.ocpp_charge_proxy_connected_to_server").state == "on"
@@ -78,7 +79,8 @@ async def test_auto_plug_in_on_soc_drop(hass, aioclient_mock):
     await hass.async_block_till_done()
     assert posted(aioclient_mock, "plug") == 1
     monitored = hass.states.get("sensor.ocpp_charge_proxy_monitored_soc")
-    assert float(monitored.state) == 29
+    assert monitored.state == "entity"
+    assert monitored.attributes["soc_percent"] == 29
     await unload(hass, entry)
 
 
