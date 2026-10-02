@@ -131,11 +131,12 @@ sensors live through Home Assistant's API.
     configuration key.
   - **Automation:** the plug-in schedule (below).
   - **Settings:** controls for Plugged In, max current, a power override and
-    a test SoC; the simulated car's start delay and ramp-up; auto re-plug; and your power, SoC and car plugged in sensors
-    and auto plug-in, with live values (power source, reporting SoC,
-    monitored SoC) and the add-on's Home Assistant entities.
+    a test SoC; the simulated car's start delay and ramp-up; auto re-plug;
+    and your power, SoC and car plugged in sensors and auto plug-in, with
+    live values (power source, reporting SoC, monitored SoC).
   - **Health:** version, uptime, reconnects and the last drop's reason,
-    heartbeat and clock offset, the Home Assistant link, and any held messages.
+    heartbeat and clock offset, the Home Assistant link and the add-on's
+    Home Assistant entities, and any held messages.
 - **Quieter logs.** OCPP messages are logged at `info`, except Heartbeats
   (every 10s with Octopus) and periodic meter readings (every 60s), which only
   show at `debug`. Clock-aligned readings (every 15 min) stay at `info`.
@@ -174,7 +175,7 @@ power, SoC and car plugged in sensors and set up auto plug-in.
    details are now on the add-on's web page
 
 Until the integration is removed, the add-on leaves the sensors alone (its
-Settings tab says so).
+Health tab says so).
 
 ### Settings tab options
 

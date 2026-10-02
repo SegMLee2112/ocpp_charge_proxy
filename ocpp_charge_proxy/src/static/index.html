@@ -58,6 +58,7 @@
     min-width: 0;
   }
   .card.wide { grid-column: 1 / -1; }
+  @media (min-width: 760px) { .span2 { grid-column: span 2; } }
   .card h2 { font-size: 16px; font-weight: 500; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .card h2 .seg, .card h2 label { font-size: 13px; font-weight: 400; }
   .ctl { display: inline-flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
@@ -372,13 +373,7 @@
   </div>
       </div>
     </div>
-    <div class="section-title">Home Assistant and your sensors</div>
-    <div class="card" id="sim-link"></div>
-    <div class="card">
-      <h2>Home Assistant entities</h2>
-      <div class="note" style="margin:0 0 10px">The add-on creates these itself. The sensors show as unavailable while the add-on is stopped.</div>
-      <dl class="kv" id="sim-entities"></dl>
-    </div>
+    <div class="section-title">Your Home Assistant sensors</div>
     <div class="grid">
       <div class="card">
         <h2>Power</h2>
@@ -428,6 +423,11 @@
       <div class="card"><h2>OCPP connection</h2><dl class="kv" id="h-conn"></dl></div>
       <div class="card"><h2>Heartbeat</h2><dl class="kv" id="h-hb"></dl></div>
       <div class="card"><h2>Home Assistant</h2><dl class="kv" id="h-ha"></dl></div>
+      <div class="card span2">
+        <h2>Home Assistant entities</h2>
+        <div class="note" style="margin:0 0 10px">The add-on creates these itself. The sensors show as unavailable while the add-on is stopped.</div>
+        <dl class="kv" id="sim-entities"></dl>
+      </div>
     </div>
     <div class="card">
       <h2>Held messages</h2>
@@ -1027,7 +1027,7 @@ function entityState(ent) {
 }
 function drawSimulation() {
   const d = sim.data; if (!d) return;
-  $('sim-link').innerHTML = `<div class="row"><b>Home Assistant</b>${
+  if ($('sim-link')) $('sim-link').innerHTML = `<div class="row"><b>Home Assistant</b>${
     !d.available ? '<span class="chip err">Not available</span><span class="muted">' + esc(d.error || '') + '</span>'
     : d.connected ? '<span class="chip ok">Connected</span><span class="muted">Following your sensors live</span>'
     : '<span class="chip warn">Connecting…</span><span class="muted">' + esc(d.error || '') + '</span>'}</div>`;
@@ -1230,7 +1230,7 @@ function refreshTab(full) {
   else if (activeTab === 'provider') refreshProvider();
   else if (activeTab === 'automation') refreshAutomation(false);
   else if (activeTab === 'settings') { refreshAutomation(false); refreshSimulation(false); }
-  else if (activeTab === 'health') refreshHealth();
+  else if (activeTab === 'health') { refreshHealth(); refreshSimulation(false); }
 }
 setInterval(() => {
   if (document.hidden) return;

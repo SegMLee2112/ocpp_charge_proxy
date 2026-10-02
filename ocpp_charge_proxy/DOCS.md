@@ -184,9 +184,10 @@ follows your Home Assistant theme.
 - **Settings:** controls for Plugged In, max current, a power override and a
   test SoC; auto re-plug (see below); and your power, SoC and car plugged in
   sensors and auto plug-in, with their live values (power source, reporting
-  SoC, monitored SoC) and the add-on's Home Assistant entities.
+  SoC, monitored SoC).
 - **Health:** version, uptime, reconnects and the last drop's reason,
-  heartbeat and clock offset, the Home Assistant link, and any held messages.
+  heartbeat and clock offset, the Home Assistant link and the add-on's Home
+  Assistant entities, and any held messages.
 
 ## Getting your OCPP credentials
 

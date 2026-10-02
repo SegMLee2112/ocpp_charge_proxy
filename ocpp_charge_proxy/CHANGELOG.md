@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.4
+
+- The Home Assistant link and entities status moved from the Settings tab
+  to the Health tab.
+
 ## 2.0.3
 
 - **Start delay and ramp-up are now set on the web page** (Settings tab, new
