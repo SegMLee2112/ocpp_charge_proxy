@@ -3,20 +3,14 @@
     "step": {
       "user": {
         "title": "OCPP Charge Proxy",
-        "description": "Connect to the OCPP Charge Proxy add-on API. The URL is detected automatically when the add-on is running; otherwise use the Hostname shown on the add-on's Info page, e.g. http://<hostname>:8099.",
+        "description": "Connect to the OCPP Charge Proxy add-on API. The URL is detected automatically when the add-on is running; otherwise use the Hostname shown on the add-on's Info page, e.g. http://<hostname>:8099. Your power, SoC and car sensors are set on the add-on's web page (Simulation tab).",
         "data": {
-          "api_url": "API URL",
-          "power_entity": "Power sensor (optional)",
-          "soc_entity": "SoC sensor for reporting to your OCPP provider (optional)"
+          "api_url": "API URL"
         }
       },
       "hassio_confirm": {
         "title": "OCPP Charge Proxy Discovered",
-        "description": "The OCPP Charge Proxy add-on was discovered at {url}.",
-        "data": {
-          "power_entity": "Power sensor (optional)",
-          "soc_entity": "SoC sensor for reporting to your OCPP provider (optional)"
-        }
+        "description": "The OCPP Charge Proxy add-on was discovered at {url}. Your power, SoC and car sensors are set on the add-on's web page (Simulation tab)."
       }
     },
     "error": {
@@ -26,29 +20,6 @@
     "abort": {
       "already_configured": "Already configured.",
       "cannot_connect": "Cannot connect to the discovered add-on."
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "OCPP Charge Proxy Options",
-        "data": {
-          "power_entity": "Power sensor (optional)",
-          "soc_entity": "SoC sensor for reporting to your OCPP provider (optional)",
-          "plug_entity": "Car plugged in sensor (optional)",
-          "auto_plug": "Plug in automatically when the SoC drops low",
-          "auto_plug_entity": "SoC sensor to watch for auto plug-in (optional)",
-          "auto_plug_soc": "Plug in below this SoC"
-        },
-        "description": "Optional: a power sensor to report real power instead of the simulation, and a SoC sensor whose value is reported to your OCPP provider as the charging car's state of charge. Clear a field to stop using it.",
-        "data_description": {
-          "soc_entity": "Only for reporting the car's state of charge to your OCPP provider. When it reads 100% the charger also reports the car as full (SuspendedEV), and power tapers above 90%. Auto plug-in can watch a different sensor below.",
-          "plug_entity": "A binary sensor (e.g. your car's 'charging cable connected'). When it turns on, Plugged In is switched on. It never switches Plugged In off: unplug with the switch (or an automation) as usual. Works alongside auto plug-in.",
-          "auto_plug": "Switches Plugged In on once when the watched SoC drops below the level below; it won't plug back in if you unplug by hand while the SoC is still low.",
-          "auto_plug_entity": "Leave empty to watch the reporting SoC sensor above. Set a different one to watch it only for auto plug-in: it is never reported to your provider (useful for a car that may be away from home).",
-          "auto_plug_soc": "SoC (%) below which Plugged In is switched on."
-        }
-      }
     }
   }
 }

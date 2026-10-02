@@ -1,43 +1,56 @@
-"""The OCPP Charge Proxy integration."""
+"""The OCPP Charge Proxy integration.
+
+Gives Home Assistant the charger's Power, Energy and Current sensors and the
+Plugged In switch. Everything else is set up and shown on the add-on's web
+page.
+"""
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 
-from .autoplug import DEFAULT_AUTO_PLUG_SOC
 from .const import DOMAIN
 from .coordinator import OCPPChargeProxyCoordinator
 
-PLATFORMS = ["sensor", "binary_sensor", "switch", "select"]
+PLATFORMS = ["sensor", "switch"]
+
+# Entities earlier versions created that now live only on the add-on's page
+MOVED_TO_ADDON = (
+    ("select", "current_amps_setting"),
+    ("sensor", "last_command_received"),
+    ("sensor", "last_command_sent"),
+    ("sensor", "last_heartbeat"),
+    ("sensor", "power_source"),
+    ("sensor", "soc_source"),
+    ("sensor", "monitored_soc"),
+    ("sensor", "state"),
+    ("binary_sensor", "connected_to_server"),
+)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up OCPP Charge Proxy from a config entry."""
-    coordinator = OCPPChargeProxyCoordinator(
-        hass,
-        config_entry=entry,
-        api_url=entry.data["api_url"],
-        power_entity=entry.options.get("power_entity", ""),
-        soc_entity=entry.options.get("soc_entity", ""),
-        auto_plug=entry.options.get("auto_plug", False),
-        auto_plug_soc=entry.options.get("auto_plug_soc", DEFAULT_AUTO_PLUG_SOC),
-        auto_plug_entity=entry.options.get("auto_plug_entity", ""),
-        plug_entity=entry.options.get("plug_entity", ""),
-    )
+    coordinator = OCPPChargeProxyCoordinator(hass, config_entry=entry, api_url=entry.data["api_url"])
     await coordinator.async_config_entry_first_refresh()
-    coordinator.async_start()  # push updates + entity tracking
+    if entry.options and await coordinator.async_migrate_sensor_options():
+        hass.config_entries.async_update_entry(entry, options={})
+    coordinator.async_start()  # push updates
+
+    _remove_old_entities(hass, entry)
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
-
-    entry.async_on_unload(entry.add_update_listener(_async_update_options))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
-async def _async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload integration when options change."""
-    await hass.config_entries.async_reload(entry.entry_id)
+def _remove_old_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    registry = er.async_get(hass)
+    for platform, key in MOVED_TO_ADDON:
+        entity_id = registry.async_get_entity_id(platform, DOMAIN, f"{entry.entry_id}_{key}")
+        if entity_id:
+            registry.async_remove(entity_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

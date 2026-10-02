@@ -16,6 +16,7 @@ from src.config import load_config, starting_current_amps
 from src.console import console_loop
 from src.gui_data import GuiSources, Health, PowerHistory, sample_loop
 from src.automation import Automation, ReplugOptions, automation_loop
+from src.ha_link import HaLink
 from src import log_filters
 from src.persistence import Persistence
 from src.shared_state import SharedState
@@ -195,6 +196,13 @@ async def run() -> None:
         attempts=config.replug_attempts,
     ))
     automation.publish(shared_state)
+    # Your HA sensors (power, SoC, car plugged in, auto plug-in): Simulation tab
+    ha_link = HaLink(
+        data_dir, shared_state,
+        set_power=cp.set_power_override,
+        set_soc=do_set_soc,
+        plug=do_plug,
+    )
 
     def _health_info() -> dict:
         info = health.snapshot()
@@ -203,6 +211,7 @@ async def run() -> None:
         info["connected_to_server"] = shared_state.connected_to_server
         info["server"] = config.server_hostname
         info["chargepoint_id"] = config.chargepoint_id
+        info["home_assistant"] = {"available": ha_link.available, "connected": ha_link.connected, "error": ha_link.error}
         return info
 
     gui = GuiSources(
@@ -220,6 +229,7 @@ async def run() -> None:
             on_sample=lambda s: cp.sessions.sample(s["power_kw"]),
         )),
         asyncio.create_task(automation_loop(automation, shared_state, do_plug, do_unplug)),
+        asyncio.create_task(ha_link.run()),
     ]
     notified_server = False
 
@@ -229,6 +239,7 @@ async def run() -> None:
         on_set_soc=do_set_soc,
         gui=gui,
         automation=automation,
+        ha_link=ha_link,
     )
     runner = web.AppRunner(api_app)
     await runner.setup()

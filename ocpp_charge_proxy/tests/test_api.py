@@ -234,3 +234,37 @@ async def test_automation_endpoints(aiohttp_client, shared_state, mock_commands,
     assert shared_state.replug["attempts"] == 2
     assert (await client.post("/api/automation/replug", json={"after_min": 0})).status == 400
     assert (await client.post("/api/automation/replug", data="nope")).status == 400
+
+
+# --- 1.2.0: your HA sensors ---
+
+
+@pytest.mark.asyncio
+async def test_sensor_settings_endpoints(aiohttp_client, shared_state, mock_commands, tmp_path):
+    from src.ha_link import HaLink
+    calls = []
+
+    async def set_soc(soc):
+        calls.append(("soc", soc))
+
+    link = HaLink(str(tmp_path), shared_state, lambda kw: calls.append(("power", kw)), set_soc,
+                  mock_commands["plug"], token="")
+    app = create_api_app(
+        shared_state, on_plug=mock_commands["plug"], on_unplug=mock_commands["unplug"],
+        on_set_current=mock_commands["set_current"], ha_link=link,
+    )
+    client = await aiohttp_client(app)
+    data = await (await client.get("/api/sensors")).json()
+    assert data["configured"] is False and data["available"] is False
+    # The integration's one-off migration
+    resp = await client.post("/api/sensors?only_if_unconfigured=1", json={"soc_entity": "sensor.soc"})
+    assert (await resp.json())["settings"]["soc_entity"] == "sensor.soc"
+    resp = await client.post("/api/sensors?only_if_unconfigured=1", json={"soc_entity": "sensor.other"})
+    assert (await resp.json())["status"] == "unchanged"
+    # The Simulation tab
+    resp = await client.post("/api/sensors", json={"auto_plug": True, "auto_plug_soc": 25})
+    assert (await resp.json())["monitored_soc"]["threshold"] == 25
+    assert (await client.post("/api/sensors", json={"plug_entity": "sensor.x"})).status == 400
+    data = await (await client.get("/api/sensors/entities")).json()
+    assert data == {"entities": [], "available": False}
+

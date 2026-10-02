@@ -10,52 +10,18 @@ import aiohttp
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import callback
 
 try:
     from homeassistant.components.hassio import HassioServiceInfo
 except ImportError:
     HassioServiceInfo = None  # Supervisor not available (HA Core standalone)
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.selector import (
-    BooleanSelector,
-    EntitySelector,
-    EntitySelectorConfig,
-    NumberSelector,
-    NumberSelectorConfig,
-    NumberSelectorMode,
-)
-
-from .autoplug import DEFAULT_AUTO_PLUG_SOC
-
 from .const import DOMAIN
 
 logger = logging.getLogger(__name__)
 
 API_PORT = 8099
 
-POWER_SELECTOR = EntitySelector(EntitySelectorConfig(domain="sensor", device_class="power"))
-SOC_SELECTOR = EntitySelector(EntitySelectorConfig(domain="sensor", device_class="battery"))
-PLUG_SELECTOR = EntitySelector(EntitySelectorConfig(domain="binary_sensor"))
-
-
-def _entity_fields(power: str = "", soc: str = "") -> dict:
-    """Optional power + SoC entity pickers.
-
-    Pre-filled with suggested_value rather than default, so a picker can be
-    cleared to unset it (with default=..., clearing just restores the old one).
-    """
-    return {
-        vol.Optional("power_entity", description={"suggested_value": power or None}): POWER_SELECTOR,
-        vol.Optional("soc_entity", description={"suggested_value": soc or None}): SOC_SELECTOR,
-    }
-
-
-def _entity_options(user_input: dict) -> dict:
-    return {
-        "power_entity": user_input.get("power_entity") or "",
-        "soc_entity": user_input.get("soc_entity") or "",
-    }
 ADDON_SLUG = "ocpp_charge_proxy"
 SUPERVISOR_ADDONS_URL = "http://supervisor/addons"
 
@@ -170,12 +136,10 @@ class OCPPChargeProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_create_entry(
                 title="OCPP Charge Proxy",
                 data={"api_url": self._discovered_url},
-                options=_entity_options(user_input),
             )
 
         return self.async_show_form(
             step_id="hassio_confirm",
-            data_schema=vol.Schema(_entity_fields()),
             description_placeholders={"url": self._discovered_url},
         )
 
@@ -193,7 +157,6 @@ class OCPPChargeProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(
                     title="OCPP Charge Proxy",
                     data={"api_url": api_url},
-                    options=_entity_options(user_input),
                 )
             errors["base"] = "cannot_connect"
 
@@ -216,73 +179,7 @@ class OCPPChargeProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required("api_url", default=default_url): str,
-                    **_entity_fields(),
                 }
             ),
             errors=errors,
         )
-
-    @staticmethod
-    @callback
-    def async_get_options_flow(
-        config_entry: config_entries.ConfigEntry,
-    ) -> OCPPChargeProxyOptionsFlow:
-        """Get the options flow handler."""
-        return OCPPChargeProxyOptionsFlow(config_entry)
-
-
-# Use OptionsFlowWithConfigEntry if available (HA 2025.x+), fall back to OptionsFlow
-_OptionsBase = getattr(config_entries, "OptionsFlowWithConfigEntry", config_entries.OptionsFlow)
-
-
-class OCPPChargeProxyOptionsFlow(_OptionsBase):
-    """Handle options for OCPP Charge Proxy."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self._config_entry = config_entry
-        super().__init__(config_entry)
-
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        """Manage options."""
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            # A cleared picker is simply missing: store "" so it's unset
-            options = {
-                **_entity_options(user_input),
-                "plug_entity": user_input.get("plug_entity") or "",
-                "auto_plug": bool(user_input.get("auto_plug", False)),
-                "auto_plug_entity": user_input.get("auto_plug_entity") or "",
-                "auto_plug_soc": int(user_input.get("auto_plug_soc", DEFAULT_AUTO_PLUG_SOC)),
-            }
-            return self.async_create_entry(title="", data=options)
-        values = dict(self._config_entry.options)
-
-        return self.async_show_form(
-            step_id="init",
-            data_schema=options_schema(values),
-            errors=errors,
-        )
-
-
-def options_schema(values: dict) -> vol.Schema:
-    """The options form, pre-filled from `values` (saved options or the last attempt)."""
-    def suggested(key):
-        return {"suggested_value": values.get(key) or None}
-
-    return vol.Schema({
-        **_entity_fields(
-            power=values.get("power_entity", ""),
-            soc=values.get("soc_entity", ""),
-        ),
-        vol.Optional("plug_entity", description=suggested("plug_entity")): PLUG_SELECTOR,
-        vol.Optional("auto_plug", default=values.get("auto_plug", False)): BooleanSelector(),
-        vol.Optional("auto_plug_entity", description=suggested("auto_plug_entity")): SOC_SELECTOR,
-        vol.Optional(
-            "auto_plug_soc", default=values.get("auto_plug_soc", DEFAULT_AUTO_PLUG_SOC),
-        ): NumberSelector(NumberSelectorConfig(
-            min=1, max=99, step=1, unit_of_measurement="%",
-            mode=NumberSelectorMode.SLIDER,
-        )),
-    })

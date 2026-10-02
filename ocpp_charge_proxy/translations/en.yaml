@@ -31,8 +31,9 @@ configuration:
   current_amps:
     name: Charger Current (A)
     description: >-
-      The charger current setting in amps. Valid values: 6, 10, 13, 16,
-      20, 25, or 32A.
+      The charger's maximum current in amps (6, 10, 13, 16, 20, 25 or 32).
+      A starting value: a change to Max current on the add-on's web page is
+      kept until you change this option again.
   initial_energy_wh:
     name: Initial Energy Register (Wh)
     description: >-

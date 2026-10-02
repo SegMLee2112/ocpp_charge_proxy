@@ -31,7 +31,7 @@ updates its state so Home Assistant automations can respond.
 | `charger_vendor` | `Wall Box Chargers` | Charger vendor reported in BootNotification |
 | `charger_serial` | Auto-generated | Charger serial number (generated on first boot if empty) |
 | `firmware_version` | `6.11.16` | Firmware version reported in BootNotification |
-| `current_amps` | `32` | Maximum charging current in amps (6/10/13/16/20/25/32). Starting value: once you change the current in Home Assistant that's remembered, until you change this option again |
+| `current_amps` | `32` | Maximum charging current in amps (6/10/13/16/20/25/32). Starting value: once you change Max current on the add-on's web page that's remembered, until you change this option again |
 | `initial_energy_wh` | `0` | Seed the energy register (Wh). Set to your old charger's meter reading when migrating. Only applied if higher than the stored register (the meter never goes backwards); cleared after first boot. |
 | `start_delay_s` | `3` | Seconds after StartTransaction before the simulated car draws any current (also applied when resuming after a charging-profile pause). `0` = instant. |
 | `ramp_up_s` | `5` | Seconds for power to ramp linearly from 0 to full after the start delay. `0` = jump straight to full power. Not applied when power comes from a real power entity. |
@@ -42,15 +42,15 @@ updates its state so Home Assistant automations can respond.
 
 ### Controlling your charger
 
-Use the companion integration's **OCPP Charge Proxy State** sensor to trigger automations when
-your provider starts or stops charging. For example, create an automation that
-turns on a smart plug when the state changes to `Charging` and turns it off
-when it changes to `Preparing` or `Available`.
+Use the companion integration's **Power** sensor to trigger automations when
+your provider starts or stops charging: with the simulated power, it's above
+0 while the charger is charging. For example, turn on a smart plug when it
+rises above 0 and off when it drops back to 0.
 
 ### Power entity
 
-You can optionally configure a Home Assistant power sensor in the companion
-integration's settings. The proxy will report this real power value to your
+You can optionally pick a Home Assistant power sensor (W or kW) on the
+add-on's **Simulation** tab. The proxy will report this real power value to your
 provider instead of simulating power delivery. The value is capped at what the
 virtual chargepoint could physically deliver at its current setting.
 
@@ -58,8 +58,8 @@ If not configured, the proxy uses a realistic power simulation.
 
 ### SoC sensor for reporting
 
-You can also set a **SoC sensor for reporting**, for example from your car's
-own integration, reporting 0–100%. When set:
+You can also pick a **SoC sensor** on the Simulation tab, for example from
+your car's own integration, reporting 0–100%. When set:
 
 - The car's state of charge is sent to your provider whenever it asks for
   `SoC` in its meter values (Octopus does), while a car is plugged in.
@@ -80,16 +80,14 @@ On the add-on's **Automation** tab:
   it runs on, and whether it plugs in or unplugs; turn single times or the
   whole schedule on and off. Times are in your Home Assistant time zone. A
   time missed while the add-on was stopped isn't run later. Unplugging
-  during a session ends the session. The **Schedule** switch in Home
-  Assistant turns the whole schedule on or off, e.g. from an automation.
+  during a session ends the session.
 - **Auto re-plug:** Octopus sometimes doesn't start a session after you plug
   in. When Plugged In has been on for `replug_after_min` minutes (default 10)
   with no session and the add-on is connected, it unplugs, waits 30 seconds
   and plugs back in, up to `replug_attempts` times (default 3). It then gives
   up until the car is next unplugged or a session starts, and the wait starts
   again after each re-plug. Changing the minutes or tries on the Automation
-  tab is kept until you change the add-on options themselves. The **Auto
-  Re-plug** switch in Home Assistant turns it on or off.
+  tab is kept until you change the add-on options themselves.
 
 Settings are saved in `/data/automation.json`.
 
@@ -142,7 +140,8 @@ always kept.
 
 ## Companion Integration
 
-Install the companion integration via HACS to get proper HA entities:
+Install the companion integration via HACS for the charger's Power, Energy
+(Energy dashboard) and Current sensors and the Plugged In switch:
 
 1. Add this repository to HACS as a custom repository (Integration category)
 2. Install "OCPP Charge Proxy" from HACS
@@ -155,59 +154,14 @@ Install the companion integration via HACS to get proper HA entities:
 | Entity | Type | Description |
 |--------|------|-------------|
 | Plugged In | Switch | Simulate car plugged in/unplugged |
-| Schedule | Switch | Plug-in schedule on/off (attributes `next_action`, `next_time`) |
-| Auto Re-plug | Switch | Auto re-plug on/off (attributes `status`, `tries_used`, `next_replug_at`, ...) |
-| Current Amps Setting | Select | Charger's maximum current (6-32A), remembered across restarts. Your provider can lower the current below it but not raise it; attributes `effective_amps` and `provider_limit_amps` show what's in use |
-| OCPP Charge Proxy State | Sensor | OCPP state (Available/Preparing/Charging/etc.) |
 | Power | Sensor | Current power draw (kW) |
 | Energy | Sensor | Cumulative energy (kWh, works with energy dashboard) |
 | Current | Sensor | Current draw (A) |
-| Power Source | Sensor (diagnostic) | Whether using real entity or simulated values |
-| Reporting SoC | Sensor (diagnostic) | The SoC being reported to your provider (e.g. `64%`), `no reading` (sensor set but no value, nothing sent) or `not set` (no SoC reported, car full off). Attribute `soc_percent` has the number |
-| Connected to Server | Binary Sensor | Connected to OCPP server |
-| Last Command Received | Sensor (diagnostic) | Last OCPP command from your provider (e.g. `RemoteStartTransaction`). Attributes: `timestamp`, `summary`, `status`, `round_trip_ms`, `message_id`, `payload`, `response`, `recent` (last 10) |
-| Last Command Sent | Sensor (diagnostic) | Last message sent to your provider, excluding Heartbeat and MeterValues. Same attributes, with the server's response |
-| Monitored SoC | Sensor (diagnostic) | The SoC auto plug-in watches (e.g. `64%`), `no reading` or `not set`. Attributes: `soc_percent`, `entity_id`, `source`, `auto_plug`, `threshold`, `armed` |
-| Last Heartbeat | Sensor (diagnostic) | When your provider last answered a Heartbeat. Attributes: `round_trip_ms`, `interval_s`, `server_time`, `clock_offset_s` |
 
-### Integration options
-
-In the integration's settings (Configure), you can optionally set:
-
-- a **power sensor**, reporting power in watts (W), such as your battery
-  charge power or grid demand sensor;
-- a **SoC sensor for reporting**, reporting the car's charge in %.
-
-Clear a field to stop using that sensor.
-
-You can also turn on **Plug in automatically when the SoC drops low**
-and choose the threshold (default 30%). When the SoC drops below it, Plugged
-In is switched on so your provider can schedule a charge. It triggers once
-per drop: unplugging by hand while the SoC is still low won't plug it back
-in, and it re-arms once the SoC is back above the threshold.
-
-If your car has a "charging cable connected" (or similar) binary sensor, you
-can set it as the **car plugged in sensor**: when it changes from off to on,
-Plugged In is switched on. It never switches Plugged In off, so unplug with
-the switch or an automation as usual. Unavailable/unknown readings in between
-are ignored, and it doesn't plug in on the first reading after a restart. The
-switch stays usable by hand, and it works alongside auto plug-in.
-
-With a SoC sensor for reporting set, the simulated power also **tapers** above
-90% SoC, down to 30% of full power at 100%, as a real car's does.
-
-By default auto plug-in watches the reporting SoC sensor above. You can pick a
-different **SoC sensor to watch for auto plug-in** instead. That sensor is
-only watched, never reported to your provider, which is useful if the car
-may be away from home: you can watch its SoC without it being sent as the
-charging car's state of charge (leave the reported SoC sensor empty to send
-none at all).
-
-The add-on pushes its state to the integration as it changes, so entities
-update within a second or so (live power every 10s). Changes to the power and
-SoC sensors are sent to the add-on straight away. If push updates aren't
-available (e.g. an older add-on) the integration polls every 10 seconds
-instead.
+Everything else is on the add-on's web page. Your power, SoC and car plugged
+in sensors and auto plug-in are set up on its **Simulation** tab (settings
+from an older integration are moved there automatically); the add-on reads
+those sensors itself through Home Assistant's API.
 
 ## Web GUI
 
@@ -225,6 +179,9 @@ follows your Home Assistant theme.
 - **Provider:** what your provider has set: charging limits, charging
   profiles drawn as a timeline, the local authorisation list and every
   configuration key.
+- **Simulation:** your power, SoC and car plugged in sensors and auto
+  plug-in, with their live values (power source, reporting SoC, monitored
+  SoC).
 - **Automation:** the plug-in schedule and auto re-plug (see below).
 - **Health:** version, uptime, reconnects and the last drop's reason,
   heartbeat and clock offset, whether the HA integration's push updates are

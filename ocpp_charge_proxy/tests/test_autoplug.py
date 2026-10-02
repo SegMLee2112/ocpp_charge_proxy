@@ -1,6 +1,6 @@
 """Auto plug-in decision logic (no Home Assistant needed)."""
 
-from custom_components.ocpp_charge_proxy.autoplug import AutoPlug, CarConnected
+from src.autoplug import AutoPlug, CarConnected
 
 
 def _run(auto_plug, readings):

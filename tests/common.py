@@ -37,14 +37,13 @@ ADDON_STATE = {
 }
 
 
-def mock_addon(aioclient_mock, state=None):
+def mock_addon(aioclient_mock, state=None, sensors_status=200):
     """Fake the add-on's API. /api/events 404 = no push, so the integration polls."""
     aioclient_mock.get(f"{URL}/api/state", json=state or ADDON_STATE)
     aioclient_mock.get(f"{URL}/api/events", status=404)
     for endpoint in ("plug", "unplug", "soc", "power", "current"):
         aioclient_mock.post(f"{URL}/api/{endpoint}", json={"status": "ok"})
-    for endpoint in ("schedule", "replug"):
-        aioclient_mock.post(f"{URL}/api/automation/{endpoint}", json={"status": "ok"})
+    aioclient_mock.post(f"{URL}/api/sensors", status=sensors_status, json={"status": "ok"})
 
 
 async def setup_integration(hass, aioclient_mock, options=None, state=None):

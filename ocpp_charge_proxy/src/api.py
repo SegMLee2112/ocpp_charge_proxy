@@ -26,6 +26,7 @@ def create_api_app(
     on_set_soc: Callable[[float | None], Awaitable[None]] | None = None,
     gui=None,
     automation=None,
+    ha_link=None,
 ) -> web.Application:
     app = web.Application()
     app["shared_state"] = shared_state
@@ -38,6 +39,7 @@ def create_api_app(
     app["events_stop"] = asyncio.Event()
     app["gui"] = gui  # src.gui_data.GuiSources, or None (GUI tabs then empty)
     app["automation"] = automation  # src.automation.Automation, or None
+    app["ha_link"] = ha_link  # src.ha_link.HaLink, or None
     # Open /api/events streams: "integration" (HA) and "gui" (the web page)
     app["event_clients"] = {"integration": 0, "gui": 0}
     app.on_shutdown.append(_close_event_streams)
@@ -63,6 +65,10 @@ def create_api_app(
     app.router.add_get("/api/automation", handle_automation)
     app.router.add_post("/api/automation/schedule", handle_schedule)
     app.router.add_post("/api/automation/replug", handle_replug)
+    # Your HA sensors (Simulation tab)
+    app.router.add_get("/api/sensors", handle_get_sensors)
+    app.router.add_post("/api/sensors", handle_set_sensors)
+    app.router.add_get("/api/sensors/entities", handle_sensor_entities)
 
     return app
 
@@ -332,3 +338,43 @@ async def handle_replug(request: web.Request) -> web.Response:
             enabled=b.get("enabled"), after_min=b.get("after_min"), attempts=b.get("attempts"),
         ),
     )
+
+
+# --- Your HA sensors ----------------------------------------------------------
+
+
+async def handle_get_sensors(request: web.Request) -> web.Response:
+    """Settings and live values. "configured": false until saved once (the
+    integration copies its old options across then)."""
+    link = request.app["ha_link"]
+    if link is None:
+        return _gui_unavailable()
+    return web.json_response(link.snapshot(), dumps=_dumps)
+
+
+async def handle_set_sensors(request: web.Request) -> web.Response:
+    """Any of power_entity, soc_entity, plug_entity, auto_plug, auto_plug_entity,
+    auto_plug_soc. With ?only_if_unconfigured=1 nothing changes once saved
+    (used by the integration's one-off migration)."""
+    link = request.app["ha_link"]
+    if link is None:
+        return _gui_unavailable()
+    if request.query.get("only_if_unconfigured") and link.configured:
+        return web.json_response({"status": "unchanged", **link.snapshot()}, dumps=_dumps)
+    try:
+        body = await request.json()
+        await link.update_settings(body)
+    except (ValueError, TypeError, json.JSONDecodeError) as err:
+        return web.json_response({"status": "error", "message": str(err)}, status=400)
+    return web.json_response({"status": "ok", **link.snapshot()}, dumps=_dumps)
+
+
+async def handle_sensor_entities(request: web.Request) -> web.Response:
+    link = request.app["ha_link"]
+    if link is None:
+        return _gui_unavailable()
+    try:
+        entities = await link.list_entities()
+    except Exception as err:
+        return web.json_response({"status": "error", "message": f"Couldn't list entities: {err}"}, status=502)
+    return web.json_response({"entities": entities, "available": link.available}, dumps=_dumps)

@@ -9,25 +9,24 @@ from datetime import timedelta
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
 )
 
-from .autoplug import DEFAULT_AUTO_PLUG_SOC, AutoPlug, CarConnected
 from .const import PUSH_FALLBACK_SCAN_INTERVAL, SCAN_INTERVAL
 
 logger = logging.getLogger(__name__)
 
-_UNKNOWN_STATES = ("unavailable", "unknown", "none", "")
-
 # Seconds to wait before reconnecting to the add-on's event stream: quick at
 # first (an add-on restart takes a few seconds), then backing off to 60s.
 RECONNECT_DELAYS = (1, 2, 2, 3, 3, 5, 5, 5, 10, 20, 30, 60)
+
+# Integration options from before 1.2.0, now set on the add-on's Simulation tab
+SENSOR_OPTION_KEYS = ("power_entity", "soc_entity", "plug_entity", "auto_plug", "auto_plug_entity", "auto_plug_soc")
 
 
 class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
@@ -36,22 +35,11 @@ class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
     Prefers push: the add-on streams its state over /api/events and every
     event updates the entities at once. If the stream isn't available (older
     add-on, add-on restarting) it polls /api/state every SCAN_INTERVAL
-    seconds instead. Power and SoC entity values are sent to the add-on as
-    soon as they change, and again on every poll.
+    seconds instead. Your power / SoC / car sensors are read by the add-on
+    itself (its Simulation tab).
     """
 
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        config_entry: ConfigEntry,
-        api_url: str,
-        power_entity: str = "",
-        soc_entity: str = "",
-        auto_plug: bool = False,
-        auto_plug_soc: float = DEFAULT_AUTO_PLUG_SOC,
-        auto_plug_entity: str = "",
-        plug_entity: str = "",
-    ) -> None:
+    def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry, api_url: str) -> None:
         super().__init__(
             hass,
             logger,
@@ -60,57 +48,13 @@ class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(seconds=SCAN_INTERVAL),
         )
         self._api_url = api_url
-        self._power_entity = power_entity
-        self._soc_entity = soc_entity
-        # Auto plug-in watches its own SoC sensor if one is set (e.g. a car that
-        # may be away from home), else the reported SoC sensor. The monitor
-        # sensor is never sent to the add-on / provider.
-        self._auto_plug_entity = auto_plug_entity or soc_entity
-        # A car-connected sensor only ever switches Plugged In on (see
-        # CarConnected); it works alongside auto plug-in and the manual switch
-        self._plug_entity = plug_entity
-        self._car_connected = CarConnected()
-        self._auto_plug = AutoPlug(bool(auto_plug and self._auto_plug_entity), auto_plug_soc)
         self._session = async_get_clientsession(hass)
         self.push_connected = False
-
-    @property
-    def soc_entity(self) -> str:
-        """Configured car battery (SoC) entity, or "" if not set."""
-        return self._soc_entity
-
-    @property
-    def plug_entity(self) -> str:
-        """Binary sensor that switches Plugged In on when the car connects ("" if none)."""
-        return self._plug_entity
-
-    @property
-    def monitored_soc_entity(self) -> str:
-        """The SoC entity auto plug-in watches ("" if none)."""
-        return self._auto_plug_entity
-
-    @property
-    def monitored_soc_source(self) -> str | None:
-        if not self._auto_plug_entity:
-            return None
-        return "reporting SoC sensor" if self._auto_plug_entity == self._soc_entity else "monitor sensor"
-
-    @property
-    def auto_plug(self) -> AutoPlug:
-        return self._auto_plug
-
-    def monitored_soc(self) -> float | None:
-        """Current value of the watched SoC entity, or None."""
-        if not self._auto_plug_entity:
-            return None
-        soc = self._entity_number(self._auto_plug_entity)
-        return soc if soc is not None and 0 <= soc <= 100 else None
 
     # --- Polling (fallback) ------------------------------------------------
 
     async def _async_update_data(self) -> dict:
         try:
-            await self._push_entity_values()
             async with self._session.get(
                 f"{self._api_url}/api/state",
                 timeout=aiohttp.ClientTimeout(total=10),
@@ -120,112 +64,36 @@ class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
         except Exception as err:
             raise UpdateFailed(f"Error communicating with add-on: {err}") from err
 
-    # --- Power / SoC entities -> add-on ----------------------------------
+    # --- One-off move of the old sensor options to the add-on -----------------
 
-    def _entity_number(self, entity_id: str, scale: float = 1.0) -> float | None:
-        state = self.hass.states.get(entity_id)
-        if state is None or str(state.state).lower() in _UNKNOWN_STATES:
-            return None
-        try:
-            return float(state.state) * scale
-        except (ValueError, TypeError):
-            return None
-
-    async def _post(self, endpoint: str, body: dict) -> None:
+    async def async_migrate_sensor_options(self) -> bool:
+        """Copy pre-1.2.0 sensor options to the add-on. True once they're there
+        (or there was nothing to copy), so the options can be cleared."""
+        options = {k: v for k, v in self.config_entry.options.items() if k in SENSOR_OPTION_KEYS}
+        if not options:
+            return True
         try:
             async with self._session.post(
-                f"{self._api_url}{endpoint}", json=body,
-                timeout=aiohttp.ClientTimeout(total=3),
+                f"{self._api_url}/api/sensors?only_if_unconfigured=1", json=options,
+                timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
                 if resp.status == 404:
-                    logger.debug("Add-on has no %s (older version)", endpoint)
-        except Exception:
-            logger.debug("Failed to push %s to add-on", endpoint, exc_info=True)
-
-    async def _push_power(self) -> None:
-        if self._power_entity:
-            # W -> kW; None tells the add-on to fall back to the simulation
-            await self._post("/api/power", {"power_kw": self._entity_number(self._power_entity, 0.001)})
-
-    async def _push_soc(self) -> None:
-        if self._soc_entity:
-            soc = self._entity_number(self._soc_entity)
-            if soc is not None and not 0 <= soc <= 100:
-                soc = None
-            await self._post("/api/soc", {"soc": soc})
-
-    async def _check_auto_plug(self) -> None:
-        if not self._auto_plug.enabled:
-            return
-        soc = self._entity_number(self._auto_plug_entity)
-        if soc is not None and not 0 <= soc <= 100:
-            soc = None
-        plugged_in = (self.data or {}).get("plugged_in")
-        if not self._auto_plug.should_plug(soc, plugged_in):
-            return
-        logger.info(
-            "Car SoC %.0f%% dropped below %.0f%%: switching Plugged In on",
-            soc, self._auto_plug.threshold,
-        )
-        try:
-            await self.send_command("/api/plug")
-        except HomeAssistantError as err:
-            logger.warning("Auto plug-in failed: %s", err)
-            self._auto_plug.armed = True  # try again on the next reading
-            return
-        await self.async_request_refresh()
-
-    async def _push_entity_values(self) -> None:
-        await self._push_power()
-        await self._push_soc()
-        await self._sync_plug()
-        await self._check_auto_plug()
-
-    async def _sync_plug(self) -> None:
-        """Switch Plugged In on when the car-connected sensor goes from off to on."""
-        if not self._plug_entity:
-            return
-        state = self.hass.states.get(self._plug_entity)
-        plugged_in = (self.data or {}).get("plugged_in")
-        if not self._car_connected.should_plug(state.state if state else None, plugged_in):
-            return
-        logger.info("%s turned on: switching Plugged In on", self._plug_entity)
-        try:
-            await self.send_command("/api/plug")
-        except HomeAssistantError as err:
-            logger.warning("Couldn't plug in for %s: %s", self._plug_entity, err)
-            return
-        await self.async_request_refresh()
+                    logger.warning(
+                        "Update the OCPP Charge Proxy add-on to 1.2.0 or later: your power / "
+                        "SoC / car sensors are now set on its Simulation tab",
+                    )
+                    return False
+                resp.raise_for_status()
+        except Exception as err:
+            logger.warning("Couldn't move sensor settings to the add-on yet: %s", err)
+            return False
+        logger.info("Sensor settings moved to the add-on's Simulation tab")
+        return True
 
     @callback
     def async_start(self) -> None:
-        """Start push updates both ways. Call once, after the first refresh."""
-        entry = self.config_entry
-        if not self._soc_entity:
-            # No SoC entity: make sure the add-on isn't still using an old one
-            entry.async_create_background_task(
-                self.hass, self._post("/api/soc", {"soc": None}), "ocpp_charge_proxy_clear_soc",
-            )
-        # entity -> what to do when it changes (one sensor can do both SoC jobs)
-        tracked: dict[str, list] = {}
-        for entity, action in (
-            (self._power_entity, self._push_power),
-            (self._soc_entity, self._push_soc),
-            (self._plug_entity, self._sync_plug),
-            (self._auto_plug_entity if self._auto_plug.enabled else "", self._check_auto_plug),
-        ):
-            if entity:
-                tracked.setdefault(entity, []).append(action)
-        if tracked:
-            @callback
-            def _changed(event: Event) -> None:
-                for action in tracked.get(event.data["entity_id"], ()):
-                    self.hass.async_create_task(action())
-
-            entry.async_on_unload(
-                async_track_state_change_event(self.hass, list(tracked), _changed)
-            )
-        entry.async_create_background_task(
+        """Start push updates. Call once, after the first refresh."""
+        self.config_entry.async_create_background_task(
             self.hass, self._listen_for_events(), "ocpp_charge_proxy_events",
         )
 
@@ -260,9 +128,6 @@ class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
                         continue
                     resp.raise_for_status()
                     attempt = 0
-                    # The add-on may have just (re)started without our sensor
-                    # values; send them now rather than at the next change/poll
-                    self.hass.async_create_task(self._push_entity_values())
                     async for raw in resp.content:
                         line = raw.decode("utf-8", "replace").strip()
                         if not line.startswith("data:"):
