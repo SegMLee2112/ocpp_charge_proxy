@@ -9,11 +9,14 @@ def _now_iso() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _sv(value: str, measurand: str, context: str, unit: str | None = None) -> dict:
+def _sv(
+    value: str, measurand: str, context: str, unit: str | None = None,
+    location: str = "Outlet",
+) -> dict:
     """Build a single sampled value with full OCPP metadata."""
     entry = {
         "format": "Raw",
-        "location": "Outlet",
+        "location": location,
         "context": context,
         "measurand": measurand,
         "value": value,
@@ -29,10 +32,12 @@ DEFAULT_MEASURAND = "Energy.Active.Import.Register"
 
 def _available_values(
     reading: ChargerReading | None, energy_register_wh: int,
+    soc: float | None = None,
 ) -> dict[str, tuple[str, str | None]]:
     """Every measurand we can report right now -> (value, unit).
 
-    reading=None means idle (not delivering power).
+    reading=None means idle (not delivering power). soc is the car's state of
+    charge in %, or None when there's no SoC entity / the car isn't connected.
     """
     values: dict[str, tuple[str, str | None]] = {
         "Energy.Active.Import.Register": (str(float(energy_register_wh)), "Wh"),
@@ -46,6 +51,8 @@ def _available_values(
         values["Frequency"] = (str(reading.frequency_hz), None)
         values["Power.Offered"] = (str(round(reading.power_offered_kw * 1000)), "W")
         values["Current.Offered"] = (str(reading.current_offered_a), "A")
+    if soc is not None:
+        values["SoC"] = (str(int(round(soc))), "Percent")
     return values
 
 
@@ -55,20 +62,24 @@ def build_meter_values(
     context: str,
     measurands: list[str] | None = None,
     timestamp: str | None = None,
+    soc: float | None = None,
 ) -> list[dict]:
     """Meter values containing only the requested measurands, in request order.
 
-    Measurands we can't supply (e.g. SoC, or Frequency while idle) are skipped.
-    An empty/None list falls back to Energy.Active.Import.Register.
+    Measurands we can't supply (e.g. SoC without a SoC entity, or Frequency
+    while idle) are skipped. An empty/None list falls back to
+    Energy.Active.Import.Register.
     """
-    available = _available_values(reading, energy_register_wh)
+    available = _available_values(reading, energy_register_wh, soc)
     wanted = measurands or [DEFAULT_MEASURAND]
     sampled = []
     seen = set()
     for m in wanted:
         if m in available and m not in seen:
             value, unit = available[m]
-            sampled.append(_sv(value, m, context, unit))
+            # SoC is measured by the car, not at the charger's outlet
+            location = "EV" if m == "SoC" else "Outlet"
+            sampled.append(_sv(value, m, context, unit, location))
             seen.add(m)
     return [{"timestamp": timestamp or _now_iso(), "sampledValue": sampled}]
 

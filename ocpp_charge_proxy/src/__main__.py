@@ -181,7 +181,10 @@ async def run() -> None:
     ]
     notified_server = False
 
-    api_app = create_api_app(shared_state, do_plug, do_unplug, do_set_current, do_set_power)
+    api_app = create_api_app(
+        shared_state, do_plug, do_unplug, do_set_current, do_set_power,
+        on_refresh=cp.refresh_live_power,
+    )
     runner = web.AppRunner(api_app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", 8099)

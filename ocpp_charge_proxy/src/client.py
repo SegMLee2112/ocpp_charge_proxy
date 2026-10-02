@@ -757,7 +757,30 @@ class ChargePoint(BaseChargePoint):
             self._zero_power_state()
             return None
 
-        # Full-power reading, then apply the car's start delay / ramp-up
+        reading, full_reading = self._instant_reading(now)
+        if self._power_override is not None:
+            energy_added_kwh = reading.power_kw * elapsed_hours
+        else:
+            # Integrate over the ramp rather than multiplying the whole interval
+            # by the instantaneous power, so the delay/ramp is billed exactly.
+            ramp_avg = self._charger_sim.average_ramp_factor(prev, now)
+            energy_added_kwh = full_reading.power_kw * ramp_avg * elapsed_hours
+
+        self._energy_register_wh += round(energy_added_kwh * 1000)
+        self._persistence.save_energy_register_wh(self._energy_register_wh)
+
+        self._publish_reading(reading)
+        self._shared_state.energy_kwh = self.energy_register_kwh
+        if self._transaction_id is not None:
+            self._save_active_transaction()
+        return reading
+
+    def _instant_reading(self, now: float) -> tuple[ChargerReading, ChargerReading]:
+        """What the charger is delivering at `now`: (reading, full-power reading).
+
+        Applies the car's start delay / ramp-up, or the power entity override.
+        Touches no energy accounting, so it's safe to call at any time.
+        """
         full_reading = self._charger_sim.sample_full()
         sim_reading = self._charger_sim.scale(
             full_reading, self._charger_sim.ramp_factor(now),
@@ -781,29 +804,32 @@ class ChargePoint(BaseChargePoint):
             )
             self._shared_state.power_source = "entity"
             self._shared_state.power_entity_value = real_power
-            energy_added_kwh = reading.power_kw * elapsed_hours
         else:
             reading = sim_reading
             self._shared_state.power_source = "simulated"
             self._shared_state.power_entity_value = None
-            # Integrate over the ramp rather than multiplying the whole interval
-            # by the instantaneous power, so the delay/ramp is billed exactly.
-            ramp_avg = self._charger_sim.average_ramp_factor(prev, now)
-            energy_added_kwh = full_reading.power_kw * ramp_avg * elapsed_hours
+        return reading, full_reading
 
-        self._energy_register_wh += round(energy_added_kwh * 1000)
-        self._persistence.save_energy_register_wh(self._energy_register_wh)
-
-        # Update shared state with charging values
+    def _publish_reading(self, reading: ChargerReading) -> None:
         self._shared_state.power_kw = reading.power_kw
         self._shared_state.voltage = reading.voltage
         self._shared_state.current_a = reading.current_a
         self._shared_state.frequency_hz = reading.frequency_hz
         self._shared_state.power_offered_kw = reading.power_offered_kw
-        self._shared_state.energy_kwh = self.energy_register_kwh
-        if self._transaction_id is not None:
-            self._save_active_transaction()
-        return reading
+
+    def refresh_live_power(self) -> None:
+        """Update the live power figures for the API between meter readings.
+
+        Called on every /api/state poll so Home Assistant sees the start
+        delay, ramp-up, profile pauses and current changes within one poll,
+        not once per MeterValueSampleInterval. Energy is still only counted
+        by _take_reading, so this never changes the energy register.
+        """
+        if self.state != ChargePointStatus.charging or not self._charger_sim.is_charging:
+            self._zero_power_state()
+            return
+        reading, _ = self._instant_reading(time.monotonic())
+        self._publish_reading(reading)
 
     async def send_meter_values(self) -> None:
         """Periodic (Sample.Periodic) meter values — unchanged payload."""

@@ -27,6 +27,10 @@ class SharedState:
     # and MeterValues excluded): {action, timestamp, payload, status, response}
     last_command_received: Optional[dict] = None
     last_command_sent: Optional[dict] = None
+    # Car's state of charge (%) from the integration's SoC entity, None if unset
+    soc_percent: Optional[float] = None
+    # Transaction messages waiting to be sent (offline queue)
+    held_messages: int = 0
 
     def to_dict(self) -> dict:
         return asdict(self)

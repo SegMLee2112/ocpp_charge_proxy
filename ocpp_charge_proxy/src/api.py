@@ -19,6 +19,7 @@ def create_api_app(
     on_unplug: Callable[[], Awaitable[None]],
     on_set_current: Callable[[int], Awaitable[None]],
     on_set_power: Callable[[float | None], Awaitable[None]] | None = None,
+    on_refresh: Callable[[], None] | None = None,
 ) -> web.Application:
     app = web.Application()
     app["shared_state"] = shared_state
@@ -26,6 +27,7 @@ def create_api_app(
     app["on_unplug"] = on_unplug
     app["on_set_current"] = on_set_current
     app["on_set_power"] = on_set_power
+    app["on_refresh"] = on_refresh
 
     # Ingress serves the status page — use relative path for API calls
     static_dir = Path(__file__).parent / "static"
@@ -48,6 +50,12 @@ async def handle_index(request: web.Request) -> web.Response:
 
 async def handle_get_state(request: web.Request) -> web.Response:
     state: SharedState = request.app["shared_state"]
+    on_refresh = request.app["on_refresh"]
+    if on_refresh is not None:
+        try:
+            on_refresh()  # live power, not just the last meter reading
+        except Exception:
+            logger.debug("Live power refresh failed", exc_info=True)
     return web.json_response(state.to_dict())
 
 

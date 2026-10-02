@@ -88,3 +88,22 @@ async def test_post_current_invalid(client):
 async def test_post_current_missing_body(client):
     resp = await client.post("/api/current")
     assert resp.status == 400
+
+
+@pytest.mark.asyncio
+async def test_get_state_refreshes_live_power(aiohttp_client, shared_state, mock_commands):
+    """Each poll asks the charger for live power before answering."""
+    def refresh():
+        shared_state.power_kw = 3.6
+
+    app = create_api_app(
+        shared_state,
+        on_plug=mock_commands["plug"],
+        on_unplug=mock_commands["unplug"],
+        on_set_current=mock_commands["set_current"],
+        on_refresh=refresh,
+    )
+    client = await aiohttp_client(app)
+    resp = await client.get("/api/state")
+    assert resp.status == 200
+    assert (await resp.json())["power_kw"] == 3.6

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.3
+
+- Live power in Home Assistant. Power, Current and the other live figures were
+  only refreshed at each meter reading (every 60s with Octopus), so HA showed
+  0 W for the first minute of a charge and never showed the start delay or
+  ramp-up. `/api/state` now works out the current power on every poll, so the
+  sensors follow the delay, the ramp, charging-profile pauses and current
+  changes within one integration update (10s).
+- Display only: the energy register and the MeterValues sent to the server
+  are unchanged and still integrate exactly between readings.
+
 ## 0.9.2
 
 - New integration sensors **Last Command Received** and **Last Command Sent**

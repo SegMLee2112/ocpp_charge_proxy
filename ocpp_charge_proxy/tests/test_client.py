@@ -1000,3 +1000,52 @@ def test_online_start_never_exposes_provisional_id(mock_connection, mock_persist
     assert seen == [None]
     assert cp._transaction_id == 42
     assert cp._shared_state.transaction_id == 42
+
+
+# --- 0.9.3: live power for the API between meter readings ---
+
+
+def test_live_power_follows_ramp_without_counting_energy(mock_connection, mock_persistence):
+    cp = ChargePoint(
+        id="CP001", connection=mock_connection, persistence=mock_persistence,
+        current_amps=32, start_delay_s=3, ramp_up_s=5,
+    )
+    cp.state = ChargePointStatus.charging
+    cp._charger_sim.start_charging()
+    start_wh = cp._energy_register_wh
+    last_meter_time = cp._last_meter_time
+
+    cp.refresh_live_power()
+    assert cp._shared_state.power_kw == 0.0  # still in the start delay
+
+    cp._charger_sim._charging_started_at -= 5.5  # halfway up the ramp
+    cp.refresh_live_power()
+    assert 3.2 <= cp._shared_state.power_kw <= 4.1
+
+    cp._charger_sim._charging_started_at -= 60  # fully ramped
+    cp.refresh_live_power()
+    assert cp._shared_state.power_kw > 6.5
+    assert cp._shared_state.current_a > 25
+
+    # Display only: energy and the integration interval are untouched
+    assert cp._energy_register_wh == start_wh
+    assert cp._last_meter_time == last_meter_time
+    mock_persistence.save_energy_register_wh.assert_not_called()
+
+
+def test_live_power_zero_when_not_charging(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp._shared_state.power_kw = 7.2  # stale value from the last reading
+    cp.state = ChargePointStatus.suspended_evse  # paused by a charging profile
+    cp.refresh_live_power()
+    assert cp._shared_state.power_kw == 0.0
+
+
+def test_live_power_uses_power_entity(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.state = ChargePointStatus.charging
+    cp._charger_sim.start_charging()
+    cp._power_override = 3.3
+    cp.refresh_live_power()
+    assert cp._shared_state.power_kw == 3.3
+    assert cp._shared_state.power_source == "entity"
