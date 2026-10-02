@@ -29,6 +29,9 @@ class SharedState:
     # and MeterValues excluded): {action, timestamp, payload, status, response}
     last_command_received: Optional[dict] = None
     last_command_sent: Optional[dict] = None
+    # Last answered Heartbeat: {timestamp, round_trip_ms, interval_s,
+    # server_time, clock_offset_s}
+    last_heartbeat: Optional[dict] = None
     # Car's state of charge (%) from the integration's SoC entity, None if unset
     soc_percent: Optional[float] = None
     # Transaction messages waiting to be sent (offline queue)

@@ -35,6 +35,7 @@
         "data": {
           "power_entity": "Power sensor (optional)",
           "soc_entity": "Car battery (SoC) sensor (optional)",
+          "plug_entity": "Car connected sensor (optional)",
           "auto_plug": "Plug in automatically when the car's SoC drops low",
           "auto_plug_entity": "SoC sensor to watch for auto plug-in (optional)",
           "auto_plug_soc": "Plug in below this SoC"
@@ -43,7 +44,8 @@
         "data_description": {
           "auto_plug": "Switches Plugged In on once when the watched SoC drops below the level below; it won't plug back in if you unplug by hand while the SoC is still low.",
           "auto_plug_soc": "SoC (%) below which Plugged In is switched on.",
-          "auto_plug_entity": "Leave empty to watch the car battery (SoC) sensor above. Set a different one to watch it only for auto plug-in: it is never reported to your provider (useful for a car that may be away from home)."
+          "auto_plug_entity": "Leave empty to watch the car battery (SoC) sensor above. Set a different one to watch it only for auto plug-in: it is never reported to your provider (useful for a car that may be away from home).",
+          "plug_entity": "A binary sensor (e.g. your car's 'charging cable connected'). When it turns on, Plugged In is switched on. It never switches Plugged In off: unplug with the switch (or an automation) as usual. Works alongside auto plug-in."
         }
       }
     }

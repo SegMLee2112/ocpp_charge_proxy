@@ -18,12 +18,16 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from .autoplug import DEFAULT_AUTO_PLUG_SOC, AutoPlug
+from .autoplug import DEFAULT_AUTO_PLUG_SOC, AutoPlug, CarConnected
 from .const import PUSH_FALLBACK_SCAN_INTERVAL, SCAN_INTERVAL
 
 logger = logging.getLogger(__name__)
 
 _UNKNOWN_STATES = ("unavailable", "unknown", "none", "")
+
+# Seconds to wait before reconnecting to the add-on's event stream: quick at
+# first (an add-on restart takes a few seconds), then backing off to 60s.
+RECONNECT_DELAYS = (1, 2, 2, 3, 3, 5, 5, 5, 10, 20, 30, 60)
 
 
 class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
@@ -46,6 +50,7 @@ class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
         auto_plug: bool = False,
         auto_plug_soc: float = DEFAULT_AUTO_PLUG_SOC,
         auto_plug_entity: str = "",
+        plug_entity: str = "",
     ) -> None:
         super().__init__(
             hass,
@@ -61,6 +66,10 @@ class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
         # may be away from home), else the reported SoC sensor. The monitor
         # sensor is never sent to the add-on / provider.
         self._auto_plug_entity = auto_plug_entity or soc_entity
+        # A car-connected sensor only ever switches Plugged In on (see
+        # CarConnected); it works alongside auto plug-in and the manual switch
+        self._plug_entity = plug_entity
+        self._car_connected = CarConnected()
         self._auto_plug = AutoPlug(bool(auto_plug and self._auto_plug_entity), auto_plug_soc)
         self._session = async_get_clientsession(hass)
         self.push_connected = False
@@ -69,6 +78,33 @@ class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
     def soc_entity(self) -> str:
         """Configured car battery (SoC) entity, or "" if not set."""
         return self._soc_entity
+
+    @property
+    def plug_entity(self) -> str:
+        """Binary sensor that switches Plugged In on when the car connects ("" if none)."""
+        return self._plug_entity
+
+    @property
+    def monitored_soc_entity(self) -> str:
+        """The SoC entity auto plug-in watches ("" if none)."""
+        return self._auto_plug_entity
+
+    @property
+    def monitored_soc_source(self) -> str | None:
+        if not self._auto_plug_entity:
+            return None
+        return "reported SoC sensor" if self._auto_plug_entity == self._soc_entity else "monitor sensor"
+
+    @property
+    def auto_plug(self) -> AutoPlug:
+        return self._auto_plug
+
+    def monitored_soc(self) -> float | None:
+        """Current value of the watched SoC entity, or None."""
+        if not self._auto_plug_entity:
+            return None
+        soc = self._entity_number(self._auto_plug_entity)
+        return soc if soc is not None and 0 <= soc <= 100 else None
 
     # --- Polling (fallback) ------------------------------------------------
 
@@ -142,7 +178,24 @@ class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
     async def _push_entity_values(self) -> None:
         await self._push_power()
         await self._push_soc()
+        await self._sync_plug()
         await self._check_auto_plug()
+
+    async def _sync_plug(self) -> None:
+        """Switch Plugged In on when the car-connected sensor goes from off to on."""
+        if not self._plug_entity:
+            return
+        state = self.hass.states.get(self._plug_entity)
+        plugged_in = (self.data or {}).get("plugged_in")
+        if not self._car_connected.should_plug(state.state if state else None, plugged_in):
+            return
+        logger.info("%s turned on: switching Plugged In on", self._plug_entity)
+        try:
+            await self.send_command("/api/plug")
+        except HomeAssistantError as err:
+            logger.warning("Couldn't plug in for %s: %s", self._plug_entity, err)
+            return
+        await self.async_request_refresh()
 
     @callback
     def async_start(self) -> None:
@@ -158,6 +211,7 @@ class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
         for entity, action in (
             (self._power_entity, self._push_power),
             (self._soc_entity, self._push_soc),
+            (self._plug_entity, self._sync_plug),
             (self._auto_plug_entity if self._auto_plug.enabled else "", self._check_auto_plug),
         ):
             if entity:
@@ -185,9 +239,13 @@ class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
             seconds=PUSH_FALLBACK_SCAN_INTERVAL if connected else SCAN_INTERVAL
         )
         logger.debug("Add-on push updates %s", "connected" if connected else "lost; polling")
+        if not connected:
+            # The next poll was scheduled on the long push-fallback interval;
+            # poll now so it reschedules on the short one
+            self.hass.async_create_task(self.async_request_refresh())
 
     async def _listen_for_events(self) -> None:
-        backoff = 5
+        attempt = 0
         while True:
             try:
                 async with self._session.get(
@@ -201,7 +259,7 @@ class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
                         await asyncio.sleep(600)  # check again after an add-on update
                         continue
                     resp.raise_for_status()
-                    backoff = 5
+                    attempt = 0
                     # The add-on may have just (re)started without our sensor
                     # values; send them now rather than at the next change/poll
                     self.hass.async_create_task(self._push_entity_values())
@@ -220,8 +278,8 @@ class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
             except Exception as err:
                 logger.debug("Add-on event stream ended: %s", err)
             self._set_push(False)
-            await asyncio.sleep(backoff)
-            backoff = min(backoff * 2, 60)
+            await asyncio.sleep(RECONNECT_DELAYS[min(attempt, len(RECONNECT_DELAYS) - 1)])
+            attempt += 1
 
     # --- Commands --------------------------------------------------------
 

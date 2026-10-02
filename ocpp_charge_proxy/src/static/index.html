@@ -131,6 +131,7 @@
       <div class="detail"><div class="status-label">Car SoC</div><div class="detail-value" id="soc">—</div></div>
       <div class="detail"><div class="status-label">Transaction</div><div class="detail-value" id="tx">—</div></div>
       <div class="detail"><div class="status-label">Held messages</div><div class="detail-value" id="held">—</div></div>
+      <div class="detail"><div class="status-label">Last heartbeat</div><div class="detail-value" id="hb">—</div></div>
     </div>
     <div class="commands">
       <div class="command">
@@ -198,10 +199,19 @@
 
         const showCommand = (prefix, cmd) => {
           if (!cmd) { set(prefix + '-name', 'None yet', 'muted'); document.getElementById(prefix + '-meta').textContent = ''; return; }
-          set(prefix + '-name', cmd.action);
+          set(prefix + '-name', cmd.action + (cmd.summary ? ' — ' + cmd.summary : ''));
           const when = cmd.timestamp ? new Date(cmd.timestamp).toLocaleTimeString() : '';
-          document.getElementById(prefix + '-meta').textContent = [cmd.status, when].filter(Boolean).join(' · ');
+          const rtt = cmd.round_trip_ms !== null && cmd.round_trip_ms !== undefined ? cmd.round_trip_ms + ' ms' : '';
+          document.getElementById(prefix + '-meta').textContent = [cmd.status, rtt, when].filter(Boolean).join(' · ');
         };
+        const hb = data.last_heartbeat;
+        if (hb && hb.timestamp) {
+          const ago = Math.max(0, Math.round((Date.now() - new Date(hb.timestamp)) / 1000));
+          const stale = hb.interval_s && ago > hb.interval_s * 3;
+          set('hb', ago + 's ago' + (hb.round_trip_ms != null ? ' · ' + hb.round_trip_ms + ' ms' : ''), stale ? 'warn' : '');
+        } else {
+          set('hb', 'None yet', 'muted');
+        }
         showCommand('rx', data.last_command_received);
         showCommand('tx', data.last_command_sent);
 

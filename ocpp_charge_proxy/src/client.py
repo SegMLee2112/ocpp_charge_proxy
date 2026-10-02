@@ -41,8 +41,14 @@ from src.meter_values import (
 )
 from src.persistence import Persistence
 from src.shared_state import SharedState
+from src.traffic import TrafficRecorder
 
 logger = logging.getLogger(__name__)
+
+# Charging taper near full (with a SoC entity): full power up to this SoC...
+TAPER_START_SOC = 90.0
+# ...then down linearly to this fraction of full power at 100%
+TAPER_MIN_FACTOR = 0.3
 
 # Offline message queue: transaction-related messages (StartTransaction,
 # StopTransaction, MeterValues with a transactionId) are held while the server
@@ -63,31 +69,6 @@ _CONNECTION_ERRORS = (
     OSError,
     asyncio.TimeoutError,
 )
-
-
-# Routine traffic left out of the "last command sent" sensor
-UNTRACKED_SENT_ACTIONS = {"Heartbeat", "MeterValues"}
-# Bulky list fields summarised (as a count) in the sensor attributes
-_SUMMARISED_FIELDS = {"transactionData", "meterValue", "configurationKey", "localAuthorizationList"}
-
-
-def _summarise_payload(payload) -> dict:
-    if not isinstance(payload, dict):
-        return {}
-    return {
-        k: (f"{len(v)} item(s)" if k in _SUMMARISED_FIELDS and isinstance(v, list) else v)
-        for k, v in payload.items()
-    }
-
-
-def _response_status(payload) -> Optional[str]:
-    """'status' (or idTagInfo.status) from a response payload, if any."""
-    if not isinstance(payload, dict):
-        return None
-    status = payload.get("status")
-    if status is None and isinstance(payload.get("idTagInfo"), dict):
-        status = payload["idTagInfo"].get("status")
-    return None if status is None else str(status)
 
 
 def _payload_to_dict(payload) -> dict:
@@ -209,8 +190,9 @@ class ChargePoint(BaseChargePoint):
         # __main__ builds it with connection=None and calls attach() per socket;
         # it only counts as online once BootNotification is accepted.
         self._registered: bool = connection is not None
-        self._last_received_uid: Optional[str] = None
-        self._last_sent_uid: Optional[str] = None
+        self._traffic = TrafficRecorder(
+            self._shared_state, lambda: self._heartbeat_interval,
+        )
         self._inflight_calls: set[asyncio.Future] = set()
         self._drain_lock = asyncio.Lock()
         loaded = persistence.load_offline_queue()
@@ -283,55 +265,8 @@ class ChargePoint(BaseChargePoint):
         return await super()._send(message)
 
     def _record_traffic(self, raw, incoming: bool) -> None:
-        """Track the last server command and our last sent message.
-
-        OCPP-J frames: [2, id, action, payload] call, [3, id, payload] result,
-        [4, id, code, description, details] error. A result/error is matched
-        by id to the call it answers. Never raises: it's only for display.
-        """
-        try:
-            msg = json.loads(raw) if isinstance(raw, (str, bytes)) else raw
-            kind, uid = msg[0], msg[1]
-            if kind == 2:  # a call
-                action, payload = msg[2], msg[3] if len(msg) > 3 else {}
-                if not incoming and action in UNTRACKED_SENT_ACTIONS:
-                    return
-                record = {
-                    "action": action,
-                    "timestamp": _now_iso(),
-                    "payload": _summarise_payload(payload),
-                    "status": None,
-                    "response": None,
-                }
-                if incoming:
-                    self._last_received_uid = uid
-                    self._shared_state.last_command_received = record
-                else:
-                    self._last_sent_uid = uid
-                    self._shared_state.last_command_sent = record
-                return
-            # A reply: incoming replies answer what we sent, outgoing ones
-            # answer what the server sent us.
-            if incoming:
-                record, expected = self._shared_state.last_command_sent, self._last_sent_uid
-            else:
-                record, expected = self._shared_state.last_command_received, self._last_received_uid
-            if record is None or uid != expected:
-                return
-            record = dict(record)
-            if kind == 3:
-                payload = msg[2] if len(msg) > 2 else {}
-                record["status"] = _response_status(payload) or "OK"  # reply without a status
-                record["response"] = _summarise_payload(payload)
-            elif kind == 4:
-                record["status"] = f"Error: {msg[2]}"
-                record["response"] = {"errorCode": msg[2], "errorDescription": msg[3] if len(msg) > 3 else ""}
-            if incoming:
-                self._shared_state.last_command_sent = record
-            else:
-                self._shared_state.last_command_received = record
-        except Exception:
-            logger.debug("Could not record OCPP traffic", exc_info=True)
+        """Feed every frame to the diagnostics recorder (src/traffic.py)."""
+        self._traffic.record(raw, incoming)
 
     async def call(self, payload, *args, **kwargs):
         """BaseChargePoint.call that fails fast when the connection drops.
@@ -772,6 +707,17 @@ class ChargePoint(BaseChargePoint):
         """Only ever true with a SoC entity set and reading 100%."""
         return self._soc is not None and self._soc >= 100.0
 
+    def _taper_factor(self) -> float:
+        """Fraction of power the car accepts at its SoC (CC/CV taper near full).
+
+        Full power up to TAPER_START_SOC, then down linearly to TAPER_MIN_FACTOR
+        at 100%. 1.0 without a SoC entity.
+        """
+        if self._soc is None or self._soc <= TAPER_START_SOC:
+            return 1.0
+        span = (min(self._soc, 100.0) - TAPER_START_SOC) / (100.0 - TAPER_START_SOC)
+        return round(1.0 - (1.0 - TAPER_MIN_FACTOR) * span, 4)
+
     def _soc_for_report(self) -> Optional[float]:
         """SoC to put in meter values: only while a car is connected."""
         if self.state in (ChargePointStatus.available, ChargePointStatus.unavailable,
@@ -865,7 +811,9 @@ class ChargePoint(BaseChargePoint):
             # Integrate over the ramp rather than multiplying the whole interval
             # by the instantaneous power, so the delay/ramp is billed exactly.
             ramp_avg = self._charger_sim.average_ramp_factor(prev, now)
-            energy_added_kwh = full_reading.power_kw * ramp_avg * elapsed_hours
+            energy_added_kwh = (
+                full_reading.power_kw * ramp_avg * self._taper_factor() * elapsed_hours
+            )
 
         self._energy_register_wh += round(energy_added_kwh * 1000)
         self._persistence.save_energy_register_wh(self._energy_register_wh)
@@ -884,7 +832,7 @@ class ChargePoint(BaseChargePoint):
         """
         full_reading = self._charger_sim.sample_full()
         sim_reading = self._charger_sim.scale(
-            full_reading, self._charger_sim.ramp_factor(now),
+            full_reading, self._charger_sim.ramp_factor(now) * self._taper_factor(),
         )
 
         # Use power override from integration if available

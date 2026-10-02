@@ -39,7 +39,7 @@ updates its state so Home Assistant automations can respond.
 
 ### Controlling your charger
 
-Use the companion integration's **State** sensor to trigger automations when
+Use the companion integration's **OCPP Charge Proxy State** sensor to trigger automations when
 your provider starts or stops charging. For example, create an automation that
 turns on a smart plug when the state changes to `Charging` and turns it off
 when it changes to `Preparing` or `Available`.
@@ -76,13 +76,14 @@ comes back.
 3. It sends periodic heartbeats and meter values
 4. When you "plug in" via the companion integration, it reports `Preparing`
 5. Your provider creates a charge schedule and sends `RemoteStartTransaction`
-6. The proxy transitions through `SuspendedEV` -> `Charging` and reports
-   meter values
+6. The proxy sends `StartTransaction`, reports `Charging`, and sends meter
+   values while the simulated car ramps up to full power
 7. When the provider ends the session, it sends `RemoteStopTransaction`
-8. The proxy reports `Finishing` then returns to `Preparing`
+8. The proxy reports `Finishing`, sends `StopTransaction`, then returns to
+   `Preparing`
 
-If the connection drops, the add-on automatically reconnects with exponential
-backoff.
+If the connection drops, the add-on reconnects automatically, retrying with
+increasing delays.
 
 ### While offline
 
@@ -131,15 +132,17 @@ Install the companion integration via HACS to get proper HA entities:
 |--------|------|-------------|
 | Plugged In | Switch | Simulate car plugged in/unplugged |
 | Current Amps Setting | Select | Charger's maximum current (6-32A), remembered across restarts. Your provider can lower the current below it but not raise it; attributes `effective_amps` and `provider_limit_amps` show what's in use |
-| State | Sensor | OCPP state (Available/Preparing/Charging/etc.) |
+| OCPP Charge Proxy State | Sensor | OCPP state (Available/Preparing/Charging/etc.) |
 | Power | Sensor | Current power draw (kW) |
 | Energy | Sensor | Cumulative energy (kWh, works with energy dashboard) |
 | Current | Sensor | Current draw (A) |
-| Power Source | Sensor | Whether using real entity or simulated values |
-| SoC Source | Sensor | `entity` (reporting your car battery sensor), `no reading` (sensor set but no value, nothing sent) or `not set` (no SoC reported, car full off) |
+| Power Source | Sensor (diagnostic) | Whether using real entity or simulated values |
+| SoC Source | Sensor (diagnostic) | `entity` (reporting your car battery sensor), `no reading` (sensor set but no value, nothing sent) or `not set` (no SoC reported, car full off) |
 | Connected to Server | Binary Sensor | Connected to OCPP server |
-| Last Command Received | Sensor (diagnostic) | Last OCPP command from your provider (e.g. `RemoteStartTransaction`). Attributes: `timestamp`, `payload`, `response`, `status` |
+| Last Command Received | Sensor (diagnostic) | Last OCPP command from your provider (e.g. `RemoteStartTransaction`). Attributes: `timestamp`, `summary`, `status`, `round_trip_ms`, `message_id`, `payload`, `response`, `recent` (last 10) |
 | Last Command Sent | Sensor (diagnostic) | Last message sent to your provider, excluding Heartbeat and MeterValues. Same attributes, with the server's response |
+| Monitored SoC | Sensor (diagnostic) | SoC (%) that auto plug-in watches. Attributes: `entity_id`, `source`, `auto_plug`, `threshold`, `armed` |
+| Last Heartbeat | Sensor (diagnostic) | When your provider last answered a Heartbeat. Attributes: `round_trip_ms`, `interval_s`, `server_time`, `clock_offset_s` |
 
 ### Integration options
 
@@ -157,7 +160,17 @@ In is switched on so your provider can schedule a charge. It triggers once
 per drop: unplugging by hand while the SoC is still low won't plug it back
 in, and it re-arms once the SoC is back above the threshold.
 
-By default it watches the car battery (SoC) sensor above. You can pick a
+If your car has a "charging cable connected" (or similar) binary sensor, you
+can set it as the **car connected sensor**: when it changes from off to on,
+Plugged In is switched on. It never switches Plugged In off, so unplug with
+the switch or an automation as usual. Unavailable/unknown readings in between
+are ignored, and it doesn't plug in on the first reading after a restart. The
+switch stays usable by hand, and it works alongside auto plug-in.
+
+With a car battery (SoC) sensor set, the simulated power also **tapers** above
+90% SoC, down to 30% of full power at 100%, as a real car's does.
+
+By default auto plug-in watches the car battery (SoC) sensor above. You can pick a
 different **SoC sensor to watch for auto plug-in** instead. That sensor is
 only watched, never reported to your provider, which is useful if the car
 may be away from home: you can watch its SoC without it being sent as the

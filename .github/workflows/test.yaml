@@ -32,3 +32,22 @@ jobs:
       - name: Run tests
         working-directory: ocpp_charge_proxy
         run: python -m pytest tests/ -v
+
+  integration:
+    name: Integration tests (Home Assistant)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # Current Home Assistant releases need Python 3.14
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: pip install pytest-homeassistant-custom-component
+
+      - name: Run integration tests
+        run: python -m pytest tests/ -v -o asyncio_mode=auto

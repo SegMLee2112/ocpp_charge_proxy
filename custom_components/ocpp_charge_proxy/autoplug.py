@@ -33,3 +33,23 @@ class AutoPlug:
             return False
         self.armed = False  # fire once per drop
         return not plugged_in
+
+
+class CarConnected:
+    """Decides when to switch Plugged In on from a car-connected binary sensor.
+
+    Plugs in when the sensor changes from off to on; never unplugs. Only
+    definite on/off readings count: unavailable/unknown in between are
+    ignored, so on -> unavailable -> on (e.g. the car's integration
+    reconnecting) isn't a new connection. The first reading only sets the
+    starting point, so restarting HA with the cable connected doesn't plug in.
+    """
+
+    def __init__(self) -> None:
+        self.last: str | None = None  # last definite reading: "on" / "off"
+
+    def should_plug(self, state: str | None, plugged_in: bool | None) -> bool:
+        if state not in ("on", "off"):
+            return False
+        previous, self.last = self.last, state
+        return previous == "off" and state == "on" and not plugged_in

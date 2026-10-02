@@ -1263,3 +1263,41 @@ def test_power_source_shows_entity_while_idle(mock_connection, mock_persistence)
     assert cp._shared_state.power_entity_value == 0.0
     cp.set_power_override(None)  # entity unset / unavailable
     assert cp._shared_state.power_source == "simulated"
+
+
+# --- 0.10.0: charging taper ---
+
+
+def test_taper_reduces_power_and_energy_near_full(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call, _ = _call_recorder()
+    cp.state = ChargePointStatus.charging
+    cp._charger_sim.start_charging()
+
+    cp.set_soc(50)
+    cp.refresh_live_power()
+    full_power = cp._shared_state.power_kw
+    assert full_power > 6.5  # no taper below 90%
+
+    cp.set_soc(95)  # halfway through the taper: 65% of full power
+    samples = []
+    for _ in range(50):
+        cp.refresh_live_power()
+        samples.append(cp._shared_state.power_kw)
+    assert 4.4 <= sum(samples) / len(samples) <= 5.1
+
+    before = cp._energy_register_wh
+    cp._last_meter_time -= 3600
+    cp._take_reading()
+    assert 4400 <= cp._energy_register_wh - before <= 5100  # energy tapers too
+
+
+def test_no_taper_without_soc_or_with_power_entity(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.state = ChargePointStatus.charging
+    cp._charger_sim.start_charging()
+    assert cp._taper_factor() == 1.0  # no SoC entity
+    cp.set_soc(99)
+    cp.set_power_override(7.0)  # a real power reading already includes the taper
+    cp.refresh_live_power()
+    assert cp._shared_state.power_kw == 7.0

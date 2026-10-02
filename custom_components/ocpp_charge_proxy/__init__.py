@@ -21,6 +21,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         auto_plug=entry.options.get("auto_plug", False),
         auto_plug_soc=entry.options.get("auto_plug_soc", DEFAULT_AUTO_PLUG_SOC),
         auto_plug_entity=entry.options.get("auto_plug_entity", ""),
+        plug_entity=entry.options.get("plug_entity", ""),
     )
     await coordinator.async_config_entry_first_refresh()
     coordinator.async_start()  # push updates + entity tracking

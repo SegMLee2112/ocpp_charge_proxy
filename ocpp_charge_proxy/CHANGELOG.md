@@ -1,5 +1,63 @@
 # Changelog
 
+## 1.0.0
+
+First stable release. Also includes the changes planned as 0.9.9, which
+wasn't released on its own.
+
+- New integration option: **car connected sensor**. Pick a binary sensor
+  (e.g. your car's "charging cable connected") and Plugged In is switched on
+  when it changes from off to on. It never switches Plugged In off. Readings
+  of unavailable/unknown in between are ignored (on -> unavailable -> on isn't
+  a new connection), and the first reading after a restart doesn't plug in.
+  The Plugged In switch stays usable by hand, and it works alongside auto
+  plug-in.
+- New: **charging taper near full**. With a car battery (SoC) sensor set,
+  simulated power stays at full up to 90% SoC, then tapers linearly to 30%
+  of full power at 100%, like a real car's charge curve. The energy register
+  follows the tapered power. Not applied when power comes from a power
+  sensor (that already shows the car's real taper), or without a SoC sensor.
+- New: **integration tests** in CI, using pytest-homeassistant-custom-component
+  (a real Home Assistant core): config and options flows, entity setup,
+  the car connected sensor, the manual switch, auto plug-in and SoC
+  reporting. Run with `python -m pytest tests/ -o asyncio_mode=auto` from the
+  repository root.
+- The integration's IoT class is now `local_push` (it receives push updates
+  from the add-on since 0.9.4).
+
+- Faster recovery after an add-on restart. The integration took around 40s
+  to come back (entities unavailable meanwhile): its reconnect delay doubled
+  from 5s (5, 10, 20s...), and the fallback poll stayed on the 5-minute
+  schedule used while push updates work. It now retries the event stream
+  after 1, 2, 2, 3, 3, then 5s (backing off to at most 60s if the add-on stays
+  down) and polls every 10s straight away when push updates drop, so
+  entities are back within a few seconds of the add-on starting.
+- New diagnostic sensor **Last Heartbeat**: when the provider last answered
+  a Heartbeat (a timestamp, so it reads "10 seconds ago"; if it stops moving,
+  the link is down). Attributes: `round_trip_ms`, `interval_s`, `server_time`
+  and `clock_offset_s` (how far the provider's clock is from yours).
+- **Last Command Received / Sent** have more attributes (the state is still
+  the action): `summary` (one readable line, e.g. `chargingALimitConn1 = 32`
+  or `transaction 1, meterStop 6612523 Wh, EVDisconnected`), `round_trip_ms`
+  (the provider's response time for sent commands, ours for received ones),
+  `message_id` (to match the add-on log) and `recent` (the last 10 commands
+  that way, newest first, with time, summary and status).
+- The add-on status page shows the last heartbeat (with a warning if it's
+  overdue) and each command's summary and response time.
+- The **State** sensor is renamed **OCPP Charge Proxy State** (also on the
+  device page, where it showed just "State"). Its values and entity ID
+  (`sensor.ocpp_charge_proxy_state`) are unchanged, so automations keep
+  working.
+- **Power Source** and **SoC Source** are now diagnostic sensors, listed with
+  the other diagnostics on the device page. Their values and entity IDs are
+  unchanged.
+- New diagnostic sensor **Monitored SoC**: the SoC (%) that auto plug-in
+  watches (the separate monitor sensor if set, otherwise the reported SoC
+  sensor), updating as soon as that sensor changes. Attributes: `entity_id`,
+  `source` (`monitor sensor` / `reported SoC sensor`), `auto_plug` (on/off),
+  `threshold` and `armed` (whether the next drop below the threshold will
+  plug in). Unknown when there's no sensor to watch.
+
 ## 0.9.8
 
 - Quieter logs: Heartbeat messages (every 10s with Octopus) and the server's
