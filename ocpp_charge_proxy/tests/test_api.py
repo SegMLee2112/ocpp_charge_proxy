@@ -146,3 +146,61 @@ async def test_events_stream_sends_state(client, shared_state):
     import json as _json
     assert _json.loads(line[5:])["state"] == "Charging"
     resp.close()
+
+
+# --- 1.1.0: web GUI endpoints ---
+
+
+def _gui_app(shared_state, mock_commands):
+    from src.gui_data import GuiSources, MessageLog, PowerHistory
+    log = MessageLog()
+    log.record('[2,"a","Heartbeat",{}]', incoming=False)
+    log.record('[3,"a",{"currentTime":"2026-10-02T15:00:00Z"}]', incoming=True)
+    history = PowerHistory()
+    history.sample(shared_state)
+    gui = GuiSources(
+        message_log=log, history=history,
+        sessions=lambda: {"current": None, "history": [{"transaction_id": 1}]},
+        provider=lambda: {"configuration": [], "charging_profiles": []},
+        health=lambda: {"version": "1.1.0", "uptime_s": 5},
+    )
+    return create_api_app(
+        shared_state, on_plug=mock_commands["plug"], on_unplug=mock_commands["unplug"],
+        on_set_current=mock_commands["set_current"], gui=gui,
+    )
+
+
+@pytest.mark.asyncio
+async def test_gui_endpoints(aiohttp_client, shared_state, mock_commands):
+    client = await aiohttp_client(_gui_app(shared_state, mock_commands))
+    data = await (await client.get("/api/messages")).json()
+    assert [m["type"] for m in data["messages"]] == ["call", "result"] and data["last_seq"] == 2
+    data = await (await client.get("/api/messages?after=1")).json()
+    assert [m["seq"] for m in data["messages"]] == [2]
+    data = await (await client.get("/api/messages?after=99")).json()  # add-on restarted
+    assert len(data["messages"]) == 2
+    assert (await (await client.get("/api/sessions")).json())["history"][0]["transaction_id"] == 1
+    assert len((await (await client.get("/api/history?since=0")).json())["samples"]) == 1
+    assert (await (await client.get("/api/history?since=9999999999")).json())["samples"] == []
+    assert (await (await client.get("/api/provider")).json())["configuration"] == []
+    health = await (await client.get("/api/health")).json()
+    assert health["version"] == "1.1.0"
+    assert health["event_streams"] == {"integration": 0, "gui": 0}
+
+
+@pytest.mark.asyncio
+async def test_gui_endpoints_without_gui(client):
+    assert (await client.get("/api/messages")).status == 501
+    assert (await client.get("/api/health")).status == 501
+
+
+@pytest.mark.asyncio
+async def test_event_streams_counted_by_client(aiohttp_client, shared_state, mock_commands):
+    app = _gui_app(shared_state, mock_commands)
+    client = await aiohttp_client(app)
+    resp = await client.get("/api/events?client=gui")
+    line = b""
+    while not line.startswith(b"data:"):
+        line = await resp.content.readline()
+    assert app["event_clients"] == {"integration": 0, "gui": 1}
+    resp.close()

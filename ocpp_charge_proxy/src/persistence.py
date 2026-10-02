@@ -19,6 +19,10 @@ class Persistence:
     def __init__(self, data_dir: str = "/data"):
         self._data_dir = data_dir
 
+    @property
+    def data_dir(self) -> str:
+        return self._data_dir
+
     # Files are written atomically: the data goes to a temp file which is
     # flushed to disk and then renamed over the target in one step, so a
     # power cut mid-write leaves the old file or the new one, never half of

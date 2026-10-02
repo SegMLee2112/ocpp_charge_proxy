@@ -112,9 +112,22 @@ Both are installed from this repository.
   trip time and how far its clock is from yours.
 - **Power Source**, **Reporting SoC** and **Monitored SoC** sensors showing
   where each value comes from, and the SoC values in use.
-- A **status page** in the Home Assistant sidebar (the add-on's Web UI):
-  connection, state, power, energy, current, SoC, transaction, held messages,
-  last heartbeat and last commands.
+- A **web GUI** in the Home Assistant sidebar (the add-on's Web UI), live
+  over push updates and styled to match your HA theme, light or dark:
+  - **Overview:** state, power, current, SoC and energy; controls for Plugged
+    In, max current, a power override and a test SoC; the current session;
+    and a chart of power, current (with your max and the provider limit) or
+    SoC over the last 30 minutes to 6 hours.
+  - **Sessions:** the last 20 charging sessions (energy, duration, peak
+    power, what ended them), kept across restarts.
+  - **Messages:** the last 300 OCPP messages both ways, with a filter, full
+    JSON on click and a Copy button for sharing.
+  - **Provider:** what your provider has set: charging limits, charging
+    profiles drawn as a timeline, the local authorisation list and every
+    configuration key.
+  - **Health:** version, uptime, reconnects and the last drop's reason,
+    heartbeat and clock offset, whether the HA integration's push updates are
+    connected, and any held messages.
 - **Quieter logs.** OCPP messages are logged at `info`, except Heartbeats
   (every 10s with Octopus) and periodic meter readings (every 60s), which only
   show at `debug`. Clock-aligned readings (every 15 min) stay at `info`.

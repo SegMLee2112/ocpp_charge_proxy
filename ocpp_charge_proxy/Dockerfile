@@ -23,6 +23,9 @@ ARG BUILD_REF
 ARG BUILD_REPOSITORY
 ARG BUILD_VERSION
 
+# Shown in the web GUI
+ENV ADDON_VERSION="${BUILD_VERSION}"
+
 # Labels
 LABEL \
     io.hass.name="${BUILD_NAME}" \

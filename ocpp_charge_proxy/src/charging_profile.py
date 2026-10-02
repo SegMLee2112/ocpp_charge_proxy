@@ -163,6 +163,40 @@ class ChargingProfileScheduler:
 
         return limit
 
+    def profiles_info(self) -> list[dict]:
+        """Active profiles for the web GUI, highest priority first."""
+        out = []
+        now_mono = time.monotonic()
+        for level in sorted(self._profiles, reverse=True):
+            profile = self._profiles[level]
+            schedule = _get(profile, "charging_schedule", "chargingSchedule") or {}
+            periods = _get(schedule, "charging_schedule_period", "chargingSchedulePeriod") or []
+            kind = _get(profile, "charging_profile_kind", "chargingProfileKind") or "Absolute"
+            start = _get(schedule, "start_schedule", "startSchedule")
+            set_mono = self._profile_start_times.get(level)
+            if kind == "Relative" and set_mono is not None:
+                start = (datetime.now(timezone.utc).timestamp() - (now_mono - set_mono))
+                start = datetime.fromtimestamp(start, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            out.append({
+                "stack_level": level,
+                "profile_id": _get(profile, "charging_profile_id", "chargingProfileId"),
+                "purpose": _get(profile, "charging_profile_purpose", "chargingProfilePurpose"),
+                "kind": kind,
+                "unit": _get(schedule, "charging_rate_unit", "chargingRateUnit") or "W",
+                "start": start,
+                "duration_s": _get(schedule, "duration"),
+                "min_rate": _get(schedule, "min_charging_rate", "minChargingRate"),
+                "periods": [
+                    {
+                        "start_period": _get(p, "start_period", "startPeriod") or 0,
+                        "limit": _get(p, "limit"),
+                        "phases": _get(p, "number_phases", "numberPhases"),
+                    }
+                    for p in periods
+                ],
+            })
+        return out
+
     @property
     def has_profile(self) -> bool:
         return len(self._profiles) > 0

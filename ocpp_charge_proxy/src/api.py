@@ -24,6 +24,7 @@ def create_api_app(
     on_set_power: Callable[[float | None], Awaitable[None]] | None = None,
     on_refresh: Callable[[], None] | None = None,
     on_set_soc: Callable[[float | None], Awaitable[None]] | None = None,
+    gui=None,
 ) -> web.Application:
     app = web.Application()
     app["shared_state"] = shared_state
@@ -34,6 +35,9 @@ def create_api_app(
     app["on_refresh"] = on_refresh
     app["on_set_soc"] = on_set_soc
     app["events_stop"] = asyncio.Event()
+    app["gui"] = gui  # src.gui_data.GuiSources, or None (GUI tabs then empty)
+    # Open /api/events streams: "integration" (HA) and "gui" (the web page)
+    app["event_clients"] = {"integration": 0, "gui": 0}
     app.on_shutdown.append(_close_event_streams)
 
     # Ingress serves the status page — use relative path for API calls
@@ -47,6 +51,12 @@ def create_api_app(
     app.router.add_post("/api/power", handle_power)
     app.router.add_post("/api/soc", handle_soc)
     app.router.add_get("/api/events", handle_events)
+    # Web GUI only
+    app.router.add_get("/api/messages", handle_messages)
+    app.router.add_get("/api/sessions", handle_sessions)
+    app.router.add_get("/api/history", handle_history)
+    app.router.add_get("/api/provider", handle_provider)
+    app.router.add_get("/api/health", handle_health)
 
     return app
 
@@ -176,6 +186,7 @@ async def handle_events(request: web.Request) -> web.StreamResponse:
     """
     app = request.app
     stop: asyncio.Event = app["events_stop"]
+    client = "gui" if request.query.get("client") == "gui" else "integration"
     resp = web.StreamResponse(headers={
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
@@ -184,6 +195,7 @@ async def handle_events(request: web.Request) -> web.StreamResponse:
     await resp.prepare(request)
     last_sig = None
     last_sent = 0.0
+    app["event_clients"][client] += 1
     try:
         while not stop.is_set():
             sig = _significant(app["shared_state"].to_dict())
@@ -199,9 +211,77 @@ async def handle_events(request: web.Request) -> web.StreamResponse:
                 pass
     except (ConnectionResetError, ConnectionError):
         pass  # integration went away
+    finally:
+        app["event_clients"][client] -= 1
     return resp
 
 
 async def _close_event_streams(app: web.Application) -> None:
     """End open event streams so add-on shutdown isn't held up by them."""
     app["events_stop"].set()
+
+
+# --- Web GUI -----------------------------------------------------------------
+
+
+def _gui_unavailable() -> web.Response:
+    return web.json_response({"status": "error", "message": "Not available"}, status=501)
+
+
+def _number_param(request: web.Request, name: str, default: float = 0) -> float:
+    try:
+        return float(request.query.get(name, default))
+    except ValueError:
+        return default
+
+
+async def handle_messages(request: web.Request) -> web.Response:
+    """OCPP frames after ?after=<seq> (all kept ones without it)."""
+    gui = request.app["gui"]
+    if gui is None:
+        return _gui_unavailable()
+    log = gui.message_log
+    after = int(_number_param(request, "after", 0))
+    if after > log.last_seq:
+        after = 0  # the add-on restarted: send everything again
+    return web.json_response(
+        {"messages": log.since(after), "last_seq": log.last_seq}, dumps=_dumps,
+    )
+
+
+async def handle_sessions(request: web.Request) -> web.Response:
+    gui = request.app["gui"]
+    if gui is None:
+        return _gui_unavailable()
+    return web.json_response(gui.sessions(), dumps=_dumps)
+
+
+async def handle_history(request: web.Request) -> web.Response:
+    """Chart samples newer than ?since=<unix time>."""
+    gui = request.app["gui"]
+    if gui is None:
+        return _gui_unavailable()
+    return web.json_response(
+        {"samples": gui.history.since(_number_param(request, "since", 0)), "now": time.time()},
+        dumps=_dumps,
+    )
+
+
+async def handle_provider(request: web.Request) -> web.Response:
+    gui = request.app["gui"]
+    if gui is None:
+        return _gui_unavailable()
+    return web.json_response(gui.provider(), dumps=_dumps)
+
+
+async def handle_health(request: web.Request) -> web.Response:
+    gui = request.app["gui"]
+    if gui is None:
+        return _gui_unavailable()
+    info = dict(gui.health())
+    info["event_streams"] = dict(request.app["event_clients"])
+    return web.json_response(info, dumps=_dumps)
+
+
+def _dumps(data) -> str:
+    return json.dumps(data, default=str)

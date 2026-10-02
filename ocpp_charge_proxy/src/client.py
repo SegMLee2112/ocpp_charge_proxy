@@ -34,6 +34,7 @@ from ocpp.v16.enums import (
 
 from src.charger_sim import VALID_CURRENT_SETTINGS, ChargerReading, ChargerSimulator
 from src.charging_profile import ChargingProfileScheduler
+from src.gui_data import MessageLog, SessionLog
 from src.meter_values import (
     build_charging_meter_values,
     build_idle_meter_values,
@@ -193,6 +194,10 @@ class ChargePoint(BaseChargePoint):
         self._traffic = TrafficRecorder(
             self._shared_state, lambda: self._heartbeat_interval,
         )
+        # For the web GUI: every OCPP frame, and the charging sessions
+        self.message_log = MessageLog()
+        data_dir = getattr(persistence, "data_dir", None)
+        self.sessions = SessionLog(data_dir if isinstance(data_dir, str) else None)
         self._inflight_calls: set[asyncio.Future] = set()
         self._drain_lock = asyncio.Lock()
         loaded = persistence.load_offline_queue()
@@ -232,6 +237,7 @@ class ChargePoint(BaseChargePoint):
         # A transaction still saved as open means the last run never stopped
         # it (power cut, crash, SIGKILL): close it the way a real charger does.
         self._recover_interrupted_transaction()
+        self._close_orphan_session()
         self._profile_scheduler = ChargingProfileScheduler(
             rated_power_w=self._charger_sim.rated_power_kw * 1000
         )
@@ -242,6 +248,43 @@ class ChargePoint(BaseChargePoint):
         if plugged_in != self._plugged_in:
             self._plugged_in = plugged_in
             self._persistence.save_plugged_in(plugged_in)
+
+    # --- For the web GUI -------------------------------------------------
+
+    def provider_info(self) -> dict:
+        """What the OCPP server has set: configuration, local list, profiles."""
+        return {
+            "configuration": [
+                {"key": k, "value": v, "readonly": ro, "set_by_server": k in self._server_config}
+                for k, (v, ro) in self._config_store.items()
+            ],
+            "local_list_version": self._local_list_version,
+            "local_auth_list": list(self._local_auth_list.values()),
+            "charging_profiles": self._profile_scheduler.profiles_info(),
+            "profile_limit_kw": self._profile_scheduler.get_current_limit_kw(),
+            "provider_limit_amps": self._server_limit_amps,
+            "max_amps": self._max_current_amps,
+            "effective_amps": self._effective_amps(),
+        }
+
+    def held_messages_info(self) -> list[dict]:
+        """Transaction messages waiting to be sent, oldest first."""
+        from src.traffic import summarise_command
+        out = []
+        for e in self._offline_queue:
+            action = str(e.get("action", "")).removesuffix("Payload")
+            payload = e.get("payload") or {}
+            camel = {
+                "".join(w if i == 0 else w.title() for i, w in enumerate(k.split("_"))): v
+                for k, v in payload.items()
+            }
+            out.append({"seq": e.get("seq"), "action": action, "summary": summarise_command(action, camel)})
+        return out
+
+    def sessions_info(self) -> dict:
+        return self.sessions.snapshot(
+            self._energy_register_wh if self._transaction_id is not None else None,
+        )
 
     # --- Connection lifecycle -------------------------------------------
 
@@ -283,6 +326,7 @@ class ChargePoint(BaseChargePoint):
     def _record_traffic(self, raw, incoming: bool) -> None:
         """Feed every frame to the diagnostics recorder (src/traffic.py)."""
         self._traffic.record(raw, incoming)
+        self.message_log.record(raw, incoming)
 
     async def call(self, payload, *args, **kwargs):
         """BaseChargePoint.call that fails fast when the connection drops.
@@ -398,6 +442,7 @@ class ChargePoint(BaseChargePoint):
             self._transaction_id = new
             self._shared_state.transaction_id = new
             self._save_active_transaction()
+        self.sessions.remap_transaction_id(old, new)
 
     def _drop_transaction(self, local_tx_id: int) -> None:
         before = len(self._offline_queue)
@@ -507,7 +552,14 @@ class ChargePoint(BaseChargePoint):
                 "(power cut or crash); holding StopTransaction (PowerLoss, %d Wh)",
                 tx_id, meter_stop,
             )
+            self.sessions.stop(meter_stop, Reason.power_loss, timestamp, tx_id)
         self._persistence.save_active_transaction(None)
+
+    def _close_orphan_session(self) -> None:
+        """A session saved as running with no open transaction (e.g. the add-on
+        stopped between the two saves): close it in the history."""
+        if self.sessions.current is not None and self._transaction_id is None:
+            self.sessions.stop(self._energy_register_wh, Reason.power_loss)
 
     # --- StopTransaction transactionData ----------------------------------
 
@@ -1039,6 +1091,9 @@ class ChargePoint(BaseChargePoint):
             else:
                 self._transaction_id = response.transaction_id
                 logger.info("Transaction started: %s (idTag %s)", self._transaction_id, id_tag)
+            self.sessions.start(
+                self._transaction_id, id_tag, self._transaction_start_energy_wh, start_ts,
+            )
             self._record_stop_txn_reading(
                 None, self._stop_txn_sampled, "Transaction.Begin", timestamp=start_ts,
                 energy_wh=self._transaction_start_energy_wh,
@@ -1098,6 +1153,7 @@ class ChargePoint(BaseChargePoint):
                 reason=reason,
                 transaction_data=transaction_data,
             )
+            self.sessions.stop(self._energy_register_wh, reason, stop_ts, transaction_id)
             response = await self._send_tx(request)
             handled = True
             if response is None:

@@ -1329,3 +1329,62 @@ def test_connector_zero_never_reports_charging(mock_connection, mock_persistence
     cp.state = ChargePointStatus.charging
     _run(cp._send_status_for_connector(0))
     assert _statuses(sent) == [ChargePointStatus.available]
+
+
+# --- 1.1.0: web GUI data ---
+
+
+def test_session_history_records_start_and_stop(mock_connection, tmp_path):
+    from src.persistence import Persistence
+    from ocpp.v16.enums import Reason
+    persistence = Persistence(data_dir=str(tmp_path))
+    cp, _ = _started_cp(mock_connection, persistence)
+    assert cp.sessions.current["transaction_id"] == 4242
+    assert cp.sessions.current["id_tag"] == OCTOPUS_TAG
+    cp._energy_register_wh += 1500
+    _run(cp._do_stop_transaction(final_state=ChargePointStatus.available, reason=Reason.remote))
+    assert cp.sessions.current is None
+    last = make_cp(mock_connection, Persistence(data_dir=str(tmp_path))).sessions.history[0]
+    assert last["transaction_id"] == 4242 and last["reason"] == "Remote"
+    assert last["energy_kwh"] >= 1.5
+
+
+def test_power_loss_closes_session_in_history(mock_connection, tmp_path):
+    from src.persistence import Persistence
+    persistence = Persistence(data_dir=str(tmp_path))
+    cp, _ = _started_cp(mock_connection, persistence)
+    del cp  # power cut
+    cp2 = make_cp(None, Persistence(data_dir=str(tmp_path)))
+    assert cp2.sessions.current is None
+    assert cp2.sessions.history[0]["reason"] == "PowerLoss"
+    assert cp2.sessions.history[0]["transaction_id"] == 4242
+
+
+def test_message_log_sees_every_frame(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp._record_traffic('[2,"x","TriggerMessage",{"requestedMessage":"StatusNotification"}]', incoming=True)
+    cp._record_traffic('[3,"x",{"status":"Accepted"}]', incoming=False)
+    entries = cp.message_log.since(0)
+    assert [(e["direction"], e["action"]) for e in entries] == [("received", "TriggerMessage"), ("sent", "TriggerMessage")]
+
+
+def test_provider_info(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    _run(cp.on_change_configuration(key="chargingALimitConn1", value="16"))
+    info = cp.provider_info()
+    keys = {c["key"]: c for c in info["configuration"]}
+    assert keys["chargingALimitConn1"]["set_by_server"] is True
+    assert keys["NumberOfConnectors"]["set_by_server"] is False
+    assert info["provider_limit_amps"] == 16 and info["effective_amps"] == 16
+    assert info["charging_profiles"] == []
+
+
+def test_held_messages_info(mock_connection):
+    persistence, _ = _queue_persistence()
+    cp, _ = _started_cp(mock_connection, persistence)
+    cp.detach()
+    from ocpp.v16.enums import Reason
+    _run(cp._do_stop_transaction(final_state=ChargePointStatus.available, reason=Reason.remote))
+    held = cp.held_messages_info()
+    assert held and held[-1]["action"] == "StopTransaction"
+    assert "transaction 4242" in held[-1]["summary"]

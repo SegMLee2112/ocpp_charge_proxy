@@ -14,6 +14,7 @@ from src.api import create_api_app
 from src.client import ChargePoint
 from src.config import load_config, starting_current_amps
 from src.console import console_loop
+from src.gui_data import GuiSources, Health, PowerHistory, sample_loop
 from src import log_filters
 from src.persistence import Persistence
 from src.shared_state import SharedState
@@ -185,9 +186,32 @@ async def run() -> None:
         start_delay_s=config.start_delay_s,
         ramp_up_s=config.ramp_up_s,
     )
+    health = Health()
+    history = PowerHistory()
+
+    def _health_info() -> dict:
+        info = health.snapshot()
+        info["held_messages"] = cp.held_messages_info()
+        info["last_heartbeat"] = shared_state.last_heartbeat
+        info["connected_to_server"] = shared_state.connected_to_server
+        info["server"] = config.server_hostname
+        info["chargepoint_id"] = config.chargepoint_id
+        return info
+
+    gui = GuiSources(
+        message_log=cp.message_log,
+        history=history,
+        sessions=cp.sessions_info,
+        provider=cp.provider_info,
+        health=_health_info,
+    )
     charger_tasks = [
         asyncio.create_task(cp.meter_values_loop()),
         asyncio.create_task(cp.clock_aligned_loop()),
+        asyncio.create_task(sample_loop(
+            history, shared_state, refresh=cp.refresh_live_power,
+            on_sample=lambda s: cp.sessions.sample(s["power_kw"]),
+        )),
     ]
     notified_server = False
 
@@ -195,6 +219,7 @@ async def run() -> None:
         shared_state, do_plug, do_unplug, do_set_current, do_set_power,
         on_refresh=cp.refresh_live_power,
         on_set_soc=do_set_soc,
+        gui=gui,
     )
     runner = web.AppRunner(api_app)
     await runner.setup()
@@ -212,6 +237,7 @@ async def run() -> None:
             ) as ws:
                 attempt = 0
                 logger.info("Connected to OCPP server")
+                health.connected()
                 cp.attach(ws)
                 try:
                     await _run_connection(
@@ -233,6 +259,7 @@ async def run() -> None:
             OSError,
         ) as e:
             shared_state.connected_to_server = False
+            health.disconnected(str(e) or type(e).__name__)
             backoff = BACKOFF_STEPS[min(attempt, len(BACKOFF_STEPS) - 1)]
             logger.warning(
                 "Connection lost (%s), reconnecting in %ds...", e, backoff,

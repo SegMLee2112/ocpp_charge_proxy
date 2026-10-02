@@ -1,229 +1,884 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OCPP Charge Proxy</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #1c1c1c;
-      color: #e0e0e0;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OCPP Charge Proxy</title>
+<style>
+  /* Colours follow the Home Assistant theme when the page is opened in the
+     HA sidebar (see applyHaTheme), otherwise light/dark from the browser. */
+  :root {
+    --bg: #fafafa; --card: #ffffff; --text: #212121; --text2: #727272;
+    --divider: rgba(0,0,0,0.12); --primary: #03a9f4; --on-primary: #fff;
+    --hover: rgba(0,0,0,0.04); --code: #f3f3f3;
+    --ok: #43a047; --warn: #f57c00; --err: #db4437; --info: #039be5; --violet: #8e24aa;
+    --radius: 12px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111111; --card: #1c1c1c; --text: #e1e1e1; --text2: #9b9b9b;
+      --divider: rgba(225,225,225,0.12); --hover: rgba(255,255,255,0.05); --code: #262626;
+      --ok: #66bb6a; --warn: #ffa726; --err: #ef5350; --info: #42a5f5; --violet: #ba68c8;
+      color-scheme: dark;
     }
-    .container {
-      text-align: center;
-      padding: 32px;
-    }
-    h1 {
-      font-size: 24px;
-      font-weight: 500;
-      color: #fff;
-      margin-bottom: 48px;
-    }
-    .status-row {
-      display: flex;
-      justify-content: center;
-      gap: 64px;
-    }
-    .status-item { text-align: center; }
-    .status-label {
-      font-size: 13px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: #888;
-      margin-bottom: 12px;
-    }
-    .status-value {
-      font-size: 20px;
-      font-weight: 500;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-    }
-    .dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      display: inline-block;
-    }
-    .dot.connected {
-      background: #4caf50;
-      box-shadow: 0 0 8px rgba(76,175,80,0.5);
-    }
-    .dot.disconnected {
-      background: #ef5350;
-      box-shadow: 0 0 8px rgba(239,83,80,0.5);
-    }
-    .state-available { color: #42a5f5; }
-    .state-preparing { color: #ffa726; }
-    .state-charging { color: #4caf50; }
-    .state-suspended { color: #ffa726; }
-    .state-finishing { color: #ab47bc; }
-    .state-unavailable { color: #ef5350; }
-    .state-unknown { color: #888; }
-    .details {
-      margin: 40px auto 0;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 20px 32px;
-      max-width: 640px;
-    }
-    .detail .status-label { margin-bottom: 6px; }
-    .detail-value { font-size: 17px; color: #fff; }
-    .commands {
-      margin: 36px auto 0;
-      max-width: 640px;
-      text-align: left;
-      border-top: 1px solid #333;
-      padding-top: 20px;
-      display: grid;
-      gap: 14px;
-    }
-    .command { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-    .command-name { color: #fff; font-size: 15px; }
-    .command-meta { color: #888; font-size: 13px; }
-    .muted { color: #666; }
-    .warn { color: #ffa726; }
-    @media (max-width: 480px) {
-      .status-row { flex-direction: column; gap: 28px; }
-      .container { padding: 24px 16px; }
-    }
-    .footer {
-      margin-top: 48px;
-      color: #555;
-      font-size: 12px;
-    }
-    .error {
-      color: #ef5350;
-      margin-top: 16px;
-      font-size: 13px;
-    }
-  </style>
+  }
+  :root[data-theme="dark"] {
+    --bg: #111111; --card: #1c1c1c; --text: #e1e1e1; --text2: #9b9b9b;
+    --divider: rgba(225,225,225,0.12); --hover: rgba(255,255,255,0.05); --code: #262626;
+    --ok: #66bb6a; --warn: #ffa726; --err: #ef5350; --info: #42a5f5; --violet: #ba68c8;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 14px/1.45 Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  header {
+    position: sticky; top: 0; z-index: 5; background: var(--bg);
+    border-bottom: 1px solid var(--divider);
+  }
+  .bar { max-width: 1100px; margin: 0 auto; padding: 12px 16px 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .bar h1 { font-size: 20px; font-weight: 400; margin: 0; flex: 1; min-width: 180px; }
+  .live { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 6px; }
+  nav { max-width: 1100px; margin: 0 auto; padding: 0 8px; display: flex; overflow-x: auto; }
+  nav button {
+    background: none; border: 0; color: var(--text2); font: inherit; font-weight: 500;
+    padding: 12px 14px 10px; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap;
+  }
+  nav button[aria-selected="true"] { color: var(--primary); border-bottom-color: var(--primary); }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  section[hidden] { display: none; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .grid.tiles { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .card {
+    background: var(--card); border-radius: var(--radius); padding: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12), 0 0 0 1px var(--divider);
+    min-width: 0;
+  }
+  .card.wide { grid-column: 1 / -1; }
+  .card h2 { font-size: 16px; font-weight: 500; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .card h2 .spacer { flex: 1; }
+  .stack { display: grid; gap: 16px; }
+  .label { font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; }
+  .big { font-size: 26px; font-weight: 400; margin-top: 2px; }
+  .sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .muted { color: var(--text2); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: var(--text2); flex: none; }
+  .dot.ok { background: var(--ok); } .dot.err { background: var(--err); } .dot.warn { background: var(--warn); }
+  .hero { display: flex; gap: 24px; flex-wrap: wrap; align-items: center; }
+  .hero .state { font-size: 30px; font-weight: 400; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 500; background: var(--hover); color: var(--text2); white-space: nowrap;
+  }
+  .chip.ok { color: var(--ok); } .chip.warn { color: var(--warn); } .chip.err { color: var(--err); } .chip.info { color: var(--info); }
+  .s-Available { color: var(--info); } .s-Preparing, .s-SuspendedEV, .s-SuspendedEVSE { color: var(--warn); }
+  .s-Charging { color: var(--ok); } .s-Finishing { color: var(--violet); } .s-Unavailable, .s-Faulted { color: var(--err); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
+  .kv dt { color: var(--text2); } .kv dd { margin: 0; overflow-wrap: anywhere; }
+  .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .row + .row { margin-top: 14px; }
+  .row .grow { flex: 1; min-width: 120px; }
+  button.btn {
+    font: inherit; font-weight: 500; border-radius: 8px; padding: 6px 14px; cursor: pointer;
+    border: 1px solid var(--divider); background: var(--card); color: var(--primary);
+  }
+  button.btn.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+  button.btn:disabled { opacity: .5; cursor: default; }
+  button.small { padding: 2px 10px; font-size: 12px; }
+  input[type="number"], input[type="search"], select {
+    font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--divider);
+    border-radius: 8px; padding: 6px 10px; min-width: 0;
+  }
+  input[type="number"] { width: 90px; }
+  .seg { display: inline-flex; border: 1px solid var(--divider); border-radius: 8px; overflow: hidden; flex-wrap: wrap; }
+  .seg button { font: inherit; border: 0; background: none; color: var(--text); padding: 6px 11px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--divider); }
+  .seg button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
+  .switch { position: relative; width: 44px; height: 24px; flex: none; }
+  .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; cursor: pointer; z-index: 1; }
+  .switch span { position: absolute; inset: 0; background: var(--divider); border-radius: 999px; transition: background .15s; }
+  .switch span::after {
+    content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .15s;
+  }
+  .switch input:checked + span { background: var(--primary); }
+  .switch input:checked + span::after { transform: translateX(20px); }
+  .note { font-size: 12px; color: var(--text2); margin-top: 6px; }
+  .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #323232; color: #fff;
+    padding: 10px 16px; border-radius: 8px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 10; }
+  .toast.show { opacity: 1; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--divider); vertical-align: top; }
+  th { font-weight: 500; color: var(--text2); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .table-wrap { overflow-x: auto; }
+  .chart-wrap { position: relative; height: 240px; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .tip { position: absolute; pointer-events: none; background: var(--card); border: 1px solid var(--divider);
+    border-radius: 8px; padding: 6px 8px; font-size: 12px; box-shadow: 0 2px 6px rgba(0,0,0,.2); display: none; white-space: nowrap; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text2); margin-top: 8px; }
+  .legend i { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
+  .legend i.dash { border-top-style: dashed; }
+  /* Messages */
+  .msg-tools { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  .msg-tools label { display: inline-flex; gap: 5px; align-items: center; font-size: 13px; color: var(--text2); cursor: pointer; }
+  .msgs { font-size: 13px; max-height: 70vh; overflow-y: auto; border-top: 1px solid var(--divider); }
+  .msg { border-bottom: 1px solid var(--divider); }
+  .msg > summary { list-style: none; display: grid; grid-template-columns: 74px 22px minmax(120px, max-content) 1fr; gap: 8px; padding: 6px 4px; cursor: pointer; align-items: baseline; }
+  .msg > summary::-webkit-details-marker { display: none; }
+  .msg > summary:hover { background: var(--hover); }
+  .msg .t { color: var(--text2); font-variant-numeric: tabular-nums; }
+  .msg .d.sent { color: var(--primary); } .msg .d.received { color: var(--ok); }
+  .msg .a { font-weight: 500; }
+  .msg.result .a, .msg.error .a { font-weight: 400; color: var(--text2); }
+  .msg.error .a, .msg.error .s { color: var(--err); }
+  .msg .s { color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  pre { margin: 0 0 8px; padding: 10px; background: var(--code); border-radius: 8px; overflow-x: auto; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; }
+  /* Profiles */
+  .timeline { display: flex; height: 28px; border-radius: 6px; overflow: hidden; margin: 8px 0 4px; background: var(--hover); }
+  .timeline div { display: flex; align-items: center; justify-content: center; font-size: 11px; color: #fff; min-width: 2px;
+    border-right: 1px solid var(--card); overflow: hidden; white-space: nowrap; }
+  .timeline-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--text2); }
+  .badge { font-size: 11px; padding: 1px 6px; border-radius: 6px; background: var(--hover); color: var(--text2); margin-left: 6px; }
+  .badge.server { color: var(--primary); }
+  .empty { color: var(--text2); padding: 12px 0; }
+  .error-banner { background: var(--err); color: #fff; padding: 8px 16px; text-align: center; font-size: 13px; display: none; }
+  @media (max-width: 520px) {
+    .msg > summary { grid-template-columns: 62px 18px 1fr; }
+    .msg .s { grid-column: 1 / -1; }
+    .big { font-size: 22px; }
+    .hero .state { font-size: 24px; }
+  }
+</style>
 </head>
 <body>
-  <div class="container">
+<div class="error-banner" id="error">Can't reach the add-on</div>
+<header>
+  <div class="bar">
     <h1>OCPP Charge Proxy</h1>
-    <div class="status-row">
-      <div class="status-item">
-        <div class="status-label">Server Connection</div>
-        <div class="status-value">
-          <span class="dot" id="conn-dot"></span>
-          <span id="conn-text">—</span>
-        </div>
-      </div>
-      <div class="status-item">
-        <div class="status-label">Charger State</div>
-        <div class="status-value">
-          <span id="state-text">—</span>
-        </div>
-      </div>
-    </div>
-    <div class="details">
-      <div class="detail"><div class="status-label">Power</div><div class="detail-value" id="power">—</div></div>
-      <div class="detail"><div class="status-label">Energy</div><div class="detail-value" id="energy">—</div></div>
-      <div class="detail"><div class="status-label">Current</div><div class="detail-value" id="amps">—</div></div>
-      <div class="detail"><div class="status-label">Car SoC</div><div class="detail-value" id="soc">—</div></div>
-      <div class="detail"><div class="status-label">Transaction</div><div class="detail-value" id="tx">—</div></div>
-      <div class="detail"><div class="status-label">Held messages</div><div class="detail-value" id="held">—</div></div>
-      <div class="detail"><div class="status-label">Last heartbeat</div><div class="detail-value" id="hb">—</div></div>
-    </div>
-    <div class="commands">
-      <div class="command">
-        <div><div class="status-label">Last command received</div><div class="command-name" id="rx-name">—</div></div>
-        <div class="command-meta" id="rx-meta"></div>
-      </div>
-      <div class="command">
-        <div><div class="status-label">Last command sent</div><div class="command-name" id="tx-name">—</div></div>
-        <div class="command-meta" id="tx-meta"></div>
-      </div>
-    </div>
-    <div class="footer">Auto-refreshes every 5 seconds</div>
-    <div class="error" id="error" style="display:none"></div>
+    <span class="live" id="live"><span class="dot" id="live-dot"></span><span id="live-text">Connecting…</span></span>
   </div>
+  <nav role="tablist" id="tabs">
+    <button role="tab" data-tab="overview">Overview</button>
+    <button role="tab" data-tab="sessions">Sessions</button>
+    <button role="tab" data-tab="messages">Messages</button>
+    <button role="tab" data-tab="provider">Provider</button>
+    <button role="tab" data-tab="health">Health</button>
+  </nav>
+</header>
 
-  <script>
-    const STATE_CLASSES = {
-      'Available': 'state-available',
-      'Preparing': 'state-preparing',
-      'Charging': 'state-charging',
-      'SuspendedEV': 'state-suspended',
-      'SuspendedEVSE': 'state-suspended',
-      'Finishing': 'state-finishing',
-      'Unavailable': 'state-unavailable',
+<main>
+  <!-- ============ Overview ============ -->
+  <section id="tab-overview" class="stack">
+    <div class="card">
+      <div class="hero">
+        <div>
+          <div class="label">Charger state</div>
+          <div class="state" id="o-state">—</div>
+        </div>
+        <div>
+          <div class="label">OCPP server</div>
+          <div class="row" style="margin-top:6px"><span class="dot" id="o-conn-dot"></span><span id="o-conn">—</span></div>
+        </div>
+        <div>
+          <div class="label">Transaction</div>
+          <div style="margin-top:6px" id="o-tx">—</div>
+        </div>
+        <div style="margin-left:auto" id="o-chips"></div>
+      </div>
+    </div>
+
+    <div class="grid tiles">
+      <div class="card"><div class="label">Power</div><div class="big" id="o-power">—</div><div class="sub" id="o-power-sub"></div></div>
+      <div class="card"><div class="label">Current</div><div class="big" id="o-amps">—</div><div class="sub" id="o-amps-sub"></div></div>
+      <div class="card"><div class="label">Car SoC</div><div class="big" id="o-soc">—</div><div class="sub" id="o-soc-sub"></div></div>
+      <div class="card"><div class="label">Energy meter</div><div class="big" id="o-energy">—</div><div class="sub">Lifetime register</div></div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Controls</h2>
+        <div class="row">
+          <div class="grow"><div>Plugged In</div><div class="note" style="margin:0">Simulate the car's cable</div></div>
+          <label class="switch"><input type="checkbox" id="c-plug" aria-label="Plugged In"><span></span></label>
+        </div>
+        <div class="row">
+          <div class="grow"><div>Max current</div><div class="note" style="margin:0">Your provider can lower it, not raise it</div></div>
+        </div>
+        <div class="row" style="margin-top:6px"><div class="seg" id="c-amps" role="group" aria-label="Max current"></div></div>
+        <div class="row">
+          <div class="grow"><div>Power override</div><div class="note" style="margin:0" id="c-power-note">Report this power instead of the simulation</div></div>
+          <input type="number" id="c-power" min="0" max="22" step="0.1" placeholder="kW" aria-label="Power override in kW">
+          <button class="btn small" id="c-power-set">Set</button>
+          <button class="btn small" id="c-power-clear">Clear</button>
+        </div>
+        <div class="row">
+          <div class="grow"><div>SoC</div><div class="note" style="margin:0" id="c-soc-note">Test value reported to your provider</div></div>
+          <input type="number" id="c-soc" min="0" max="100" step="1" placeholder="%" aria-label="SoC in percent">
+          <button class="btn small" id="c-soc-set">Set</button>
+          <button class="btn small" id="c-soc-clear">Clear</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Current session</h2>
+        <div id="o-session"><div class="empty">No session</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>History<span class="spacer"></span>
+        <div class="seg" id="ch-series" role="group" aria-label="Chart series">
+          <button data-series="power" aria-pressed="true">Power</button><button data-series="current">Current</button><button data-series="soc">SoC</button>
+        </div>
+        <div class="seg" id="ch-range" role="group" aria-label="Chart range">
+          <button data-range="1800">30m</button><button data-range="3600" aria-pressed="true">1h</button><button data-range="21600">6h</button>
+        </div>
+      </h2>
+      <div class="chart-wrap" id="chart-wrap"><canvas id="chart"></canvas><div class="tip" id="chart-tip"></div></div>
+      <div class="legend" id="chart-legend"></div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Last command received</h2>
+        <div id="o-rx" class="muted">None yet</div>
+      </div>
+      <div class="card">
+        <h2>Last command sent</h2>
+        <div id="o-txcmd" class="muted">None yet</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Sessions ============ -->
+  <section id="tab-sessions" class="stack" hidden>
+    <div class="grid tiles" id="s-totals"></div>
+    <div class="card">
+      <h2>Recent sessions</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Started</th><th class="num">Duration</th><th class="num">Energy</th><th class="num">Peak</th><th>Ended by</th><th class="num">Tx</th></tr></thead>
+          <tbody id="s-rows"></tbody>
+        </table>
+      </div>
+      <div class="note">The last 20 sessions are kept, across restarts.</div>
+    </div>
+  </section>
+
+  <!-- ============ Messages ============ -->
+  <section id="tab-messages" class="stack" hidden>
+    <div class="card">
+      <div class="msg-tools">
+        <input type="search" id="m-filter" placeholder="Filter by action or text" aria-label="Filter messages" style="flex:1;min-width:160px">
+        <label><input type="checkbox" id="m-hide-hb" checked> Hide Heartbeat</label>
+        <label><input type="checkbox" id="m-hide-mv"> Hide MeterValues</label>
+        <label><input type="checkbox" id="m-pause"> Pause</label>
+        <button class="btn small" id="m-copy">Copy</button>
+      </div>
+      <div class="msgs" id="m-list"></div>
+      <div class="note"><span id="m-count">0</span> shown · newest at the top · the last 300 frames are kept (cleared on restart). ↑ sent, ↓ received.</div>
+    </div>
+  </section>
+
+  <!-- ============ Provider ============ -->
+  <section id="tab-provider" class="stack" hidden>
+    <div class="grid">
+      <div class="card">
+        <h2>Charging limits</h2>
+        <dl class="kv" id="p-limits"></dl>
+      </div>
+      <div class="card">
+        <h2>Local authorisation list</h2>
+        <div id="p-local"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Charging profiles</h2>
+      <div id="p-profiles"></div>
+    </div>
+    <div class="card">
+      <h2>Configuration<span class="spacer"></span>
+        <label class="live" style="cursor:pointer"><input type="checkbox" id="p-only-server"> Set by provider only</label>
+      </h2>
+      <div class="table-wrap">
+        <table><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody id="p-config"></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Health ============ -->
+  <section id="tab-health" class="stack" hidden>
+    <div class="grid">
+      <div class="card"><h2>Add-on</h2><dl class="kv" id="h-addon"></dl></div>
+      <div class="card"><h2>OCPP connection</h2><dl class="kv" id="h-conn"></dl></div>
+      <div class="card"><h2>Heartbeat</h2><dl class="kv" id="h-hb"></dl></div>
+      <div class="card"><h2>Home Assistant</h2><dl class="kv" id="h-ha"></dl></div>
+    </div>
+    <div class="card">
+      <h2>Held messages</h2>
+      <div id="h-held"></div>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const AMPS = [6, 10, 13, 16, 20, 25, 32];
+const VOLTS = 230;
+let state = null;          // latest /api/state
+let activeTab = 'overview';
+
+// ---------- formatting ----------
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = (v, d = 1) => (v === null || v === undefined || isNaN(v)) ? '—' : Number(v).toLocaleString(undefined, {minimumFractionDigits: d, maximumFractionDigits: d});
+function dur(s) {
+  if (s === null || s === undefined) return '—';
+  s = Math.max(0, Math.round(s));
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  if (d) return `${d}d ${h}h`;
+  if (h) return `${h}h ${m}m`;
+  if (m) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+const time = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'}) : '—';
+function dateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso), today = new Date();
+  const t = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+  return d.toDateString() === today.toDateString() ? `Today ${t}` : `${d.toLocaleDateString([], {day: 'numeric', month: 'short'})} ${t}`;
+}
+const ago = (iso) => iso ? dur((Date.now() - new Date(iso)) / 1000) + ' ago' : '—';
+const kv = (rows) => rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('');
+const stateClass = (s) => 's-' + String(s || '').replace(/[^A-Za-z]/g, '');
+
+function toast(text) {
+  const t = $('toast'); t.textContent = text; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ---------- Home Assistant theme ----------
+// In the HA sidebar the page is an iframe on HA's own origin, so the theme's
+// CSS variables can be read from the parent page.
+function applyHaTheme() {
+  try {
+    const p = window.parent;
+    if (!p || p === window) return;
+    const cs = p.getComputedStyle(p.document.documentElement);
+    const v = (name) => cs.getPropertyValue(name).trim();
+    const map = {
+      '--bg': '--primary-background-color', '--card': '--card-background-color',
+      '--text': '--primary-text-color', '--text2': '--secondary-text-color',
+      '--divider': '--divider-color', '--primary': '--primary-color',
+      '--on-primary': '--text-primary-color', '--code': '--code-background-color',
+      '--ok': '--success-color', '--warn': '--warning-color', '--err': '--error-color', '--info': '--info-color',
     };
-
-    async function refresh() {
-      try {
-        const resp = await fetch('./api/state');
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data = await resp.json();
-
-        const connected = data.connected_to_server;
-        const dot = document.getElementById('conn-dot');
-        const connText = document.getElementById('conn-text');
-        dot.className = 'dot ' + (connected ? 'connected' : 'disconnected');
-        connText.textContent = connected ? 'Connected' : 'Disconnected';
-        connText.style.color = connected ? '#fff' : '#ef5350';
-
-        const state = data.state || 'Unknown';
-        const stateEl = document.getElementById('state-text');
-        stateEl.textContent = state;
-        stateEl.className = STATE_CLASSES[state] || 'state-unknown';
-
-        const set = (id, text, cls) => {
-          const el = document.getElementById(id);
-          el.textContent = text;
-          el.className = (id.endsWith('-name') ? 'command-name' : 'detail-value') + (cls ? ' ' + cls : '');
-        };
-        const power = Number(data.power_kw || 0);
-        set('power', power.toFixed(2) + ' kW' + (data.power_source === 'entity' ? ' (sensor)' : ''));
-        set('energy', Number(data.energy_kwh || 0).toLocaleString(undefined, {maximumFractionDigits: 1}) + ' kWh');
-        const eff = data.current_amps_effective ?? data.current_amps_setting;
-        const max = data.current_amps_setting;
-        set('amps', eff + ' A' + (eff < max ? ' (max ' + max + ' A, provider limit)' : ''));
-        if (data.soc_percent === null || data.soc_percent === undefined) {
-          set('soc', 'Not set', 'muted');
-        } else {
-          set('soc', Math.round(data.soc_percent) + '%' + (data.soc_percent >= 100 ? ' (full)' : ''));
-        }
-        set('tx', data.transaction_id === null || data.transaction_id === undefined ? 'None' : String(data.transaction_id),
-            data.transaction_id === null || data.transaction_id === undefined ? 'muted' : '');
-        const held = data.held_messages || 0;
-        set('held', held ? held + ' waiting' : 'None', held ? 'warn' : 'muted');
-
-        const showCommand = (prefix, cmd) => {
-          if (!cmd) { set(prefix + '-name', 'None yet', 'muted'); document.getElementById(prefix + '-meta').textContent = ''; return; }
-          set(prefix + '-name', cmd.action + (cmd.summary ? ' — ' + cmd.summary : ''));
-          const when = cmd.timestamp ? new Date(cmd.timestamp).toLocaleTimeString() : '';
-          const rtt = cmd.round_trip_ms !== null && cmd.round_trip_ms !== undefined ? cmd.round_trip_ms + ' ms' : '';
-          document.getElementById(prefix + '-meta').textContent = [cmd.status, rtt, when].filter(Boolean).join(' · ');
-        };
-        const hb = data.last_heartbeat;
-        if (hb && hb.timestamp) {
-          const ago = Math.max(0, Math.round((Date.now() - new Date(hb.timestamp)) / 1000));
-          const stale = hb.interval_s && ago > hb.interval_s * 3;
-          set('hb', ago + 's ago' + (hb.round_trip_ms != null ? ' · ' + hb.round_trip_ms + ' ms' : ''), stale ? 'warn' : '');
-        } else {
-          set('hb', 'None yet', 'muted');
-        }
-        showCommand('rx', data.last_command_received);
-        showCommand('tx', data.last_command_sent);
-
-        document.getElementById('error').style.display = 'none';
-      } catch (e) {
-        document.getElementById('error').textContent = 'Cannot reach add-on API';
-        document.getElementById('error').style.display = 'block';
-      }
+    let found = false;
+    for (const [ours, theirs] of Object.entries(map)) {
+      const val = v(theirs);
+      if (val) { document.documentElement.style.setProperty(ours, val); found = true; }
     }
+    if (!found) return;
+    const bg = v('--primary-background-color');
+    const m = bg.match(/\d+/g);
+    if (m && m.length >= 3) {
+      const dark = (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) < 128;
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      document.documentElement.style.setProperty('--hover', dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)');
+      if (!v('--code-background-color')) document.documentElement.style.setProperty('--code', dark ? '#262626' : '#f3f3f3');
+    }
+  } catch (e) { /* not in HA, or another origin */ }
+}
 
-    refresh();
-    setInterval(refresh, 5000);
-  </script>
+// ---------- API ----------
+async function api(path, opts) {
+  const r = await fetch('./api/' + path, opts);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+async function post(path, body) {
+  try {
+    await api(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: body === undefined ? undefined : JSON.stringify(body)});
+    return true;
+  } catch (e) { toast('Failed: ' + e.message); return false; }
+}
+
+// ---------- tabs ----------
+function showTab(name) {
+  if (!document.getElementById('tab-' + name)) name = 'overview';
+  activeTab = name;
+  document.querySelectorAll('#tabs button').forEach((b) => b.setAttribute('aria-selected', b.dataset.tab === name));
+  document.querySelectorAll('main > section').forEach((s) => s.hidden = s.id !== 'tab-' + name);
+  try { history.replaceState(null, '', '#' + name); } catch (e) {}
+  refreshTab(true);
+}
+$('tabs').addEventListener('click', (e) => { if (e.target.dataset.tab) showTab(e.target.dataset.tab); });
+
+// ---------- live state (push, with polling as a fallback) ----------
+let es = null, lastEvent = 0, pollTimer = null;
+function setLive(kind, text) {
+  $('live-dot').className = 'dot ' + kind; $('live-text').textContent = text;
+}
+function startPush() {
+  if (!window.EventSource) { startPolling(); return; }
+  try { es = new EventSource('./api/events?client=gui'); } catch (e) { startPolling(); return; }
+  es.onmessage = (ev) => {
+    lastEvent = Date.now();
+    stopPolling();
+    setLive('ok', 'Live');
+    $('error').style.display = 'none';
+    try { renderState(JSON.parse(ev.data)); } catch (e) {}
+  };
+  es.onerror = () => { setLive('warn', 'Reconnecting…'); startPolling(); };
+}
+async function pollState() {
+  try {
+    renderState(await api('state'));
+    $('error').style.display = 'none';
+    if (Date.now() - lastEvent > 20000) setLive('warn', 'Polling');
+  } catch (e) {
+    $('error').style.display = 'block'; setLive('err', 'Offline');
+  }
+}
+function startPolling() { if (!pollTimer) { pollState(); pollTimer = setInterval(pollState, 5000); } }
+function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+// The stream sends at least every 10s: if it goes quiet, poll instead.
+setInterval(() => { if (lastEvent && Date.now() - lastEvent > 25000) { setLive('warn', 'Polling'); startPolling(); } }, 5000);
+
+// ---------- Overview ----------
+function renderState(s) {
+  state = s;
+  const st = s.state || 'Unknown';
+  $('o-state').textContent = st; $('o-state').className = 'state ' + stateClass(st);
+  $('o-conn-dot').className = 'dot ' + (s.connected_to_server ? 'ok' : 'err');
+  $('o-conn').textContent = s.connected_to_server ? 'Connected' : 'Disconnected';
+  $('o-tx').innerHTML = s.transaction_id === null || s.transaction_id === undefined ? '<span class="muted">None</span>'
+    : `#${esc(s.transaction_id)}` + (s.transaction_id < 0 ? ' <span class="chip warn">provisional</span>' : '');
+  const chips = [];
+  if (s.plugged_in) chips.push('<span class="chip info">Plugged in</span>');
+  if (s.held_messages) chips.push(`<span class="chip warn">${s.held_messages} held</span>`);
+  if (s.power_source === 'entity') chips.push('<span class="chip">Power from sensor</span>');
+  $('o-chips').innerHTML = chips.join(' ');
+
+  $('o-power').textContent = num(s.power_kw, 2) + ' kW';
+  $('o-power-sub').textContent = s.power_offered_kw ? `Offered ${num(s.power_offered_kw, 1)} kW` : (s.power_source === 'entity' ? 'From your power sensor' : 'Simulated');
+  const eff = s.current_amps_effective ?? s.current_amps_setting, max = s.current_amps_setting;
+  $('o-amps').textContent = num(s.current_a, 1) + ' A';
+  $('o-amps-sub').textContent = `Limit ${eff} A` + (eff < max ? ` (max ${max} A, provider)` : '') +
+    (s.current_amps_provider_limit != null ? ` · provider ${num(s.current_amps_provider_limit, 0)} A` : '');
+  if (s.soc_percent === null || s.soc_percent === undefined) {
+    $('o-soc').textContent = '—'; $('o-soc-sub').textContent = 'Not set';
+  } else {
+    $('o-soc').textContent = Math.round(s.soc_percent) + '%';
+    $('o-soc-sub').textContent = s.soc_percent >= 100 ? 'Full' : (s.plugged_in ? 'Reported to your provider' : 'Reported when plugged in');
+  }
+  $('o-energy').textContent = num(s.energy_kwh, 1) + ' kWh';
+
+  // controls (don't fight the user while they're editing)
+  $('c-plug').checked = !!s.plugged_in;
+  document.querySelectorAll('#c-amps button').forEach((b) => b.setAttribute('aria-pressed', Number(b.dataset.amps) === max));
+  $('c-power-note').textContent = s.power_source === 'entity'
+    ? 'Your power sensor is set: it replaces this on its next change'
+    : 'Report this power instead of the simulation';
+
+  renderCommand('o-rx', s.last_command_received);
+  renderCommand('o-txcmd', s.last_command_sent);
+  if (activeTab === 'overview') refreshSessionCard();
+}
+
+function renderCommand(id, c) {
+  if (!c) { $(id).innerHTML = '<span class="muted">None yet</span>'; return; }
+  const status = c.status ? `<span class="chip ${/error|reject/i.test(c.status) ? 'err' : 'ok'}">${esc(c.status)}</span>` : '<span class="chip">waiting</span>';
+  const rtt = c.round_trip_ms != null ? ` · ${c.round_trip_ms} ms` : '';
+  const recent = (c.recent || []).slice(1, 6).map((r) =>
+    `<div class="sub">${time(r.timestamp)} · ${esc(r.action)}${r.summary ? ' — ' + esc(r.summary) : ''}${r.status ? ' · ' + esc(r.status) : ''}</div>`).join('');
+  $(id).innerHTML = `<div class="row" style="gap:8px"><b>${esc(c.action)}</b>${status}</div>` +
+    (c.summary ? `<div>${esc(c.summary)}</div>` : '') +
+    `<div class="sub">${time(c.timestamp)}${rtt}</div>` +
+    (recent ? `<div style="margin-top:10px"><div class="label">Earlier</div>${recent}</div>` : '');
+}
+
+// controls
+AMPS.forEach((a) => { const b = document.createElement('button'); b.textContent = a + ' A'; b.dataset.amps = a; $('c-amps').appendChild(b); });
+$('c-amps').addEventListener('click', async (e) => {
+  const a = Number(e.target.dataset.amps); if (!a) return;
+  if (await post('current', {amps: a})) toast(`Max current set to ${a} A`);
+});
+$('c-plug').addEventListener('change', async (e) => {
+  const on = e.target.checked;
+  if (!on && state && state.transaction_id != null && !confirmInline(e.target)) return;
+  if (await post(on ? 'plug' : 'unplug')) toast(on ? 'Plugged in' : 'Unplugged');
+  else e.target.checked = !on;
+});
+// Unplugging mid-session ends it: ask by toggling twice within 4s, no dialogs.
+function confirmInline(input) {
+  if (confirmInline.armed && Date.now() - confirmInline.armed < 4000) { confirmInline.armed = 0; return true; }
+  confirmInline.armed = Date.now(); input.checked = true;
+  toast('This ends the charging session — switch off again to confirm');
+  return false;
+}
+$('c-power-set').onclick = async () => {
+  const v = parseFloat($('c-power').value);
+  if (isNaN(v) || v < 0) { toast('Enter a power in kW'); return; }
+  if (await post('power', {power_kw: v})) toast(`Reporting ${v} kW`);
+};
+$('c-power-clear').onclick = async () => { if (await post('power', {power_kw: null})) { $('c-power').value = ''; toast('Power override cleared'); } };
+$('c-soc-set').onclick = async () => {
+  const v = parseFloat($('c-soc').value);
+  if (isNaN(v) || v < 0 || v > 100) { toast('Enter a SoC from 0 to 100'); return; }
+  if (await post('soc', {soc: v})) toast(`SoC set to ${v}%`);
+};
+$('c-soc-clear').onclick = async () => { if (await post('soc', {soc: null})) { $('c-soc').value = ''; toast('SoC cleared'); } };
+
+// current session card
+let sessionsData = null;
+async function refreshSessionCard() {
+  if (refreshSessionCard.busy || Date.now() - (refreshSessionCard.at || 0) < 4000) { drawSessionCard(); return; }
+  refreshSessionCard.busy = true;
+  try { sessionsData = await api('sessions'); refreshSessionCard.at = Date.now(); } catch (e) {}
+  refreshSessionCard.busy = false;
+  drawSessionCard();
+}
+function drawSessionCard() {
+  const c = sessionsData && sessionsData.current;
+  if (!c) {
+    const last = sessionsData && sessionsData.history && sessionsData.history[0];
+    $('o-session').innerHTML = '<div class="empty">No session' + (state && state.plugged_in ? ' — waiting for your provider to start one' : '') + '</div>' +
+      (last ? `<div class="sub">Last: ${dateTime(last.start)} · ${num(last.energy_kwh, 2)} kWh · ${dur(last.duration_s)} · ${esc(last.reason || '')}</div>` : '');
+    return;
+  }
+  const avg = c.duration_s > 0 ? c.energy_kwh / (c.duration_s / 3600) : null;
+  $('o-session').innerHTML = `<div class="grid tiles" style="gap:12px;margin-bottom:12px">
+      <div><div class="label">Energy</div><div class="big">${num(c.energy_kwh, 2)} kWh</div></div>
+      <div><div class="label">Duration</div><div class="big">${dur(c.duration_s)}</div></div>
+    </div>
+    <dl class="kv">${kv([
+      ['Started', dateTime(c.start)],
+      ['Average', avg === null ? '—' : num(avg, 2) + ' kW'],
+      ['Peak', num(c.peak_power_kw, 2) + ' kW'],
+      ['Transaction', '#' + esc(c.transaction_id)],
+      ['idTag', `<code>${esc(c.id_tag)}</code>`],
+    ])}</dl>`;
+}
+
+// ---------- chart ----------
+const chart = {samples: [], series: 'power', range: 3600, lastT: 0};
+async function refreshHistory(full) {
+  try {
+    const since = full ? 0 : chart.lastT;
+    const d = await api('history?since=' + since);
+    if (full) chart.samples = d.samples; else chart.samples.push(...d.samples);
+    if (chart.samples.length) chart.lastT = chart.samples[chart.samples.length - 1].t;
+    const cutoff = Date.now() / 1000 - 6 * 3600 - 60;
+    while (chart.samples.length && chart.samples[0].t < cutoff) chart.samples.shift();
+    drawChart();
+  } catch (e) {}
+}
+function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function seriesDefs() {
+  const p = cssVar('--primary'), w = cssVar('--warn'), e = cssVar('--err'), ok = cssVar('--ok');
+  if (chart.series === 'current') return {unit: 'A', lines: [
+    {name: 'Current', color: p, fill: true, get: (s) => s.current_a},
+    {name: 'Max (HA)', color: w, dash: true, step: true, get: (s) => s.max_amps},
+    {name: 'Provider limit', color: e, dash: true, step: true, get: (s) => s.provider_limit_amps},
+  ]};
+  if (chart.series === 'soc') return {unit: '%', min: 0, max: 100, lines: [
+    {name: 'SoC', color: ok, fill: true, get: (s) => s.soc},
+  ]};
+  return {unit: 'kW', lines: [
+    {name: 'Power', color: p, fill: true, get: (s) => s.power_kw},
+    {name: 'Limit (effective current)', color: w, dash: true, step: true, get: (s) => s.effective_amps * VOLTS / 1000},
+  ]};
+}
+function drawChart() {
+  const cv = $('chart'), wrap = $('chart-wrap');
+  const dpr = window.devicePixelRatio || 1, W = wrap.clientWidth, H = wrap.clientHeight;
+  if (!W) return;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+  const defs = seriesDefs();
+  const now = Date.now() / 1000, t0 = now - chart.range;
+  const data = chart.samples.filter((s) => s.t >= t0);
+  const L = 44, R = 10, T = 10, B = 24, pw = W - L - R, ph = H - T - B;
+  let ymax = defs.max ?? 0;
+  if (defs.max === undefined) {
+    for (const s of data) for (const l of defs.lines) { const v = l.get(s); if (v != null && v > ymax) ymax = v; }
+    ymax = niceMax(ymax || (defs.unit === 'A' ? 32 : 1));
+  }
+  const ymin = defs.min ?? 0;
+  const x = (t) => L + (t - t0) / chart.range * pw;
+  const y = (v) => T + ph - (v - ymin) / (ymax - ymin) * ph;
+  const text2 = cssVar('--text2'), divider = cssVar('--divider');
+  ctx.font = '11px Roboto, sans-serif'; ctx.fillStyle = text2; ctx.strokeStyle = divider; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const v = ymin + (ymax - ymin) * i / 4, yy = Math.round(y(v)) + 0.5;
+    ctx.beginPath(); ctx.moveTo(L, yy); ctx.lineTo(W - R, yy); ctx.stroke();
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillText(fmtAxis(v) + (i === 4 ? ' ' + defs.unit : ''), L - 6, yy);
+  }
+  const step = chart.range <= 1800 ? 300 : chart.range <= 3600 ? 600 : 3600;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let t = Math.ceil(t0 / step) * step; t <= now; t += step) {
+    const d = new Date(t * 1000);
+    ctx.fillText(d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}), x(t), H - B + 6);
+  }
+  if (!data.length) {
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('Collecting data — a sample every 10 seconds', L + pw / 2, T + ph / 2);
+  }
+  const GAP = 35; // seconds: a longer gap (add-on restarted) breaks the line
+  for (const l of defs.lines) {
+    const pts = data.map((s) => [s.t, l.get(s)]);
+    if (!pts.some((p) => p[1] != null)) continue;
+    ctx.strokeStyle = l.color; ctx.lineWidth = l.dash ? 1.5 : 2; ctx.setLineDash(l.dash ? [5, 4] : []);
+    let run = [];
+    const flush = () => {
+      if (run.length) {
+        ctx.beginPath();
+        run.forEach(([t, v], i) => {
+          if (i === 0) ctx.moveTo(x(t), y(v));
+          else { if (l.step) ctx.lineTo(x(t), y(run[i - 1][1])); ctx.lineTo(x(t), y(v)); }
+        });
+        ctx.stroke();
+        if (l.fill && run.length > 1) {
+          ctx.lineTo(x(run[run.length - 1][0]), y(ymin)); ctx.lineTo(x(run[0][0]), y(ymin)); ctx.closePath();
+          ctx.globalAlpha = 0.12; ctx.fillStyle = l.color; ctx.fill(); ctx.globalAlpha = 1;
+        }
+      }
+      run = [];
+    };
+    for (const p of pts) {
+      if (p[1] == null || (run.length && p[0] - run[run.length - 1][0] > GAP)) flush();
+      if (p[1] != null) run.push(p);
+    }
+    flush();
+  }
+  ctx.setLineDash([]);
+  chart.geom = {x, y, t0, L, pw, data, defs};
+  $('chart-legend').innerHTML = defs.lines.map((l) => `<span><i class="${l.dash ? 'dash' : ''}" style="border-color:${l.color}"></i>${esc(l.name)}</span>`).join('');
+}
+function niceMax(v) {
+  const p = Math.pow(10, Math.floor(Math.log10(v))), n = v / p;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p;
+}
+const fmtAxis = (v) => Number.isInteger(v) ? String(v) : v.toFixed(v < 1 ? 2 : 1);
+$('chart-wrap').addEventListener('mousemove', (e) => {
+  const g = chart.geom, tip = $('chart-tip'); if (!g || !g.data.length) return;
+  const rect = $('chart-wrap').getBoundingClientRect(), mx = e.clientX - rect.left;
+  const t = g.t0 + (mx - g.L) / g.pw * chart.range;
+  let best = null;
+  for (const s of g.data) if (!best || Math.abs(s.t - t) < Math.abs(best.t - t)) best = s;
+  if (!best || Math.abs(best.t - t) > 60) { tip.style.display = 'none'; return; }
+  tip.innerHTML = `<b>${new Date(best.t * 1000).toLocaleTimeString()}</b><br>` + g.defs.lines.map((l) => {
+    const v = l.get(best); return `${esc(l.name)}: ${v == null ? '—' : fmtAxis(Math.round(v * 100) / 100) + ' ' + g.defs.unit}`;
+  }).join('<br>') + `<br><span class="muted">${esc(best.state)}</span>`;
+  tip.style.display = 'block';
+  const left = Math.min(Math.max(g.x(best.t) + 10, 0), rect.width - tip.offsetWidth - 4);
+  tip.style.left = left + 'px'; tip.style.top = '8px';
+});
+$('chart-wrap').addEventListener('mouseleave', () => { $('chart-tip').style.display = 'none'; });
+$('ch-series').addEventListener('click', (e) => {
+  if (!e.target.dataset.series) return; chart.series = e.target.dataset.series;
+  $('ch-series').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b === e.target)); drawChart();
+});
+$('ch-range').addEventListener('click', (e) => {
+  if (!e.target.dataset.range) return; chart.range = Number(e.target.dataset.range);
+  $('ch-range').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b === e.target)); drawChart();
+});
+window.addEventListener('resize', () => drawChart());
+
+// ---------- Sessions ----------
+async function refreshSessions() {
+  try { sessionsData = await api('sessions'); } catch (e) { return; }
+  const h = sessionsData.history || [];
+  const rows = [];
+  if (sessionsData.current) {
+    const c = sessionsData.current;
+    rows.push(`<tr><td>${dateTime(c.start)} <span class="chip ok">charging now</span></td><td class="num">${dur(c.duration_s)}</td><td class="num">${num(c.energy_kwh, 2)} kWh</td><td class="num">${num(c.peak_power_kw, 1)} kW</td><td class="muted">—</td><td class="num">${esc(c.transaction_id)}</td></tr>`);
+  }
+  for (const s of h) {
+    rows.push(`<tr><td>${dateTime(s.start)}</td><td class="num">${dur(s.duration_s)}</td><td class="num">${num(s.energy_kwh, 2)} kWh</td><td class="num">${num(s.peak_power_kw, 1)} kW</td><td>${esc(reasonText(s.reason))}</td><td class="num">${esc(s.transaction_id)}</td></tr>`);
+  }
+  $('s-rows').innerHTML = rows.join('') || '<tr><td colspan="6" class="empty">No sessions yet. They appear here once your provider starts one.</td></tr>';
+  const total = h.reduce((a, s) => a + (s.energy_kwh || 0), 0);
+  const week = h.filter((s) => Date.now() - new Date(s.start) < 7 * 86400e3).reduce((a, s) => a + (s.energy_kwh || 0), 0);
+  const avg = h.length ? total / h.length : null;
+  $('s-totals').innerHTML = [
+    ['Sessions kept', h.length],
+    ['Energy (last 7 days)', num(week, 1) + ' kWh'],
+    ['Energy (all kept)', num(total, 1) + ' kWh'],
+    ['Average session', avg === null ? '—' : num(avg, 1) + ' kWh'],
+  ].map(([l, v]) => `<div class="card"><div class="label">${l}</div><div class="big">${v}</div></div>`).join('');
+}
+function reasonText(r) {
+  return ({Remote: 'Provider (remote stop)', EVDisconnected: 'Unplugged', Reboot: 'Add-on restart', PowerLoss: 'Power cut / crash',
+    Local: 'Local', HardReset: 'Hard reset', SoftReset: 'Soft reset', UnlockCommand: 'Unlock command', DeAuthorized: 'Deauthorised'})[r] || r || '—';
+}
+
+// ---------- Messages ----------
+const msgs = {list: [], lastSeq: 0};
+async function refreshMessages() {
+  if ($('m-pause').checked) return;
+  try {
+    const d = await api('messages?after=' + msgs.lastSeq);
+    if (d.last_seq < msgs.lastSeq) msgs.list = [];
+    msgs.list.push(...d.messages);
+    if (msgs.list.length > 300) msgs.list.splice(0, msgs.list.length - 300);
+    msgs.lastSeq = d.last_seq;
+    if (d.messages.length || !msgs.drawn) drawMessages();
+  } catch (e) {}
+}
+function visibleMessages() {
+  const f = $('m-filter').value.trim().toLowerCase();
+  const hideHb = $('m-hide-hb').checked, hideMv = $('m-hide-mv').checked;
+  return msgs.list.filter((m) => {
+    if (hideHb && m.action === 'Heartbeat') return false;
+    if (hideMv && m.action === 'MeterValues') return false;
+    if (!f) return true;
+    return (m.action || '').toLowerCase().includes(f) || (m.summary || '').toLowerCase().includes(f) || JSON.stringify(m.payload).toLowerCase().includes(f);
+  });
+}
+function drawMessages() {
+  msgs.drawn = true;
+  const open = new Set([...document.querySelectorAll('#m-list details[open]')].map((d) => d.dataset.seq));
+  const list = visibleMessages().slice().reverse();
+  $('m-count').textContent = list.length;
+  $('m-list').innerHTML = list.map((m) => {
+    const arrow = m.direction === 'sent' ? '↑' : '↓';
+    const label = m.type === 'call' ? m.action : `${m.action || '?'} ${m.type === 'error' ? 'error' : 'reply'}`;
+    let summary = m.summary || '';
+    if (m.type === 'result') { const st = m.payload && (m.payload.status || (m.payload.idTagInfo && m.payload.idTagInfo.status)); summary = st || (Object.keys(m.payload || {}).length ? '' : 'OK'); }
+    if (m.type === 'error') summary = `${m.payload.errorCode} ${m.payload.errorDescription || ''}`;
+    return `<details class="msg ${m.type}" data-seq="${m.seq}" ${open.has(String(m.seq)) ? 'open' : ''}>
+      <summary><span class="t">${time(m.timestamp)}</span><span class="d ${m.direction}" title="${m.direction}">${arrow}</span><span class="a">${esc(label)}</span><span class="s">${esc(summary)}</span></summary>
+      <pre>${esc(JSON.stringify(m.payload, null, 2))}</pre><div class="sub" style="margin:-4px 0 8px 4px">id ${esc(m.message_id)}</div></details>`;
+  }).join('') || '<div class="empty">No messages match.</div>';
+}
+['m-filter', 'm-hide-hb', 'm-hide-mv'].forEach((id) => $(id).addEventListener('input', drawMessages));
+$('m-pause').addEventListener('change', () => { if (!$('m-pause').checked) refreshMessages(); });
+$('m-copy').onclick = async () => {
+  const text = visibleMessages().map((m) => JSON.stringify({time: m.timestamp, dir: m.direction, type: m.type, action: m.action, id: m.message_id, payload: m.payload})).join('\n');
+  try { await navigator.clipboard.writeText(text); toast('Copied ' + visibleMessages().length + ' messages'); }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); toast('Copied'); } catch (e2) { toast("Couldn't copy"); }
+    ta.remove();
+  }
+};
+
+// ---------- Provider ----------
+let providerData = null;
+async function refreshProvider() {
+  try { providerData = await api('provider'); } catch (e) { return; }
+  const p = providerData;
+  $('p-limits').innerHTML = kv([
+    ['Provider limit', p.provider_limit_amps == null ? '<span class="muted">None set</span>' : `${num(p.provider_limit_amps, 0)} A <span class="badge">chargingALimitConn1</span>`],
+    ['Your max (HA)', `${p.max_amps} A`],
+    ['Charging at', `<b>${p.effective_amps} A</b> (~${num(p.effective_amps * VOLTS / 1000, 1)} kW)`],
+    ['Profile limit now', p.profile_limit_kw == null ? '<span class="muted">No active profile</span>' : (p.profile_limit_kw === 0 ? 'Pause (0 kW)' : num(p.profile_limit_kw, 1) + ' kW')],
+  ]);
+  const tags = p.local_auth_list || [];
+  $('p-local').innerHTML = `<div class="sub" style="margin-bottom:8px">Version ${esc(p.local_list_version)}</div>` + (tags.length
+    ? tags.map((t) => `<div class="row" style="gap:8px;margin-top:4px"><code>${esc(t.id_tag || t.idTag)}</code><span class="chip ${((t.id_tag_info || t.idTagInfo || {}).status || '') === 'Accepted' ? 'ok' : ''}">${esc((t.id_tag_info || t.idTagInfo || {}).status || 'listed')}</span></div>`).join('')
+    : '<div class="empty">Empty</div>');
+  $('p-profiles').innerHTML = (p.charging_profiles || []).length ? p.charging_profiles.map(profileHtml).join('<hr style="border:0;border-top:1px solid var(--divider);margin:16px 0">')
+    : '<div class="empty">No charging profile. Your provider usually sends one with each RemoteStart (Octopus: TxProfile 32 A), and it\'s cleared when the session ends.</div>';
+  drawConfig();
+}
+function profileHtml(pr) {
+  const periods = (pr.periods || []).slice().sort((a, b) => a.start_period - b.start_period);
+  const unit = pr.unit === 'A' ? 'A' : 'W';
+  const total = pr.duration_s || (periods.length > 1 ? periods[periods.length - 1].start_period + 3600 : 3600 * 24);
+  const maxLimit = Math.max(1, ...periods.map((p) => p.limit || 0));
+  const segs = periods.map((p, i) => {
+    const end = i + 1 < periods.length ? periods[i + 1].start_period : total;
+    const w = Math.max(0.5, (end - p.start_period) / total * 100);
+    const shade = p.limit ? 0.45 + 0.55 * (p.limit / maxLimit) : 0;
+    const bg = p.limit ? `color-mix(in srgb, var(--primary) ${Math.round(shade * 100)}%, transparent)` : 'var(--err)';
+    return `<div style="width:${w}%;background:${bg}" title="from +${dur(p.start_period)}: ${p.limit} ${unit}">${p.limit === 0 ? 'pause' : esc(p.limit) + ' ' + unit}</div>`;
+  }).join('');
+  const startTxt = pr.start ? dateTime(pr.start) : (pr.kind === 'Relative' ? 'When the session starts' : '—');
+  return `<div class="row" style="gap:8px"><b>${esc(pr.purpose)}</b><span class="chip">${esc(pr.kind)}</span><span class="badge">id ${esc(pr.profile_id)} · stack ${esc(pr.stack_level)}</span></div>
+    <div class="timeline">${segs || '<div style="width:100%;color:var(--text2)">No periods</div>'}</div>
+    <div class="timeline-axis"><span>${esc(startTxt)}</span><span>${pr.duration_s ? '+' + dur(pr.duration_s) : 'open-ended'}</span></div>
+    <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>From</th><th class="num">Limit</th><th class="num">≈ Power</th></tr></thead><tbody>
+    ${periods.map((p) => `<tr><td>+${dur(p.start_period)}${pr.start ? ' <span class="muted">(' + time(new Date(new Date(pr.start).getTime() + p.start_period * 1000).toISOString()) + ')</span>' : ''}</td><td class="num">${esc(p.limit)} ${unit}</td><td class="num">${num(unit === 'A' ? p.limit * VOLTS / 1000 : p.limit / 1000, 1)} kW</td></tr>`).join('')}
+    </tbody></table></div>` + (pr.min_rate != null ? `<div class="note">Minimum rate ${esc(pr.min_rate)} ${unit}</div>` : '');
+}
+function drawConfig() {
+  if (!providerData) return;
+  const only = $('p-only-server').checked;
+  $('p-config').innerHTML = providerData.configuration.filter((c) => !only || c.set_by_server).map((c) =>
+    `<tr><td>${esc(c.key)}${c.set_by_server ? '<span class="badge server">set by provider</span>' : ''}${c.readonly ? '<span class="badge">read-only</span>' : ''}</td><td style="overflow-wrap:anywhere">${esc(c.value) || '<span class="muted">empty</span>'}</td></tr>`).join('');
+}
+$('p-only-server').addEventListener('change', drawConfig);
+
+// ---------- Health ----------
+async function refreshHealth() {
+  let h;
+  try { h = await api('health'); } catch (e) { return; }
+  $('h-addon').innerHTML = kv([
+    ['Version', esc(h.version)],
+    ['Running for', dur(h.uptime_s)],
+    ['Started', dateTime(h.started)],
+    ['Chargepoint ID', `<code>${esc(h.chargepoint_id)}</code>`],
+  ]);
+  const ld = h.last_disconnect;
+  $('h-conn').innerHTML = kv([
+    ['Status', h.connected_to_server ? '<span class="chip ok">Connected</span>' : '<span class="chip err">Disconnected</span>'],
+    ['Server', esc(h.server)],
+    ['Connected for', h.connected_for_s == null ? '—' : dur(h.connected_for_s)],
+    ['Reconnects', `${h.reconnects} since start`],
+    ['Last drop', ld ? `${dateTime(ld.timestamp)} <span class="muted">(${ago(ld.timestamp)})</span><div class="sub">${esc(ld.reason)}</div>` : '<span class="muted">None</span>'],
+  ]);
+  const hb = h.last_heartbeat;
+  const off = hb && hb.clock_offset_s;
+  $('h-hb').innerHTML = hb ? kv([
+    ['Last', `${ago(hb.timestamp)}`],
+    ['Interval', hb.interval_s + ' s'],
+    ['Round trip', hb.round_trip_ms + ' ms'],
+    ['Server clock', off == null ? '—' : (Math.abs(off) < 2 ? `In sync (${off > 0 ? '+' : ''}${off} s)` : `<span class="chip warn">${off > 0 ? '+' : ''}${off} s</span> vs this add-on`)],
+  ]) : '<div class="empty">None yet</div>';
+  const streams = h.event_streams || {};
+  $('h-ha').innerHTML = kv([
+    ['Integration', streams.integration > 0 ? '<span class="chip ok">Push updates connected</span>' : '<span class="chip warn">Not connected</span><div class="sub">Polling, or the integration isn\'t set up</div>'],
+    ['Pages open', String(streams.gui || 0)],
+    ['Power source', state ? (state.power_source === 'entity' ? 'Your power sensor' : 'Simulated') : '—'],
+  ]);
+  const held = h.held_messages || [];
+  $('h-held').innerHTML = held.length
+    ? '<div class="sub" style="margin-bottom:8px">Waiting to be sent to your provider, oldest first.</div>' + held.map((m) => `<div class="row" style="gap:8px;margin-top:4px"><b>${esc(m.action)}</b><span class="muted">${esc(m.summary)}</span></div>`).join('')
+    : '<div class="empty">None. Transaction messages are held here if the connection drops, and sent when it\'s back.</div>';
+}
+
+// ---------- refresh loop ----------
+function refreshTab(full) {
+  if (activeTab === 'overview') { refreshSessionCard(); refreshHistory(full && !chart.samples.length); }
+  else if (activeTab === 'sessions') refreshSessions();
+  else if (activeTab === 'messages') refreshMessages();
+  else if (activeTab === 'provider') refreshProvider();
+  else if (activeTab === 'health') refreshHealth();
+}
+setInterval(() => {
+  if (document.hidden) return;
+  if (activeTab === 'messages') refreshMessages();
+}, 2000);
+setInterval(() => { if (!document.hidden) refreshTab(false); }, 10000);
+// keep the chart's history filling in while on other tabs
+setInterval(() => { if (!document.hidden && activeTab !== 'overview') refreshHistory(false); }, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshTab(false); });
+
+applyHaTheme();
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { applyHaTheme(); drawChart(); });
+showTab((location.hash || '#overview').slice(1));
+refreshHistory(true);
+startPush();
+pollState();
+</script>
 </body>
 </html>

@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.1.0
+
+- **New web GUI** (the add-on's page in the sidebar), with five tabs:
+  - **Overview:** live state, power, current, SoC and energy; controls
+    (Plugged In, max current, power override, test SoC); the current session;
+    and a power / current / SoC chart for the last 30 min to 6 hours.
+  - **Sessions:** the last 20 sessions with energy, duration, peak power and
+    how they ended, saved in `/data/sessions.json`.
+  - **Messages:** a live log of the last 300 OCPP messages, filterable, with
+    the full JSON and a Copy button.
+  - **Provider:** charging limits, charging profiles as a timeline, the local
+    authorisation list and all configuration keys (what your provider set is
+    marked).
+  - **Health:** version, uptime, reconnects and the last disconnect reason,
+    heartbeat and clock offset, HA integration push status, held messages.
+- The page uses push updates instead of refreshing every 5 seconds, falling
+  back to polling if the stream drops, and follows your HA theme.
+- New read-only API endpoints for the page: `/api/messages`, `/api/sessions`,
+  `/api/history`, `/api/provider` and `/api/health`.
+
 ## 1.0.5
 
 - **Plugged In is remembered across an add-on restart**, like a cable left in

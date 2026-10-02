@@ -183,9 +183,25 @@ SoC sensors are sent to the add-on straight away. If push updates aren't
 available (e.g. an older add-on) the integration polls every 10 seconds
 instead.
 
-The add-on's own page (sidebar) shows the connection, state, power, energy,
-car SoC, the current transaction, any held messages and the last command
-received from and sent to your provider.
+## Web GUI
+
+Open the add-on from the sidebar (or **Open Web UI**). It updates live and
+follows your Home Assistant theme.
+
+- **Overview:** state, power, current, SoC and energy; controls for Plugged
+  In, max current, a power override and a test SoC; the current session;
+  and a chart of power, current (with your max and the provider limit) or
+  SoC over the last 30 minutes to 6 hours.
+- **Sessions:** the last 20 charging sessions (energy, duration, peak
+  power, what ended them), kept across restarts.
+- **Messages:** the last 300 OCPP messages both ways, with a filter, full
+  JSON on click and a Copy button for sharing.
+- **Provider:** what your provider has set: charging limits, charging
+  profiles drawn as a timeline, the local authorisation list and every
+  configuration key.
+- **Health:** version, uptime, reconnects and the last drop's reason,
+  heartbeat and clock offset, whether the HA integration's push updates are
+  connected, and any held messages.
 
 ## Getting your OCPP credentials
 
