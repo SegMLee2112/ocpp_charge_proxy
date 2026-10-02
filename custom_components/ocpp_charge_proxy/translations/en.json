@@ -34,9 +34,17 @@
         "title": "OCPP Charge Proxy Options",
         "data": {
           "power_entity": "Power sensor (optional)",
-          "soc_entity": "Car battery (SoC) sensor (optional)"
+          "soc_entity": "Car battery (SoC) sensor (optional)",
+          "auto_plug": "Plug in automatically when the car's SoC drops low",
+          "auto_plug_entity": "SoC sensor to watch for auto plug-in (optional)",
+          "auto_plug_soc": "Plug in below this SoC"
         },
-        "description": "Optional: a power sensor to report real power instead of the simulation, and a car battery (SoC) sensor to report the car's charge level to your provider. When the SoC sensor reads 100%, the charger reports the car as full (SuspendedEV). Clear a field to stop using it."
+        "description": "Optional: a power sensor to report real power instead of the simulation, and a car battery (SoC) sensor to report the car's charge level to your provider. When the SoC sensor reads 100%, the charger reports the car as full (SuspendedEV). Clear a field to stop using it.",
+        "data_description": {
+          "auto_plug": "Switches Plugged In on once when the watched SoC drops below the level below; it won't plug back in if you unplug by hand while the SoC is still low.",
+          "auto_plug_soc": "SoC (%) below which Plugged In is switched on.",
+          "auto_plug_entity": "Leave empty to watch the car battery (SoC) sensor above. Set a different one to watch it only for auto plug-in: it is never reported to your provider (useful for a car that may be away from home)."
+        }
       }
     }
   }

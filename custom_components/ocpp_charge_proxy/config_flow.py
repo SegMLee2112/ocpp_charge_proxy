@@ -17,7 +17,16 @@ try:
 except ImportError:
     HassioServiceInfo = None  # Supervisor not available (HA Core standalone)
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.selector import EntitySelector, EntitySelectorConfig
+from homeassistant.helpers.selector import (
+    BooleanSelector,
+    EntitySelector,
+    EntitySelectorConfig,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+)
+
+from .autoplug import DEFAULT_AUTO_PLUG_SOC
 
 from .const import DOMAIN
 
@@ -238,13 +247,31 @@ class OCPPChargeProxyOptionsFlow(_OptionsBase):
         """Manage options."""
         if user_input is not None:
             # A cleared picker is simply missing: store "" so it's unset
-            return self.async_create_entry(title="", data=_entity_options(user_input))
+            return self.async_create_entry(title="", data={
+                **_entity_options(user_input),
+                "auto_plug": bool(user_input.get("auto_plug", False)),
+                "auto_plug_entity": user_input.get("auto_plug_entity") or "",
+                "auto_plug_soc": int(user_input.get("auto_plug_soc", DEFAULT_AUTO_PLUG_SOC)),
+            })
 
         options = self._config_entry.options
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(_entity_fields(
-                power=options.get("power_entity", ""),
-                soc=options.get("soc_entity", ""),
-            )),
+            data_schema=vol.Schema({
+                **_entity_fields(
+                    power=options.get("power_entity", ""),
+                    soc=options.get("soc_entity", ""),
+                ),
+                vol.Optional("auto_plug", default=options.get("auto_plug", False)): BooleanSelector(),
+                vol.Optional(
+                    "auto_plug_entity",
+                    description={"suggested_value": options.get("auto_plug_entity") or None},
+                ): SOC_SELECTOR,
+                vol.Optional(
+                    "auto_plug_soc", default=options.get("auto_plug_soc", DEFAULT_AUTO_PLUG_SOC),
+                ): NumberSelector(NumberSelectorConfig(
+                    min=1, max=99, step=1, unit_of_measurement="%",
+                    mode=NumberSelectorMode.SLIDER,
+                )),
+            }),
         )

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.9.6
+
+- New integration option: **plug in automatically when the car's SoC drops
+  low**, with an adjustable threshold (1-99%, default 30%). Off by default.
+  When the watched SoC drops below the threshold, Plugged In is switched on,
+  so the provider can schedule a charge.
+- It can watch its own SoC sensor, separate from the one reported to the
+  provider: useful when the car may be away from home, where its SoC
+  shouldn't be reported as the charging car's. The watched sensor is never
+  sent to the provider. Left empty, it watches the reported SoC sensor.
+- It triggers on the drop, not while the SoC is low: if you unplug by hand at
+  a low SoC it won't plug straight back in, and restarting Home Assistant with
+  a low SoC doesn't plug in either. It re-arms once the SoC is back at or
+  above the threshold. Nothing happens if already plugged in.
+
 ## 0.9.5
 
 - New integration sensor **SoC Source**, alongside Power Source. Shows where

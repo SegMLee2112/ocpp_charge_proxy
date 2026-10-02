@@ -18,6 +18,7 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
+from .autoplug import DEFAULT_AUTO_PLUG_SOC, AutoPlug
 from .const import PUSH_FALLBACK_SCAN_INTERVAL, SCAN_INTERVAL
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,9 @@ class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
         api_url: str,
         power_entity: str = "",
         soc_entity: str = "",
+        auto_plug: bool = False,
+        auto_plug_soc: float = DEFAULT_AUTO_PLUG_SOC,
+        auto_plug_entity: str = "",
     ) -> None:
         super().__init__(
             hass,
@@ -53,6 +57,11 @@ class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
         self._api_url = api_url
         self._power_entity = power_entity
         self._soc_entity = soc_entity
+        # Auto plug-in watches its own SoC sensor if one is set (e.g. a car that
+        # may be away from home), else the reported SoC sensor. The monitor
+        # sensor is never sent to the add-on / provider.
+        self._auto_plug_entity = auto_plug_entity or soc_entity
+        self._auto_plug = AutoPlug(bool(auto_plug and self._auto_plug_entity), auto_plug_soc)
         self._session = async_get_clientsession(hass)
         self.push_connected = False
 
@@ -109,9 +118,31 @@ class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
                 soc = None
             await self._post("/api/soc", {"soc": soc})
 
+    async def _check_auto_plug(self) -> None:
+        if not self._auto_plug.enabled:
+            return
+        soc = self._entity_number(self._auto_plug_entity)
+        if soc is not None and not 0 <= soc <= 100:
+            soc = None
+        plugged_in = (self.data or {}).get("plugged_in")
+        if not self._auto_plug.should_plug(soc, plugged_in):
+            return
+        logger.info(
+            "Car SoC %.0f%% dropped below %.0f%%: switching Plugged In on",
+            soc, self._auto_plug.threshold,
+        )
+        try:
+            await self.send_command("/api/plug")
+        except HomeAssistantError as err:
+            logger.warning("Auto plug-in failed: %s", err)
+            self._auto_plug.armed = True  # try again on the next reading
+            return
+        await self.async_request_refresh()
+
     async def _push_entity_values(self) -> None:
         await self._push_power()
         await self._push_soc()
+        await self._check_auto_plug()
 
     @callback
     def async_start(self) -> None:
@@ -122,18 +153,20 @@ class OCPPChargeProxyCoordinator(DataUpdateCoordinator):
             entry.async_create_background_task(
                 self.hass, self._post("/api/soc", {"soc": None}), "ocpp_charge_proxy_clear_soc",
             )
-        tracked = {
-            e: push for e, push in (
-                (self._power_entity, self._push_power),
-                (self._soc_entity, self._push_soc),
-            ) if e
-        }
+        # entity -> what to do when it changes (one sensor can do both SoC jobs)
+        tracked: dict[str, list] = {}
+        for entity, action in (
+            (self._power_entity, self._push_power),
+            (self._soc_entity, self._push_soc),
+            (self._auto_plug_entity if self._auto_plug.enabled else "", self._check_auto_plug),
+        ):
+            if entity:
+                tracked.setdefault(entity, []).append(action)
         if tracked:
             @callback
             def _changed(event: Event) -> None:
-                push = tracked.get(event.data["entity_id"])
-                if push is not None:
-                    self.hass.async_create_task(push())
+                for action in tracked.get(event.data["entity_id"], ()):
+                    self.hass.async_create_task(action())
 
             entry.async_on_unload(
                 async_track_state_change_event(self.hass, list(tracked), _changed)

@@ -151,6 +151,19 @@ In the integration's settings (Configure), you can optionally set:
 
 Clear a field to stop using that sensor.
 
+You can also turn on **Plug in automatically when the car's SoC drops low**
+and choose the threshold (default 30%). When the SoC drops below it, Plugged
+In is switched on so your provider can schedule a charge. It triggers once
+per drop: unplugging by hand while the SoC is still low won't plug it back
+in, and it re-arms once the SoC is back above the threshold.
+
+By default it watches the car battery (SoC) sensor above. You can pick a
+different **SoC sensor to watch for auto plug-in** instead. That sensor is
+only watched, never reported to your provider, which is useful if the car
+may be away from home: you can watch its SoC without it being sent as the
+charging car's state of charge (leave the reported SoC sensor empty to send
+none at all).
+
 The add-on pushes its state to the integration as it changes, so entities
 update within a second or so (live power every 10s). Changes to the power and
 SoC sensors are sent to the add-on straight away. If push updates aren't

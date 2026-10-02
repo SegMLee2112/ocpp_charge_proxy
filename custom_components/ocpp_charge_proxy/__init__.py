@@ -3,6 +3,7 @@
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
+from .autoplug import DEFAULT_AUTO_PLUG_SOC
 from .const import DOMAIN
 from .coordinator import OCPPChargeProxyCoordinator
 
@@ -17,6 +18,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         api_url=entry.data["api_url"],
         power_entity=entry.options.get("power_entity", ""),
         soc_entity=entry.options.get("soc_entity", ""),
+        auto_plug=entry.options.get("auto_plug", False),
+        auto_plug_soc=entry.options.get("auto_plug_soc", DEFAULT_AUTO_PLUG_SOC),
+        auto_plug_entity=entry.options.get("auto_plug_entity", ""),
     )
     await coordinator.async_config_entry_first_refresh()
     coordinator.async_start()  # push updates + entity tracking
