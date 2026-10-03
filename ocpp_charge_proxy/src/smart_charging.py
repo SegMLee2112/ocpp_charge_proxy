@@ -13,7 +13,13 @@ Both use the same attributes: planned_dispatches / started_dispatches /
 completed_dispatches, each a list of {start, end, charge_in_kwh, source}.
 The add-on looks through HA's states for any binary sensor carrying them, so
 a renamed entity, or another integration using the same format, is found
-too. Nothing to set up; if none is found the page says so.
+too.
+
+- E.ON Next (the eon_next integration) publishes a sensor named
+  "<charger serial> Smart Charging Schedule" with a `schedule` attribute:
+  a list of {start, end, type, energy_added_kwh} (planned slots only).
+
+Nothing to set up; if none is found the page says so.
 
 Kept free of I/O so it can be tested on its own; HaLink fetches the states.
 """
@@ -27,6 +33,7 @@ PROVIDERS = (  # entity ID prefix -> name shown on the page
     ("binary_sensor.octopus_energy_", "Octopus Energy"),
     ("binary_sensor.edf_energy_", "EDF Energy"),
 )
+EON_SUFFIX = "smart_charging_schedule"  # sensor.<serial>_smart_charging_schedule
 
 
 def _ts(value) -> Optional[float]:
@@ -57,7 +64,7 @@ def _slots(items) -> list[dict]:
         start, end = _ts(item.get("start")), _ts(item.get("end"))
         if start is None or end is None or end <= start:
             continue
-        kwh = item.get("charge_in_kwh")
+        kwh = item.get("charge_in_kwh", item.get("energy_added_kwh"))
         try:
             kwh = None if kwh is None else round(float(kwh), 2)
         except (TypeError, ValueError):
@@ -83,22 +90,31 @@ def _merge(slots: list[dict]) -> list[dict]:
     return merged
 
 
+def _is_eon(st: dict) -> bool:
+    return (str(st.get("entity_id", "")).startswith("sensor.") and EON_SUFFIX in st["entity_id"]
+            and isinstance((st.get("attributes") or {}).get("schedule"), list))
+
+
 def provider_name(entity_id: str) -> str:
     for prefix, name in PROVIDERS:
         if entity_id.startswith(prefix):
             return name
+    if entity_id.startswith("sensor.") and EON_SUFFIX in entity_id:
+        return "E.ON Next"
     return "Your supplier"
 
 
 def find_dispatch_sensors(states: list[dict]) -> list[dict]:
-    """Binary sensors with a planned_dispatches list, known suppliers first."""
+    """Supplier smart charging sensors (Kraken dispatching binary sensors, or
+    E.ON Next's schedule sensor), known suppliers first."""
     found = [
         st for st in states or []
-        if str(st.get("entity_id", "")).startswith("binary_sensor.")
-        and isinstance((st.get("attributes") or {}).get("planned_dispatches"), list)
+        if (str(st.get("entity_id", "")).startswith("binary_sensor.")
+            and isinstance((st.get("attributes") or {}).get("planned_dispatches"), list))
+        or _is_eon(st)
     ]
     known = [p for p, _ in PROVIDERS]
-    found.sort(key=lambda st: (not any(st["entity_id"].startswith(p) for p in known), st["entity_id"]))
+    found.sort(key=lambda st: (not (any(st["entity_id"].startswith(p) for p in known) or _is_eon(st)), st["entity_id"]))
     return found
 
 
@@ -109,7 +125,9 @@ def smart_charging(states: list[dict], now: float) -> dict:
         return {"found": False}
     st = sensors[0]
     attrs = st.get("attributes") or {}
-    planned = _merge(_slots(attrs.get("planned_dispatches")) + _slots(attrs.get("started_dispatches")))
+    planned = _merge(sorted(
+        _slots(attrs.get("planned_dispatches")) + _slots(attrs.get("started_dispatches")) + _slots(attrs.get("schedule")),
+        key=lambda s: s["_s"]))
     completed = _merge(_slots(attrs.get("completed_dispatches")))
     current = next((s for s in planned if s["_s"] <= now < s["_e"]), None)
     upcoming = [s for s in planned if s["_s"] > now]
@@ -124,7 +142,7 @@ def smart_charging(states: list[dict], now: float) -> dict:
         "provider": provider_name(st["entity_id"]),
         "entity_id": st["entity_id"],
         "name": attrs.get("friendly_name") or st["entity_id"],
-        "dispatching": st.get("state") == "on",
+        "dispatching": st.get("state") == "on" or current is not None,
         "current": clean([current])[0] if current else None,
         "planned": clean(upcoming),
         "planned_kwh": round(sum(s["charge_kwh"] or 0 for s in upcoming), 2) if any(

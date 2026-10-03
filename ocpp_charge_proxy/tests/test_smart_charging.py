@@ -57,3 +57,16 @@ def test_bad_items_ignored():
     sensor["attributes"]["planned_dispatches"] = [{"start": "x", "end": None}, "junk",
                                                   {"start": _iso(NOW + 60), "end": _iso(NOW + 30)}]
     assert smart_charging([sensor], NOW)["planned"] == []
+
+
+def test_eon_next_schedule_sensor():
+    eon = {"entity_id": "sensor.ab12345_smart_charging_schedule", "state": "Active",
+           "attributes": {"schedule": [
+               {"start": _iso(NOW + 3600), "end": _iso(NOW + 7200), "type": "SMART", "energy_added_kwh": 3.2},
+               {"start": _iso(NOW - 60), "end": _iso(NOW + 600), "type": "SMART", "energy_added_kwh": 0.5}]}}
+    lookalike = {"entity_id": "sensor.bins_schedule", "state": "x", "attributes": {"schedule": []}}
+    assert [s["entity_id"] for s in find_dispatch_sensors([lookalike, eon])] == [eon["entity_id"]]
+    out = smart_charging([eon], NOW)
+    assert out["provider"] == "E.ON Next" and out["dispatching"] is True
+    assert out["current"]["charge_kwh"] == 0.5
+    assert [p["charge_kwh"] for p in out["planned"]] == [3.2]

@@ -43,6 +43,17 @@ class SharedState:
     schedule_enabled: bool = False
     schedule_next: Optional[dict] = None  # {time, action, entry_id}
     replug: Optional[dict] = None  # {enabled, after_min, attempts, status, ...}
+    # Your supplier has a charge slot running or planned (None: no supplier
+    # integration to tell, src/smart_charging.py)
+    scheduled: Optional[bool] = None
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+def display_status(shared) -> str:
+    """The add-on's status: the OCPP state ("Charging", not
+    "ChargePointStatus.charging"), or "Scheduled" while plugged in (Preparing)
+    with a charge slot planned by your supplier."""
+    state = str(getattr(shared.state, "value", shared.state))
+    return "Scheduled" if state == "Preparing" and shared.scheduled else state

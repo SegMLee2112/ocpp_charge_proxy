@@ -226,3 +226,48 @@ def test_loop_runs_schedule_and_publishes():
     assert state.replug["status"] == "waiting"
     assert state.schedule_next["action"] == "plug"
     json.dumps(state.to_dict())  # serialisable for the API
+
+
+def test_no_replug_while_supplier_has_a_slot_planned():
+    a, clock = _automation(options=ReplugOptions(True, 10, 3))
+    assert not a.replug_due(True, False, True, scheduled=False)  # plugged in, nothing planned yet
+    clock.advance(minutes=5)
+    # Octopus plans a slot for tonight: no re-plug, however long until it starts
+    assert not a.replug_due(True, False, True, scheduled=True)
+    assert a.replug_status()["status"] == "scheduled"
+    clock.advance(hours=3)
+    assert not a.replug_due(True, False, True, scheduled=True)
+    # The plan is dropped: the wait starts again from now
+    assert not a.replug_due(True, False, True, scheduled=False)
+    assert a.replug_status()["status"] == "waiting"
+    clock.advance(minutes=10)
+    assert a.replug_due(True, False, True, scheduled=False)
+
+
+def test_replug_without_supplier_info_waits_for_a_session():
+    a, clock = _automation(options=ReplugOptions(True, 10, 3))
+    a.replug_due(True, False, True, scheduled=None)
+    clock.advance(minutes=10)
+    assert a.replug_due(True, False, True, scheduled=None)
+
+
+def test_automation_loop_publishes_scheduled():
+    from src.automation import automation_loop
+    from src.shared_state import SharedState, display_status
+    a, clock = _automation()
+    state = SharedState(state="Preparing", plugged_in=True, connected_to_server=True)
+
+    async def noop(source=None):
+        pass
+
+    async def one_tick():
+        task = asyncio.ensure_future(automation_loop(a, state, noop, noop, tick_s=60, scheduled=lambda: True))
+        await asyncio.sleep(0.05)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    _run(one_tick())
+    assert state.scheduled is True and display_status(state) == "Scheduled"
+    assert state.replug["status"] == "scheduled"
+    state.state = "Charging"
+    assert display_status(state) == "Charging"

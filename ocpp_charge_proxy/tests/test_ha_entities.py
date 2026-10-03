@@ -148,6 +148,8 @@ class FakeHA:
         if t == "config/entity_registry/list":
             result = self.registry + ([{"entity_id": f"input_boolean.{HELPER_ID}", "platform": "input_boolean",
                                         "unique_id": HELPER_ID}] if self.helpers else [])
+        elif t == "get_states":
+            result = getattr(self, "all_states", [])
         elif t == "input_boolean/list":
             result = self.helpers
         elif t == "input_boolean/create":
@@ -160,8 +162,10 @@ class FakeHA:
         elif t == "subscribe_entities":
             self.sub = i
             self.inbox.put_nowait(Msg({"type": "result", "id": i, "success": True}))
+            known = {st["entity_id"]: st for st in getattr(self, "all_states", [])}
             self.inbox.put_nowait(Msg({"type": "event", "id": i, "event": {"a": {
-                e: {"s": self.helper_state if e.startswith("input_boolean") else "50", "a": {}}
+                e: ({"s": known[e]["state"], "a": known[e]["attributes"]} if e in known else
+                    {"s": self.helper_state if e.startswith("input_boolean") else "50", "a": {}})
                 for e in msg["entity_ids"]}}}))
             return
         self.inbox.put_nowait(Msg({"type": "result", "id": i, "success": ok, "result": result}))
@@ -267,3 +271,32 @@ def test_status_and_limit_sensors_posted_on_change():
     pub.forget("sensor.ocpp_charge_proxy_status")  # a failed post is sent again
     assert [e for e, _, _ in pub.due(st, 1003.0)] == ["sensor.ocpp_charge_proxy_status"]
     assert len(SensorPublisher.unavailable()) == 5
+
+
+def test_status_sensor_says_scheduled():
+    pub = SensorPublisher()
+    st = SharedState(state="Preparing", scheduled=True)
+    due = {e: v for e, v, _ in pub.due(st, 1000.0)}
+    assert due["sensor.ocpp_charge_proxy_status"] == "Scheduled"
+    st.scheduled = False
+    assert {e: v for e, v, _ in pub.due(st, 1001.0)}["sensor.ocpp_charge_proxy_status"] == "Preparing"
+
+
+def test_supplier_dispatch_sensor_found_and_followed():
+    fake = FakeHA(helper_exists=True)
+    sensor = "binary_sensor.octopus_energy_x_intelligent_dispatching"
+    fake.all_states = [{"entity_id": sensor, "state": "off", "attributes": {"planned_dispatches": [
+        {"start": "2099-01-01T23:30:00+00:00", "end": "2099-01-02T05:30:00+00:00", "charge_in_kwh": -20.0}]}}]
+    link, _, _ = _scenario(fake, [])
+    assert link.dispatch_entities == [sensor]
+    sub = next(m for m in fake.sent if m.get("type") == "subscribe_entities")
+    assert sensor in sub["entity_ids"]
+    info = link.smart_charging()
+    assert info["found"] and info["provider"] == "Octopus Energy" and len(info["planned"]) == 1
+    assert link.scheduled() is True
+
+
+def test_no_supplier_sensor():
+    fake = FakeHA(helper_exists=True)
+    link, _, _ = _scenario(fake, [])
+    assert link.smart_charging() == {"found": False} and link.scheduled() is None

@@ -20,6 +20,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Callable, Optional
 
+from src.shared_state import display_status
 from src.traffic import summarise_command
 
 logger = logging.getLogger(__name__)
@@ -372,7 +373,7 @@ class PowerHistory:
             "max_amps": state.current_amps_setting,
             "effective_amps": state.current_amps_effective,
             "provider_limit_amps": state.current_amps_provider_limit,
-            "state": str(getattr(state.state, "value", state.state)),
+            "state": display_status(state),
         }
         self._samples.append(entry)
         return entry

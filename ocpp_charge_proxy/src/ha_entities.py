@@ -10,7 +10,8 @@
   (sensor.ocpp_charge_proxy_power / _energy / _current), with the device and
   state classes the Energy dashboard needs. They're "unavailable" while the
   add-on is stopped, and re-posted when it (or HA) restarts.
-- Status (the OCPP state: Charging, Preparing...) and Current limit (the
+- Status (the OCPP state: Charging, Preparing..., or Scheduled while plugged
+  in with a slot planned by your supplier) and Current limit (the
   current the charger uses, with your max and the provider's limit as
   attributes). HA records all of these, and the web page's charts and daily
   energy are read back from that history (src/ha_history.py).
@@ -22,6 +23,8 @@ talking.
 from __future__ import annotations
 
 from typing import Optional
+
+from src.shared_state import display_status
 
 HELPER_ID = "ocpp_charge_proxy_plugged_in"
 HELPER_NAME = "OCPP Charge Proxy Plugged In"
@@ -56,10 +59,6 @@ LIMIT_ATTRS = {
 }
 ALL_SENSORS = [e for e, _, _ in SENSORS.values()] + [STATUS_SENSOR, LIMIT_SENSOR]
 
-
-def status_text(state) -> str:
-    """"Charging", not "ChargePointStatus.charging"."""
-    return str(getattr(state, "value", state))
 
 
 class PluggedInSync:
@@ -125,7 +124,7 @@ class SensorPublisher:
             "provider_limit_amps": shared_state.current_amps_provider_limit,
         }
         for entity_id, value, attrs in (
-            (STATUS_SENSOR, status_text(shared_state.state), STATUS_ATTRS),
+            (STATUS_SENSOR, display_status(shared_state), STATUS_ATTRS),
             (LIMIT_SENSOR, str(shared_state.current_amps_effective), limit_attrs),
         ):
             key = (value, tuple(sorted((k, str(v)) for k, v in attrs.items())))

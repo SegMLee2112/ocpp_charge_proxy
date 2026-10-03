@@ -35,7 +35,7 @@ def test_to_dict_includes_all_fields():
         "soc_percent", "held_messages",
         "current_amps_effective", "current_amps_provider_limit",
         "last_heartbeat",
-        "schedule_enabled", "schedule_next", "replug",
+        "schedule_enabled", "schedule_next", "replug", "scheduled",
         "start_delay_s", "ramp_up_s",
     }
     assert set(d.keys()) == expected_keys

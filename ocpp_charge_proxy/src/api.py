@@ -417,7 +417,7 @@ async def handle_smart_charging(request: web.Request) -> web.Response:
     if link is None or not link.available:
         return web.json_response({"found": False, "error": "Not connected to Home Assistant"})
     try:
-        return web.json_response(await link.smart_charging(), dumps=_dumps)
+        return web.json_response(link.smart_charging(), dumps=_dumps)
     except Exception as err:
         return web.json_response({"found": False, "error": f"Couldn't read Home Assistant's states: {err}"})
 

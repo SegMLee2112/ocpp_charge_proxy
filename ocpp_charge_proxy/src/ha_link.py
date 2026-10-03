@@ -24,7 +24,7 @@ import time
 from typing import Awaitable, Callable, Optional
 
 from src.autoplug import DEFAULT_AUTO_PLUG_SOC, AutoPlug, CarConnected
-from src.smart_charging import smart_charging
+from src.smart_charging import find_dispatch_sensors, smart_charging
 from src.ha_entities import (
     ALL_SENSORS, HELPER_ICON, HELPER_ID, HELPER_NAME, PluggedInSync, SensorPublisher,
     helper_entity_id, integration_entities,
@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 SUPERVISOR_WS = "ws://supervisor/core/websocket"
 SUPERVISOR_API = "http://supervisor/core/api"
 RECONNECT_DELAYS = (2, 5, 10, 20, 30, 60)
+DISPATCH_SEARCH_S = 600  # look for a supplier's dispatching sensor again this often
 ENTITY_LIST_TTL_S = 30
 _UNKNOWN_STATES = ("unavailable", "unknown", "none", "")
 SETTING_KEYS = ("power_entity", "soc_entity", "plug_entity", "auto_plug", "auto_plug_entity", "auto_plug_soc")
@@ -129,6 +130,10 @@ class HaLink:
         self.error: Optional[str] = None
         self._changed = asyncio.Event()
         self._states_cache: tuple[float, list] = (0.0, [])  # all of HA's states, briefly
+        # Your supplier's smart charging sensor(s) (src/smart_charging.py); the
+        # first is followed live with the other entities
+        self.dispatch_entities: list[str] = []
+        self._dispatch_searched = 0.0
         self._call = None  # websocket request function while connected
         self._reset_logic()
         self._load()
@@ -360,6 +365,7 @@ class HaLink:
                 self.auto_plug.armed = False
                 self.plug_sync.reset()
                 ids = self.watched + ([self.plug_sync.entity_id] if self.plug_sync.entity_id else [])
+                ids += self.dispatch_entities[:1]
                 if ids:
                     counter["id"] += 1
                     counter["sub"] = counter["id"]
@@ -369,6 +375,7 @@ class HaLink:
             self._call = call
             try:
                 await self._setup_entities(call)
+                await self._find_dispatch_sensor(call)
                 self._changed.clear()
                 await subscribe()
                 self.publisher.reset()
@@ -381,6 +388,9 @@ class HaLink:
                         event = None
                     if event is not None:
                         await self.handle_entities_event(event)
+                    if time.monotonic() - self._dispatch_searched >= DISPATCH_SEARCH_S:
+                        if await self._find_dispatch_sensor(call):
+                            self._changed.set()  # follow the new sensor
                     if self._changed.is_set():
                         self._changed.clear()
                         await subscribe()
@@ -496,9 +506,44 @@ class HaLink:
         self._states_cache = (time.monotonic(), states)
         return states
 
-    async def smart_charging(self) -> dict:
+    async def _find_dispatch_sensor(self, call) -> bool:
+        """Look for a supplier's dispatching sensor. True if what's found changed."""
+        self._dispatch_searched = time.monotonic()
+        try:
+            states = await call({"type": "get_states"}, timeout=30) or []
+        except Exception as err:
+            logger.debug("Couldn't list states for smart charging: %s", err)
+            return False
+        found = find_dispatch_sensors(states)
+        ids = [st["entity_id"] for st in found]
+        if found:  # until the subscription brings it
+            first = found[0]
+            self.states[first["entity_id"]] = {"state": first.get("state"), "attributes": first.get("attributes") or {}}
+        if ids == self.dispatch_entities:
+            return False
+        if ids[:1] != self.dispatch_entities[:1]:
+            logger.info("Smart charging: %s", f"following {ids[0]}" if ids else "no supplier sensor found")
+        self.dispatch_entities = ids
+        return True
+
+    def smart_charging(self) -> dict:
         """Your supplier's planned charge slots, if its integration is installed."""
-        return smart_charging(await self.all_states(), time.time())
+        if not self.dispatch_entities:
+            return {"found": False}
+        entity_id = self.dispatch_entities[0]
+        st = self.states.get(entity_id) or {}
+        info = smart_charging([{"entity_id": entity_id, **st}], time.time())
+        if info.get("found"):
+            info["others"] = self.dispatch_entities[1:]
+        return info
+
+    def scheduled(self) -> Optional[bool]:
+        """True if your supplier has a charge slot running or planned; None if
+        there's no supplier sensor to tell."""
+        info = self.smart_charging()
+        if not info.get("found"):
+            return None
+        return bool(info.get("current") or info.get("planned"))
 
     async def list_entities(self) -> list[dict]:
         """Sensors and binary sensors for the pickers."""

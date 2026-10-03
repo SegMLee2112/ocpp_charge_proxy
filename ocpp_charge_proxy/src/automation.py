@@ -7,11 +7,13 @@
 - Re-plug: if the car is plugged in but the provider hasn't started a
   session after `after_min` minutes, unplug, wait REPLUG_WAIT_S seconds and
   plug back in, up to `attempts` times. The count resets when a session
-  starts or when the car is unplugged by anything else.
+  starts or when the car is unplugged by anything else. If your supplier's
+  smart charging plan is available (src/smart_charging.py), a planned slot
+  counts as an answer: no re-plug while one is planned, only when nothing
+  has been scheduled `after_min` minutes after plugging in.
 
 Settings are saved in /data/automation.json and set on the web page
-(Settings tab for re-plug). Until they're saved, re-plug uses the defaults
-(or re-plug options left from add-on versions before 2.0.3).
+(Settings tab for re-plug). Until they're saved, re-plug uses the defaults.
 """
 
 from __future__ import annotations
@@ -119,6 +121,7 @@ class Automation:
         self.waiting_since: Optional[float] = None  # plugged in, no session, since
         self.replugging = False
         self.gave_up = False
+        self.scheduled = False  # waiting, but your supplier has a slot planned
         self.last_replug: Optional[float] = None
         self.last_run: Optional[dict] = None  # last schedule entry run
         self._last_check: Optional[datetime.datetime] = None
@@ -264,13 +267,19 @@ class Automation:
 
     # --- re-plug -------------------------------------------------------------
 
-    def replug_due(self, plugged_in: bool, in_session: bool, connected: bool) -> bool:
-        """Call regularly; True when it's time to re-plug."""
+    def replug_due(self, plugged_in: bool, in_session: bool, connected: bool,
+                   scheduled: Optional[bool] = None) -> bool:
+        """Call regularly; True when it's time to re-plug.
+
+        scheduled: your supplier has a charge slot planned (None: unknown, so
+        only a session counts)."""
         now = self._clock()
+        self.scheduled = bool(scheduled) and plugged_in and not in_session
         if self.replugging:
             return False
-        if in_session or not plugged_in:
-            # A session started, or the car was unplugged: start afresh
+        if in_session or not plugged_in or scheduled:
+            # A session started or was scheduled, or the car was unplugged:
+            # start afresh (if a planned slot is dropped, the wait starts then)
             self.attempts_used = 0
             self.gave_up = False
             self.waiting_since = None
@@ -321,6 +330,8 @@ class Automation:
             status = "replugging"
         elif self.gave_up:
             status = "gave_up"
+        elif self.scheduled:
+            status = "scheduled"
         elif self.waiting_since is not None:
             status = "waiting"
         else:
@@ -362,10 +373,15 @@ async def automation_loop(
     plug: Callable[[], Awaitable[None]],
     unplug: Callable[[], Awaitable[None]],
     tick_s: float = TICK_S,
+    scheduled: Optional[Callable[[], Optional[bool]]] = None,
 ) -> None:
-    """Run the schedule and re-plug for the life of the add-on."""
+    """Run the schedule and re-plug for the life of the add-on.
+
+    scheduled: whether your supplier has a charge slot planned (None if its
+    integration isn't there); also shown as the add-on's status."""
     while True:
         try:
+            shared_state.scheduled = scheduled() if scheduled is not None else None
             for entry in automation.due():
                 logger.info("Schedule: %s at %s", "plugging in" if entry["action"] == "plug" else "unplugging", entry["time"])
                 automation.last_run = {
@@ -378,6 +394,7 @@ async def automation_loop(
                 plugged_in=bool(shared_state.plugged_in) and shared_state.state == "Preparing",
                 in_session=shared_state.transaction_id is not None,
                 connected=bool(shared_state.connected_to_server),
+                scheduled=shared_state.scheduled,
             ):
                 automation.publish(shared_state)
                 await automation.run_replug(unplug, plug)

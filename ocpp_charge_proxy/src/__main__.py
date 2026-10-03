@@ -232,7 +232,8 @@ async def run() -> None:
             history, shared_state, refresh=cp.refresh_live_power,
             on_sample=lambda s: cp.sessions.sample(s["power_kw"]),
         )),
-        asyncio.create_task(automation_loop(automation, shared_state, do_plug, do_unplug)),
+        asyncio.create_task(automation_loop(automation, shared_state, do_plug, do_unplug,
+                                            scheduled=ha_link.scheduled)),
         asyncio.create_task(ha_link.run()),
         asyncio.create_task(cp.message_log.save_loop()),
     ]

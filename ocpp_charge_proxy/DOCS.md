@@ -79,7 +79,10 @@ comes back.
   session and the add-on is connected, it unplugs, waits 30 seconds and
   plugs back in, up to the set number of tries (default 3). It then gives up
   until the car is next unplugged or a session starts, and the wait starts
-  again after each re-plug.
+  again after each re-plug. If your supplier's smart charging plan is found
+  (see the Overview tab), a planned slot counts too: it only re-plugs when
+  nothing has been scheduled after the set minutes, not while it waits for
+  a slot later on.
 - **Start delay and ramp-up** (**Settings** tab, Simulated car): after
   StartTransaction (or resuming after a charging-profile pause) the simulated
   car waits the start delay (default 3s) before drawing current, then ramps
@@ -170,7 +173,7 @@ follows your Home Assistant theme.
 
 - **Overview:** state, power, current, SoC and energy; the current session;
   **smart charging** (the charge slots your supplier plans, found
-  automatically from the Octopus Energy or EDF Energy integration, also
+  automatically from the Octopus Energy, EDF Energy or E.ON Next integration, also
   shown along the top of the chart);
   and a chart of power, current (with your max and the provider limit) or
   SoC over the last 30 minutes to 24 hours, or 14 days. Drag across the

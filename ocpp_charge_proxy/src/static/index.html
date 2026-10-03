@@ -98,7 +98,7 @@
   }
   .chip.ok { color: var(--ok); } .chip.warn { color: var(--warn); } .chip.err { color: var(--err); } .chip.info { color: var(--info); }
   .s-Available { color: var(--info); } .s-Preparing, .s-SuspendedEV, .s-SuspendedEVSE { color: var(--warn); }
-  .s-Charging { color: var(--ok); } .s-Finishing { color: var(--violet); } .s-Unavailable, .s-Faulted { color: var(--err); }
+  .s-Charging { color: var(--ok); } .s-Finishing, .s-Scheduled { color: var(--violet); } .s-Unavailable, .s-Faulted { color: var(--err); }
   .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
   .kv dt { color: var(--text2); } .kv dd { margin: 0; overflow-wrap: anywhere; }
   .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -257,6 +257,7 @@
         <div>
           <div class="label">Charger state</div>
           <div class="state" id="o-state">—</div>
+          <div class="sub" id="o-state-sub"></div>
         </div>
         <div>
           <div class="label">OCPP server</div>
@@ -445,7 +446,7 @@
         </h2>
         <div id="a-rp-status" style="margin-bottom:12px"></div>
         <div class="row">
-          <div class="grow">Re-plug after<div class="note" style="margin:0">Minutes plugged in with no session</div></div>
+          <div class="grow">Re-plug after<div class="note" style="margin:0">Minutes plugged in with no session (or, if your supplier's plan is found, nothing scheduled)</div></div>
           <span class="ctl"><input type="number" id="a-rp-after" min="1" max="240" step="1" aria-label="Re-plug after minutes"> min</span>
         </div>
         <div class="row">
@@ -720,8 +721,10 @@ setInterval(() => {
 // ---------- Overview ----------
 function renderState(s) {
   state = s;
-  const st = s.state || 'Unknown';
+  // "Scheduled": plugged in and your supplier has a slot planned (the OCPP state stays Preparing)
+  const st = s.state === 'Preparing' && s.scheduled ? 'Scheduled' : (s.state || 'Unknown');
   $('o-state').textContent = st; $('o-state').className = 'state ' + stateClass(st);
+  drawStateSub();
   $('o-conn-dot').className = 'dot ' + (s.connected_to_server ? 'ok' : 'err');
   $('o-conn').textContent = s.connected_to_server ? 'Connected' : 'Disconnected';
   $('o-tx').innerHTML = s.transaction_id === null || s.transaction_id === undefined ? '<span class="muted">None</span>'
@@ -962,7 +965,8 @@ function drawChart() {
   const gapAfter = (s) => (s.d || every) * (isLong ? 1.6 : 3.5);
   ctx.save(); ctx.beginPath(); ctx.rect(L, 0, pw, H); ctx.clip();
   // State bands behind the lines: charging / paused / waiting for a session
-  const bandColor = (st) => /Charging/.test(st) ? cssVar('--ok') : /Suspended/.test(st) ? cssVar('--warn') : /Preparing/.test(st) ? cssVar('--info') : null;
+  const bandColor = (st) => /Charging/.test(st) ? cssVar('--ok') : /Suspended/.test(st) ? cssVar('--warn')
+    : /Scheduled/.test(st) ? cssVar('--violet') : /Preparing/.test(st) ? cssVar('--info') : null;
   // One rectangle per run of the same state (many thin ones would overlap and darken)
   for (let i = 0; i < data.length;) {
     const c = bandColor(data[i].state);
@@ -976,7 +980,7 @@ function drawChart() {
     }
     if (c) {
       const x0 = x(data[i].t), w = Math.max(1, x(t1) - x0);
-      ctx.globalAlpha = /Preparing/.test(data[i].state) ? 0.05 : 0.10; ctx.fillStyle = c;
+      ctx.globalAlpha = /Preparing|Scheduled/.test(data[i].state) ? 0.06 : 0.10; ctx.fillStyle = c;
       ctx.fillRect(x0, T, w, ph);
       ctx.globalAlpha = 0.6; ctx.fillRect(x0, T + ph - 3, w, 3);
       ctx.globalAlpha = 1;
@@ -1038,7 +1042,7 @@ function drawChart() {
   ctx.restore();
   chart.geom = {x, y, t0, t1, span, L, pw, data, defs, every, isLong, marks};
   $('chart-legend').innerHTML = defs.lines.map((l) => `<span><i class="${l.dash ? 'dash' : ''}" style="border-color:${l.color}"></i>${esc(l.name)}</span>`).join('') +
-    [['--ok', 'Charging'], ['--warn', 'Paused'], ['--info', 'Waiting for a session']].map(([v, n]) =>
+    [['--ok', 'Charging'], ['--warn', 'Paused'], ...(smart.data && smart.data.found ? [['--violet', 'Scheduled']] : []), ['--info', 'Waiting for a session']].map(([v, n]) =>
       `<span><b class="band" style="background:${cssVar(v)}"></b>${n}</span>`).join('') +
     (smart.data && smart.data.found ? `<span><b class="band" style="background:${cssVar('--primary')};height:4px;vertical-align:top"></b>${esc(smart.data.provider)} slot</span>` : '') +
     '<span class="hint">Drag or scroll to zoom · double-click to reset</span>';
@@ -1086,7 +1090,18 @@ async function refreshSmart(force) {
   if (!force && smart.data && Date.now() - smart.at < 60000) return;
   smart.at = Date.now();
   try { smart.data = await api('smart_charging'); } catch (e) { return; }
-  drawSmart(); drawChart();
+  drawSmart(); drawStateSub(); drawChart();
+}
+function drawStateSub() {
+  const s = state || {}, d = smart.data;
+  let text = '';
+  if (s.state === 'Preparing' && d && d.found) {
+    const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    if (d.current) text = `${esc(d.provider)} slot now, until ${t(d.current.end)}`;
+    else if (d.planned && d.planned.length) text = `Next slot ${slotText(d.planned[0])}`;
+    else text = `Waiting for ${esc(d.provider)} to schedule a charge`;
+  }
+  $('o-state-sub').innerHTML = text;
 }
 function slotText(s) {
   const a = new Date(s.start), b = new Date(s.end), now = new Date();
@@ -1101,7 +1116,7 @@ function drawSmart() {
   $('sc-provider').textContent = d.found ? d.provider : '';
   if (!d.found) {
     $('sc-body').innerHTML = `<div class="empty">Smart charging information not found</div>
-      <div class="sub">${d.error ? esc(d.error) : 'Install your supplier\'s Home Assistant integration (e.g. Octopus Energy or EDF Energy) to see the charge slots it plans.'}</div>`;
+      <div class="sub">${d.error ? esc(d.error) : 'Install your supplier\'s Home Assistant integration (Octopus Energy, EDF Energy or E.ON Next) to see the charge slots it plans.'}</div>`;
     return;
   }
   const now = d.current
@@ -1604,6 +1619,7 @@ function drawReplugStatus(r) {
     idle: '<span class="chip ok">Ready</span> <span class="muted">Watching for the next plug-in</span>',
     waiting: `<span class="chip warn">Waiting for a session</span> <span class="muted">since ${hm(r.waiting_since)}${r.next_replug_at ? ' · re-plug at ' + hm(r.next_replug_at) : ''} · ${tries}</span>`,
     replugging: '<span class="chip warn">Re-plugging now</span>',
+    scheduled: '<span class="chip ok">Scheduled</span> <span class="muted">Your supplier has a charge slot planned, so no re-plug is needed</span>',
     gave_up: `<span class="chip err">Gave up</span> <span class="muted">No session after ${r.attempts_used} re-plug${r.attempts_used === 1 ? '' : 's'}. Resets when the car is unplugged or a session starts.</span>`,
   }[r.status] || '';
   $('a-rp-status').innerHTML = html + (r.last_replug ? `<div class="sub">Last re-plug ${dateTime(r.last_replug)}</div>` : '');

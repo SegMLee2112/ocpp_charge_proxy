@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.6.0
+
+- **Scheduled status.** While the car is plugged in and your supplier has a
+  charge slot planned, the add-on's status shows **Scheduled** (with the
+  next slot under it) instead of Preparing, on the Overview tab, in the
+  History chart's shading and in `sensor.ocpp_charge_proxy_status`. What
+  the charger reports to the OCPP server doesn't change.
+- **Auto re-plug understands schedules.** If your supplier's plan is found,
+  a planned slot counts as an answer: no re-plug while one is planned (e.g.
+  plugged in at 6pm for a slot at 11:30pm), and a re-plug only when nothing
+  has been scheduled the set minutes after plugging in. Without a supplier
+  integration it works as before (waits for a session).
+- **E.ON Next** smart charging is found too (the eon_next integration's
+  "Smart Charging Schedule" sensor), alongside Octopus Energy and EDF Energy.
+- The supplier's sensor is followed live (found when the add-on connects to
+  Home Assistant and looked for again every 10 minutes), rather than read
+  from all of HA's states each time.
+
 ## 2.5.0
 
 - **Smart charging card** on the Overview tab: the charge slots your
