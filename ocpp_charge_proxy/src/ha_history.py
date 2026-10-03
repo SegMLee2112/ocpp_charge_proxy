@@ -194,6 +194,27 @@ def long_samples(stats: dict, rows: dict) -> list[dict]:
     return out
 
 
+def charging_per_day(rows: list[tuple[float, Optional[str], dict]], days: list[tuple[str, float, float]],
+                     now: float) -> dict[str, float]:
+    """Seconds spent Charging per day, from the Status sensor's history.
+
+    days: (date, start, end) in unix seconds. Only days the history fully
+    covers are returned (the first row is the state at the start of the
+    query, so a day starting before it is unknown)."""
+    if not rows:
+        return {}
+    covered_from = rows[0][0]
+    out = {d: 0.0 for d, start, _ in days if start >= covered_from}
+    for n, (t, state, _) in enumerate(rows):
+        if state != "Charging":
+            continue
+        t_end = rows[n + 1][0] if n + 1 < len(rows) else now
+        for d, start, end in days:
+            if d in out:
+                out[d] += max(0.0, min(t_end, end) - max(t, start))
+    return out
+
+
 # --- the source the API uses ----------------------------------------------------
 
 
@@ -289,14 +310,29 @@ class ChartHistory:
         return [p for p in long_samples(stats, rows) if p["t"] > since]
 
     async def daily(self, days: int, sessions: list) -> list[dict]:
-        """kWh per day for the last `days` days: HA's daily statistics of the
-        Energy sensor, or the kept sessions where those are missing or lower
-        (e.g. today until HA's next hourly statistics)."""
+        """kWh and time spent charging per day for the last `days` days.
+
+        kWh: HA's daily statistics of the Energy sensor, or the kept sessions
+        where those are missing or lower (e.g. today until HA's next hourly
+        statistics). Charging time: from the Status sensor's history (2.3.0
+        on), else estimated from the sessions' lengths."""
         metered: dict[str, float] = {}
+        charging: dict[str, float] = {}
         if self._ha:
             today = self._today()
             first = today - datetime.timedelta(days=days - 1)
             start = datetime.datetime.combine(first, datetime.time()).astimezone().timestamp()
+            bounds = []
+            for i in range(days):
+                day = first + datetime.timedelta(days=i)
+                d0 = datetime.datetime.combine(day, datetime.time()).astimezone().timestamp()
+                d1 = datetime.datetime.combine(day + datetime.timedelta(days=1), datetime.time()).astimezone().timestamp()
+                bounds.append((day.isoformat(), d0, d1))
+            try:
+                status = await self._history([STATUS_SENSOR], start, self._clock(), attributes=False)
+                charging = charging_per_day(parse_history(status, STATUS_SENSOR), bounds, self._clock())
+            except Exception as err:
+                logger.debug("Status history not available: %s", err)
             try:
                 result = await self._statistics([ENERGY], start, self._clock(), "day", ["change"])
                 for row in parse_statistics(result, ENERGY):
@@ -308,4 +344,4 @@ class ChartHistory:
             except Exception as err:
                 self.error = f"Home Assistant statistics not available: {err}"
                 logger.debug("%s", self.error)
-        return daily_from_sessions(days, sessions, self._today(), metered)
+        return daily_from_sessions(days, sessions, self._today(), metered, charging)

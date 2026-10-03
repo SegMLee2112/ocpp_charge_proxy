@@ -170,14 +170,16 @@ follows your Home Assistant theme.
 
 - **Overview:** state, power, current, SoC and energy; the current session;
   and a chart of power, current (with your max and the provider limit) or
-  SoC over the last 30 minutes to 24 hours, or 14 days. The charts and the
+  SoC over the last 30 minutes to 24 hours, or 14 days. Drag across the
+  chart or scroll over it to zoom (double-click or **Reset zoom** to go
+  back). The charts and the
   energy per day are read from Home Assistant's history of the add-on's
   sensors (keep them recorded): 10-second detail for 24 hours, then
   5-minute points while HA keeps them (10 days by default, `purge_keep_days`)
   and hourly beyond that.
 - **Header:** a health dot left of the title (green / amber / red) that
   opens the Health tab.
-- **Sessions:** energy per day for the last 14 days, and the last 20 charging sessions (energy, duration, peak
+- **Sessions:** energy and time spent charging per day for the last 14 days, and the last 20 charging sessions (energy, duration, peak
   power, what ended them, transaction ID and ID tag), kept across restarts,
   and the last 20 plug-ins that never got a session: when, for how long, who
   plugged in, and whether auto re-plug gave up on it or it was unplugged

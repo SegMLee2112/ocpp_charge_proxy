@@ -3,7 +3,7 @@ import datetime
 
 from src.gui_data import PowerHistory
 from src.ha_history import (
-    CURRENT, ENERGY, POWER, ChartHistory, fine_samples, long_samples, parse_history, parse_statistics,
+    CURRENT, ENERGY, POWER, ChartHistory, charging_per_day, fine_samples, long_samples, parse_history, parse_statistics,
 )
 from src.ha_entities import LIMIT_SENSOR, STATUS_SENSOR
 from src.shared_state import SharedState
@@ -132,3 +132,25 @@ def test_long_samples_and_daily_from_ha():
     assert [d["kwh"] for d in days] == [0.0, 7.25]  # the 6000 kWh jump is ignored
     history_calls = [q for q in link.queries if q["type"] == "history/history_during_period"]
     assert any("sensor.car_soc" in q["entity_ids"] for q in history_calls)
+
+
+def test_charging_per_day():
+    day = 86400
+    days = [("d1", T0, T0 + day), ("d2", T0 + day, T0 + 2 * day)]
+    rows = [(T0, "Preparing", {}), (T0 + day - 3600, "Charging", {}),  # 23:00 to 01:30
+            (T0 + day + 5400, "SuspendedEVSE", {}), (T0 + day + 7200, "Charging", {})]
+    out = charging_per_day(rows, days, now=T0 + day + 7200 + 600)  # still charging, 10 min so far
+    assert out == {"d1": 3600.0, "d2": 5400.0 + 600.0}
+    # History starting part-way through a day: that day is unknown
+    assert charging_per_day(rows[1:], days, now=T0 + 2 * day) == {"d2": 5400.0 + day - 7200}
+    assert charging_per_day([], days, now=T0) == {}
+
+
+def test_daily_charging_time_falls_back_to_sessions():
+    import datetime as dt
+    from src.gui_data import daily_from_sessions
+    today = dt.date(2026, 10, 3)
+    start = dt.datetime.combine(today - dt.timedelta(days=1), dt.time(23, 0)).astimezone().isoformat()
+    sessions = [{"start": start, "energy_kwh": 5.0, "duration_s": 7200}]
+    days = daily_from_sessions(2, sessions, today, {}, {"2026-10-03": 1800.0})
+    assert [(d["charging_s"], d["charging_estimated"]) for d in days] == [(7200, True), (1800, False)]

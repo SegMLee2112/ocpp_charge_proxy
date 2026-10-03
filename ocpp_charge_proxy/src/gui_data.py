@@ -382,13 +382,17 @@ class PowerHistory:
 
 
 def daily_from_sessions(days: int, sessions: Optional[list], today: datetime.date,
-                        metered: Optional[dict] = None) -> list[dict]:
-    """kWh per day for the last `days` days.
+                        metered: Optional[dict] = None, charging: Optional[dict] = None) -> list[dict]:
+    """kWh and charging time per day for the last `days` days.
 
     metered: date -> kWh from HA's statistics. Each kept session's energy
     counts on the day it started, and the larger of the two figures is used
-    (HA's figure lags by up to an hour; sessions cover HA being unreachable)."""
+    (HA's figure lags by up to an hour; sessions cover HA being unreachable).
+    charging: date -> seconds Charging from HA's history. Days without it
+    use the sessions' lengths (charging_estimated: true), which include any
+    paused time."""
     from_sessions: dict[str, float] = {}
+    session_time: dict[str, float] = {}
     for s in sessions or []:
         if s.get("type") == "no_session" or s.get("energy_kwh") is None:
             continue
@@ -396,11 +400,18 @@ def daily_from_sessions(days: int, sessions: Optional[list], today: datetime.dat
         if start:
             day = start.astimezone().date().isoformat()
             from_sessions[day] = from_sessions.get(day, 0.0) + float(s["energy_kwh"])
-    metered = metered or {}
+            session_time[day] = session_time.get(day, 0.0) + float(s.get("duration_s") or 0)
+    metered, charging = metered or {}, charging or {}
     out = []
     for i in range(days - 1, -1, -1):
         day = (today - datetime.timedelta(days=i)).isoformat()
-        out.append({"date": day, "kwh": round(max(metered.get(day, 0.0), from_sessions.get(day, 0.0)), 3)})
+        known = day in charging
+        out.append({
+            "date": day,
+            "kwh": round(max(metered.get(day, 0.0), from_sessions.get(day, 0.0)), 3),
+            "charging_s": int(charging[day] if known else session_time.get(day, 0.0)),
+            "charging_estimated": not known and day in session_time,
+        })
     return out
 
 

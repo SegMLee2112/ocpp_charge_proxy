@@ -123,7 +123,7 @@ sensors live through Home Assistant's API.
     session; and a chart (shaded by state, with session start/end marked)
     of power, current (with your max and the provider limit) or SoC over
     the last 30 minutes to 24 hours, or 14 days, read from Home Assistant's
-    history of the add-on's sensors.
+    history of the add-on's sensors. Drag or scroll on it to zoom.
   - **Sessions:** energy per day for the last 14 days; the last 20 charging
     sessions (energy, duration, peak power, what ended them, transaction ID
     and ID tag, with details and the power curve on click), and plug-ins that

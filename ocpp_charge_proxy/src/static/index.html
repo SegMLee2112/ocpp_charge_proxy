@@ -161,7 +161,12 @@
   th { font-weight: 500; color: var(--text2); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .table-wrap { overflow-x: auto; }
-  .chart-wrap { position: relative; height: 240px; }
+  .chart-wrap { position: relative; height: 240px; cursor: crosshair; user-select: none; touch-action: pan-y; }
+  .chart-sel { position: absolute; top: 10px; bottom: 24px; display: none; pointer-events: none;
+    background: color-mix(in srgb, var(--primary) 14%, transparent); border: 1px solid var(--primary); border-width: 0 1px; }
+  .legend .hint { margin-left: auto; }
+  @media (hover: none) { .legend .hint { display: none; } }
+  .daybars .b.est { opacity: .45; }
   canvas { display: block; width: 100%; height: 100%; }
   .tip { position: absolute; pointer-events: none; background: var(--card); border: 1px solid var(--divider);
     border-radius: 8px; padding: 6px 8px; font-size: 12px; box-shadow: 0 2px 6px rgba(0,0,0,.2); display: none; white-space: nowrap; }
@@ -281,6 +286,7 @@
 
     <div class="card">
       <h2>History<span class="spacer"></span>
+        <button class="btn small" id="ch-reset" hidden title="Back to the selected range">Reset zoom</button>
         <div class="seg" id="ch-series" role="group" aria-label="Chart series">
           <button data-series="power" aria-pressed="true">Power</button><button data-series="current">Current</button><button data-series="soc">SoC</button>
         </div>
@@ -288,7 +294,7 @@
           <button data-range="1800">30m</button><button data-range="3600" aria-pressed="true">1h</button><button data-range="21600">6h</button><button data-range="43200">12h</button><button data-range="86400">24h</button><button data-range="1209600">14d</button>
         </div>
       </h2>
-      <div class="chart-wrap" id="chart-wrap"><canvas id="chart"></canvas><div class="tip" id="chart-tip"></div></div>
+      <div class="chart-wrap" id="chart-wrap"><canvas id="chart"></canvas><div class="chart-sel" id="chart-sel"></div><div class="tip" id="chart-tip"></div></div>
       <div class="legend" id="chart-legend"></div>
     </div>
 
@@ -308,8 +314,13 @@
   <section id="tab-sessions" class="stack" hidden>
     <div class="grid tiles" id="s-totals"></div>
     <div class="card">
-      <h2>Energy per day<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400" id="d-total"></span></h2>
+      <h2>Per day<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400" id="d-total"></span>
+        <div class="seg" id="d-mode" role="group" aria-label="Show per day">
+          <button data-mode="kwh" aria-pressed="true">Energy</button><button data-mode="time">Time charging</button>
+        </div>
+      </h2>
       <div class="daybars" id="d-bars"></div>
+      <div class="note" id="d-note" hidden></div>
     </div>
     <div class="card">
       <h2>Recent sessions<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400">Click a row for details</span></h2>
@@ -836,7 +847,9 @@ function drawSessionCard() {
 // 14d view and the curves of older sessions), loaded when first needed.
 // Both come from Home Assistant's history of the add-on's sensors.
 const LONG_RANGE = 86400, LONG_STEP = 300;
-const chart = {samples: [], long: [], longLoaded: false, series: 'power', range: 3600, lastT: 0, longT: 0, longAt: 0, error: null};
+// view: [t0, t1] while zoomed in (drag or scroll on the chart), else null
+const chart = {samples: [], long: [], longLoaded: false, series: 'power', range: 3600, lastT: 0, longT: 0, longAt: 0, error: null, view: null};
+const MIN_SPAN = 120, MAX_SPAN = 14 * 86400;
 async function refreshHistory(full) {
   try {
     const since = full ? 0 : chart.lastT;
@@ -847,13 +860,15 @@ async function refreshHistory(full) {
     const cutoff = Date.now() / 1000 - 24 * 3600 - 60;
     let drop = 0; while (drop < chart.samples.length && chart.samples[drop].t < cutoff) drop++;
     if (drop) chart.samples.splice(0, drop);
-    if (chart.range > LONG_RANGE) await refreshLong(full);
+    if (chart.range > LONG_RANGE || (chart.geom && chart.geom.isLong)) await refreshLong(full);
     drawChart();
   } catch (e) {}
 }
 async function refreshLong(full) {
   // New 5-minute points only appear every 5 minutes: ask at most once a minute
   if (!full && chart.longLoaded && Date.now() - chart.longAt < 60000) return;
+  if (chart.longLoading) return;
+  chart.longLoading = true;
   try {
     if (full || !chart.longLoaded) { chart.long = []; chart.longT = 0; }
     chart.longAt = Date.now();
@@ -864,7 +879,7 @@ async function refreshLong(full) {
     const cutoff = Date.now() / 1000 - 14 * 86400 - 300;
     let drop = 0; while (drop < chart.long.length && chart.long[drop].t < cutoff) drop++;
     if (drop) chart.long.splice(0, drop);
-  } catch (e) {}
+  } catch (e) {} finally { chart.longLoading = false; }
 }
 function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
 function seriesDefs() {
@@ -889,9 +904,19 @@ function drawChart() {
   cv.width = W * dpr; cv.height = H * dpr;
   const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
   const defs = seriesDefs();
-  const now = Date.now() / 1000, t0 = now - chart.range;
-  const isLong = chart.range > LONG_RANGE, every = isLong ? LONG_STEP : 10;
-  const data = (isLong ? chart.long : chart.samples).filter((s) => s.t >= t0);
+  const now = Date.now() / 1000;
+  const [t0, t1] = chart.view || [now - chart.range, now];
+  const span = t1 - t0;
+  // 10 s samples while they cover the window, else the 5-minute / hourly points
+  const fineFrom = chart.samples.length ? chart.samples[0].t : now;
+  const isLong = chart.view ? t0 < fineFrom - 30 : chart.range > LONG_RANGE, every = isLong ? LONG_STEP : 10;
+  if (isLong && !chart.longLoaded && !chart.longLoading) refreshLong(true).then(drawChart);
+  $('ch-reset').hidden = !chart.view;
+  // one point either side of the window, so lines run to the edges
+  const all = isLong ? chart.long : chart.samples;
+  let i0 = all.findIndex((s) => s.t >= t0); if (i0 < 0) i0 = all.length;
+  let i1 = all.length; while (i1 > 0 && all[i1 - 1].t > t1) i1--;
+  const data = all.slice(Math.max(0, i0 - 1), Math.min(all.length, i1 + 1));
   const L = 44, R = 10, T = 10, B = 24, pw = W - L - R, ph = H - T - B;
   let ymax = defs.max ?? 0;
   if (defs.max === undefined) {
@@ -899,7 +924,7 @@ function drawChart() {
     ymax = niceMax(ymax || (defs.unit === 'A' ? 32 : 1));
   }
   const ymin = defs.min ?? 0;
-  const x = (t) => L + (t - t0) / chart.range * pw;
+  const x = (t) => L + (t - t0) / span * pw;
   const y = (v) => T + ph - (v - ymin) / (ymax - ymin) * ph;
   const text2 = cssVar('--text2'), divider = cssVar('--divider');
   ctx.font = '11px Roboto, sans-serif'; ctx.fillStyle = text2; ctx.strokeStyle = divider; ctx.lineWidth = 1;
@@ -910,15 +935,15 @@ function drawChart() {
     ctx.fillText(fmtAxis(v) + (i === 4 ? ' ' + defs.unit : ''), L - 6, yy);
   }
   // label spacing: at least ~70px between time labels
-  const steps = [300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400, 172800];
-  const step = steps.find((st) => st / chart.range * pw >= (st >= 86400 ? 60 : 70)) || 172800;
+  const steps = [60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400, 172800];
+  const step = steps.find((st) => st / span * pw >= (st >= 86400 ? 60 : 70)) || 172800;
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   // Labels on local hours / midnights (not UTC ones)
   const tz = new Date().getTimezoneOffset() * 60;
-  for (let t = Math.ceil((t0 - tz) / step) * step + tz; t <= now; t += step) {
+  for (let t = Math.ceil((t0 - tz) / step) * step + tz; t <= t1; t += step) {
     const d = new Date(t * 1000);
     const label = step >= 86400 ? d.toLocaleDateString([], {weekday: 'short', day: 'numeric'})
-      : d.getHours() === 0 && d.getMinutes() === 0 && chart.range > 6 * 3600 ? d.toLocaleDateString([], {weekday: 'short'})
+      : d.getHours() === 0 && d.getMinutes() === 0 && (span > 6 * 3600 || t1 < now - 86400) ? d.toLocaleDateString([], {weekday: 'short', day: 'numeric'})
       : d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
     ctx.fillText(label, x(t), H - B + 6);
   }
@@ -930,6 +955,7 @@ function drawChart() {
   }
   // A longer gap than this after a point (the add-on was stopped) breaks the line
   const gapAfter = (s) => (s.d || every) * (isLong ? 1.6 : 3.5);
+  ctx.save(); ctx.beginPath(); ctx.rect(L, 0, pw, H); ctx.clip();
   // State bands behind the lines: charging / paused / waiting for a session
   const bandColor = (st) => /Charging/.test(st) ? cssVar('--ok') : /Suspended/.test(st) ? cssVar('--warn') : /Preparing/.test(st) ? cssVar('--info') : null;
   // One rectangle per run of the same state (many thin ones would overlap and darken)
@@ -958,8 +984,8 @@ function drawChart() {
   for (const se of [...(sd.current ? [sd.current] : []), ...(sd.history || [])]) {
     if (se.type === 'no_session') continue;
     const st = se.start && new Date(se.start).getTime() / 1000, sp = se.stop && new Date(se.stop).getTime() / 1000;
-    if (st && st >= t0 && st <= now) marks.push([st, 'start']);
-    if (sp && sp >= t0 && sp <= now) marks.push([sp, 'stop']);
+    if (st && st >= t0 && st <= t1) marks.push([st, 'start']);
+    if (sp && sp >= t0 && sp <= t1) marks.push([sp, 'stop']);
   }
   // Dotted lines only (labels overlapped when sessions were close together);
   // hovering near one names it in the tooltip
@@ -996,10 +1022,12 @@ function drawChart() {
     flush();
   }
   ctx.setLineDash([]);
-  chart.geom = {x, y, t0, L, pw, data, defs, every, isLong, marks};
+  ctx.restore();
+  chart.geom = {x, y, t0, t1, span, L, pw, data, defs, every, isLong, marks};
   $('chart-legend').innerHTML = defs.lines.map((l) => `<span><i class="${l.dash ? 'dash' : ''}" style="border-color:${l.color}"></i>${esc(l.name)}</span>`).join('') +
     [['--ok', 'Charging'], ['--warn', 'Paused'], ['--info', 'Waiting for a session']].map(([v, n]) =>
-      `<span><b class="band" style="background:${cssVar(v)}"></b>${n}</span>`).join('');
+      `<span><b class="band" style="background:${cssVar(v)}"></b>${n}</span>`).join('') +
+    '<span class="hint">Drag or scroll to zoom · double-click to reset</span>';
 }
 function niceMax(v) {
   const p = Math.pow(10, Math.floor(Math.log10(v))), n = v / p;
@@ -1009,13 +1037,14 @@ const fmtAxis = (v) => Number.isInteger(v) ? String(v) : v.toFixed(v < 1 ? 2 : 1
 $('chart-wrap').addEventListener('mousemove', (e) => {
   const g = chart.geom, tip = $('chart-tip'); if (!g || !g.data.length) return;
   const rect = $('chart-wrap').getBoundingClientRect(), mx = e.clientX - rect.left;
-  const t = g.t0 + (mx - g.L) / g.pw * chart.range;
+  if (zoom.dragging) { tip.style.display = 'none'; return; }
+  const t = g.t0 + (mx - g.L) / g.pw * g.span;
   let best = null;
   for (const s of g.data) if (!best || Math.abs(s.t - t) < Math.abs(best.t - t)) best = s;
   if (!best || Math.abs(best.t - t) > Math.max(60, (best.d || g.every) * 1.5)) { tip.style.display = 'none'; return; }
   const when = new Date(best.t * 1000);
   tip.innerHTML = `<b>${g.isLong ? when.toLocaleString([], {weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})
-      : chart.range > 6 * 3600 ? when.toLocaleTimeString([], {weekday: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit'}) : when.toLocaleTimeString()}</b>`
+      : g.span > 6 * 3600 || g.t1 < Date.now() / 1000 - 86400 ? when.toLocaleString([], {weekday: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit'}) : when.toLocaleTimeString()}</b>`
     + (g.isLong ? ` <span class="muted">${(best.d || LONG_STEP) >= 3600 ? 'hourly' : Math.round((best.d || LONG_STEP) / 60) + '-min'} average</span>` : '') + '<br>' + g.defs.lines.map((l) => {
     const v = l.get(best); return `${esc(l.name)}: ${v == null ? '—' : fmtAxis(Math.round(v * 100) / 100) + ' ' + g.defs.unit}`;
   }).join('<br>') + (g.isLong && chart.series === 'power' && best.power_max_kw != null ? `<br>Peak: ${fmtAxis(Math.round(best.power_max_kw * 100) / 100)} kW` : '')
@@ -1032,11 +1061,58 @@ $('ch-series').addEventListener('click', (e) => {
   $('ch-series').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b === e.target)); drawChart();
 });
 $('ch-range').addEventListener('click', (e) => {
-  if (!e.target.dataset.range) return; chart.range = Number(e.target.dataset.range);
+  if (!e.target.dataset.range) return; chart.range = Number(e.target.dataset.range); chart.view = null;
   $('ch-range').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b === e.target)); drawChart();
   if (chart.range > LONG_RANGE && !chart.longLoaded) refreshLong(true).then(drawChart);
 });
 window.addEventListener('resize', () => drawChart());
+
+// ---------- zoom: drag across the chart, or scroll over it ----------
+const zoom = {dragging: false, x0: 0};
+function chartTimeAt(clientX) {
+  const g = chart.geom, rect = $('chart-wrap').getBoundingClientRect();
+  const mx = Math.min(Math.max(clientX - rect.left, g.L), g.L + g.pw);
+  return {t: g.t0 + (mx - g.L) / g.pw * g.span, mx};
+}
+function setView(t0, t1) {
+  const now = Date.now() / 1000;
+  let span = Math.min(Math.max(t1 - t0, MIN_SPAN), MAX_SPAN);
+  const mid = (t0 + t1) / 2;
+  t0 = mid - span / 2; t1 = mid + span / 2;
+  if (t1 > now) { t0 -= t1 - now; t1 = now; }
+  if (t0 < now - MAX_SPAN) { t1 += now - MAX_SPAN - t0; t0 = now - MAX_SPAN; t1 = Math.min(t1, now); }
+  chart.view = [t0, t1];
+  drawChart();
+}
+$('chart-wrap').addEventListener('mousedown', (e) => {
+  if (e.button !== 0 || !chart.geom) return;
+  zoom.dragging = true; zoom.x0 = chartTimeAt(e.clientX).mx;
+  e.preventDefault();
+});
+window.addEventListener('mousemove', (e) => {
+  if (!zoom.dragging) return;
+  const mx = chartTimeAt(e.clientX).mx, sel = $('chart-sel');
+  if (Math.abs(mx - zoom.x0) < 4) { sel.style.display = 'none'; return; }
+  sel.style.display = 'block'; sel.style.left = Math.min(mx, zoom.x0) + 'px'; sel.style.width = Math.abs(mx - zoom.x0) + 'px';
+});
+window.addEventListener('mouseup', (e) => {
+  if (!zoom.dragging) return;
+  zoom.dragging = false; $('chart-sel').style.display = 'none';
+  const g = chart.geom, mx = chartTimeAt(e.clientX).mx;
+  if (Math.abs(mx - zoom.x0) < 8) return;  // a click, not a drag
+  const ta = g.t0 + (Math.min(mx, zoom.x0) - g.L) / g.pw * g.span, tb = g.t0 + (Math.max(mx, zoom.x0) - g.L) / g.pw * g.span;
+  setView(ta, tb);
+});
+$('chart-wrap').addEventListener('wheel', (e) => {
+  if (!chart.geom || !e.deltaY) return;
+  e.preventDefault();
+  const g = chart.geom, {t} = chartTimeAt(e.clientX);
+  const f = e.deltaY > 0 ? 1.25 : 0.8, span = Math.min(Math.max(g.span * f, MIN_SPAN), MAX_SPAN);
+  const k = (t - g.t0) / g.span;  // keep the time under the pointer where it is
+  setView(t - k * span, t - k * span + span);
+}, {passive: false});
+$('chart-wrap').addEventListener('dblclick', () => { chart.view = null; drawChart(); });
+$('ch-reset').addEventListener('click', () => { chart.view = null; drawChart(); });
 
 // ---------- Sessions ----------
 async function refreshSessions() {
@@ -1072,7 +1148,7 @@ async function refreshSessions() {
   let week = h.filter((s) => Date.now() - new Date(s.start) < 7 * 86400e3).reduce((a, s) => a + (s.energy_kwh || 0), 0);
   try {
     const daily = (await api('energy/daily?days=14')).days;
-    drawDayBars(daily);
+    dayData = daily; drawDayBars(daily);
     week = daily.slice(-7).reduce((a, d) => a + d.kwh, 0);
   } catch (e) { $('d-bars').innerHTML = '<div class="empty">Not available</div>'; }
   const avg = h.length ? total / h.length : null;
@@ -1130,19 +1206,43 @@ function sessionDetail(s) {
     s.current ? ['Peak', num(s.peak_power_kw, 2) + ' kW'] : ['Stop reason', esc(s.reason || '—')],
   ].filter((r) => r[1] !== null))}</dl><div>${start ? sparkline(start, stop) : ''}</div></div>`;
 }
+let dayData = [];
+let dayMode = 'kwh';
+try { if (localStorage.getItem('ocpp-charge-proxy-daymode') === 'time') dayMode = 'time'; } catch (e) {}
+function hmDur(sec) {
+  const m = Math.round(sec / 60);
+  return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${m % 60 ? ' ' + (m % 60) + 'm' : ''}`;
+}
 function drawDayBars(days) {
-  const max = Math.max(0.5, ...days.map((d) => d.kwh));
-  const today = new Date().toISOString().slice(0, 10);
-  $('d-total').textContent = `${num(days.reduce((a, d) => a + d.kwh, 0), 1)} kWh in ${days.length} days`;
+  const time = dayMode === 'time';
+  $('d-mode').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === dayMode));
+  const val = (d) => time ? (d.charging_s || 0) / 3600 : d.kwh;
+  const max = Math.max(time ? 1 : 0.5, ...days.map(val));
+  const today = new Date().toLocaleDateString('en-CA');  // local YYYY-MM-DD
+  const totalS = days.reduce((a, d) => a + (d.charging_s || 0), 0);
+  $('d-total').textContent = time ? `${hmDur(totalS)} charging in ${days.length} days`
+    : `${num(days.reduce((a, d) => a + d.kwh, 0), 1)} kWh in ${days.length} days`;
   $('d-bars').innerHTML = days.map((d) => {
-    const dt = new Date(d.date + 'T12:00:00');
+    const dt = new Date(d.date + 'T12:00:00'), v = val(d);
     const label = days.length > 10 ? dt.toLocaleDateString([], {day: 'numeric'}) : dt.toLocaleDateString([], {weekday: 'short'});
-    return `<div class="d ${d.date === today ? 'today' : ''}" title="${dt.toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})}: ${num(d.kwh, 2)} kWh">
-      <div class="bw"><div class="v">${d.kwh ? num(d.kwh, d.kwh < 10 ? 1 : 0) : ''}</div>
-      <div class="b ${d.kwh ? '' : 'zero'}" style="height:${Math.max(1, d.kwh / max * 85)}%"></div></div>
+    const est = time && d.charging_estimated;
+    const top = !v ? '' : time ? (d.charging_s < 3600 ? hmDur(d.charging_s) : num(v, v < 10 ? 1 : 0) + 'h') : num(v, v < 10 ? 1 : 0);
+    const title = `${dt.toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})}: ${num(d.kwh, 2)} kWh · ${hmDur(d.charging_s || 0)} charging${d.charging_estimated ? ' (estimated from session length)' : ''}`;
+    return `<div class="d ${d.date === today ? 'today' : ''}" title="${title}">
+      <div class="bw"><div class="v">${top}</div>
+      <div class="b ${v ? '' : 'zero'} ${est ? 'est' : ''}" style="height:${Math.max(1, v / max * 85)}%"></div></div>
       <div class="l">${label}</div></div>`;
   }).join('');
+  const anyEst = time && days.some((d) => d.charging_estimated && d.charging_s);
+  $('d-note').hidden = !anyEst;
+  $('d-note').textContent = anyEst ? 'Faded bars are estimated from session lengths (days before 2.3.0, when the add-on started recording its state in Home Assistant), so they include any paused time.' : '';
 }
+$('d-mode').addEventListener('click', (e) => {
+  if (!e.target.dataset.mode) return;
+  dayMode = e.target.dataset.mode;
+  try { localStorage.setItem('ocpp-charge-proxy-daymode', dayMode); } catch (e2) {}
+  drawDayBars(dayData);
+});
 function reasonText(r) {
   return ({Remote: 'Provider (remote stop)', EVDisconnected: 'Unplugged', Reboot: 'Add-on restart', PowerLoss: 'Power cut / crash',
     Local: 'Local', HardReset: 'Hard reset', SoftReset: 'Soft reset', UnlockCommand: 'Unlock command', DeAuthorized: 'Deauthorised'})[r] || r || '—';

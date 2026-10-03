@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.4.0
+
+- **Zoom on the History chart.** Drag across the chart to zoom into that
+  stretch, or scroll over it to zoom in and out around the pointer (from 2
+  minutes up to 14 days). Double-click or **Reset zoom** goes back to the
+  selected range; picking a range does too. Zooming further back than the
+  10-second readings switches to the 5-minute / hourly points by itself.
+- **Time spent charging per day** on the Sessions tab: the per-day chart
+  has an **Energy / Time charging** switch (remembered in your browser),
+  and hovering over a bar shows both. Charging time comes from the Status
+  sensor's history in Home Assistant; days before 2.3.0 are estimated from
+  the sessions' lengths (shown faded), so they include any paused time.
+
 ## 2.3.0
 
 - **Charts and daily energy now come from Home Assistant's history**
