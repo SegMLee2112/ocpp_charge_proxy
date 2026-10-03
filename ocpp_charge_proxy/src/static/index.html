@@ -104,6 +104,8 @@
   .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .row + .row { margin-top: 14px; }
   .row .grow { flex: 1; min-width: 120px; }
+  .row[hidden] { display: none; }
+  .plan-slots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
   button.btn {
     font: inherit; font-weight: 500; border-radius: 8px; padding: 6px 14px; cursor: pointer;
     border: 1px solid var(--divider); background: var(--card); color: var(--primary);
@@ -413,6 +415,16 @@
           <div id="a-ready-status" style="margin-top:6px"></div>
         </div>
         <label class="switch"><input type="checkbox" id="a-ready-on" aria-label="Force schedule on supplier"><span></span></label>
+      </div>
+      <div class="row" id="a-wait-row" style="margin-top:10px" hidden>
+        <div class="grow">Wait for the supplier at unplug
+          <div class="note" style="margin:0">At a scheduled unplug during a session, give your supplier up to this long to stop the session itself first. 0 unplugs straight away.</div></div>
+        <span class="ctl"><input type="number" id="a-wait" min="0" max="600" step="10" aria-label="Seconds to wait for the supplier at unplug"> s</span>
+      </div>
+      <div class="row" id="a-plan-row" style="margin-top:10px" hidden>
+        <div class="grow">Supplier's plan
+          <div class="note" style="margin:0">While plugged in, your supplier's planned slots up to the ready time are checked against the schedule.</div>
+          <div id="a-plan" style="margin-top:6px"></div></div>
       </div>
       <div class="note" id="a-tz"></div>
     </div>
@@ -755,7 +767,10 @@ function renderState(s) {
   if (s.power_source === 'entity') chips.push('<span class="chip">Power from sensor</span>');
   if (s.schedule_enabled && s.schedule_next) chips.push(`<span class="chip">${s.schedule_next.action === 'plug' ? 'Plug in' : 'Unplug'} ${whenText(s.schedule_next.time)}</span>`);
   const rp = s.replug || {};
-  if (s.unplug_pending) chips.push(`<span class="chip warn" title="Giving your supplier up to a minute to stop the session first">Unplugging by ${new Date(s.unplug_pending).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'})}</span>`);
+  if (s.unplug_pending) chips.push(`<span class="chip warn" title="Giving your supplier time to stop the session first">Unplugging by ${new Date(s.unplug_pending).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'})}</span>`);
+  const pc = s.plan_check;
+  if (pc && pc.status === 'error') chips.push(`<span class="chip err" title="${esc(pc.problems.join('\n'))}">Supplier plan doesn't match the schedule</span>`);
+  if (activeTab === 'automation') drawPlanCheck(pc);
   if (rp.status === 'waiting' && rp.next_replug_at) chips.push(`<span class="chip warn">Re-plug ${hm(rp.next_replug_at)} if no session</span>`);
   if (rp.status === 'replugging') chips.push('<span class="chip warn">Re-plugging…</span>');
   if (rp.status === 'gave_up') chips.push('<span class="chip err">No session — re-plug gave up</span>');
@@ -1652,7 +1667,32 @@ function drawReadyStatus(d) {
     : `<span class="chip ok">Set to ${esc(r.ready)}</span> for the unplug at ${t(r.unplug)}`} <span class="muted">· ${ago(r.at)}</span></div>`;
   else if (on) html += '<div class="sub">Not set yet: happens at the next scheduled plug-in.</div>';
   $('a-ready-status').innerHTML = html;
+  $('a-wait-row').hidden = !on; $('a-plan-row').hidden = !on;
+  if (document.activeElement !== $('a-wait')) $('a-wait').value = d.schedule.unplug_wait_s;
+  drawPlanCheck(d.schedule.plan_check);
 }
+function drawPlanCheck(pc) {
+  const el = $('a-plan'); if (!el) return;
+  const t = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '—';
+  if (!pc) { el.innerHTML = '<span class="muted">Checked while the schedule has the car plugged in.</span>'; return; }
+  const span = `${t(pc.start)}–${t(pc.end)}`;
+  const head = {
+    waiting: `<span class="chip">Checking at ${t(pc.check_at)}</span> <span class="muted">Giving your supplier a few minutes to plan (plugged in ${span})</span>`,
+    none: `<span class="chip">No slots yet</span> <span class="muted">Nothing planned before ${t(pc.until)} (plugged in ${span})</span>`,
+    ok: `<span class="chip ok">Matches</span> <span class="muted">Every slot up to ${t(pc.until)} is inside ${span}</span>`,
+    error: `<span class="chip err">Doesn't match</span> <span class="muted">Plugged in ${span}, checked up to ${t(pc.until)}</span>`,
+  }[pc.status] || '';
+  const problems = (pc.problems || []).map((p) => `<div class="sub" style="color:var(--err)">${esc(p)}</div>`).join('');
+  const slots = (pc.slots || []).length ? `<div class="plan-slots">${pc.slots.map((sl) =>
+    `<span class="chip ${sl.ok ? '' : 'err'}">${t(sl.start)}–${t(sl.end)}</span>`).join('')}</div>` : '';
+  el.innerHTML = head + problems + slots;
+}
+$('a-wait').addEventListener('change', async (e) => {
+  const v = parseInt(e.target.value, 10);
+  if (!(v >= 0 && v <= 600)) { toast('Wait must be 0 to 600 seconds'); refreshAutomation(false); return; }
+  if (await post('automation/schedule', {unplug_wait_s: v})) toast(v ? `Waits up to ${v} s for your supplier at unplug` : 'Unplugs straight away');
+  refreshAutomation(false);
+});
 $('a-ready-on').addEventListener('change', async (e) => {
   if (await post('automation/schedule', {ready_time: e.target.checked})) { toast(e.target.checked ? 'Ready time: set from the schedule' : 'Ready time: left alone'); await refreshAutomation(false); drawEntries(); }
   else e.target.checked = !e.target.checked;

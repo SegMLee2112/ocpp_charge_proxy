@@ -48,6 +48,8 @@ class SharedState:
     scheduled: Optional[bool] = None
     # A scheduled unplug waiting (until this time) for the supplier to stop the session
     unplug_pending: Optional[str] = None
+    # Force schedule on supplier: the supplier's plan checked against the schedule
+    plan_check: Optional[dict] = None
 
     def to_dict(self) -> dict:
         return asdict(self)

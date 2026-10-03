@@ -495,3 +495,44 @@ def test_graceful_unplug_waits_for_the_supplier():
     assert run(True, False, False) == ([("unplug", 0)], False)  # no session: straight away
     assert run(True, True, True) == ([("unplug", 20)], True)  # supplier stopped it after 20 s
     assert run(True, True, False) == ([("unplug", 61)], True)  # gave it a minute
+
+
+def test_unplug_wait_setting(tmp_path):
+    a, _ = _automation(tmp_path)
+    assert a.unplug_wait_s == 60 and a.snapshot()["schedule"]["unplug_wait_s"] == 60
+    a.set_schedule(unplug_wait_s=120)
+    assert _automation(tmp_path)[0].unplug_wait_s == 120  # saved
+    for bad in (-1, 601, "x"):
+        try:
+            a.set_schedule(unplug_wait_s=bad)
+            raise AssertionError("accepted %r" % (bad,))
+        except ValueError:
+            pass
+    assert a.unplug_wait_s == 120
+
+
+def test_unplug_wait_zero_unplugs_straight_away():
+    every = list(range(7))
+    a, clock = _automation(start=datetime.datetime(2026, 10, 6, 6, 59, tzinfo=TZ))
+    a.set_schedule(enabled=True, ready_time=True, unplug_wait_s=0, entries=[
+        {"time": "23:30", "action": "plug", "days": every}, {"time": "07:00", "action": "unplug", "days": every}])
+    state = SharedState(plugged_in=True, transaction_id=1)
+    calls = []
+
+    async def plug(source=None):
+        calls.append("plug")
+
+    async def unplug(source=None):
+        calls.append("unplug")
+        state.plugged_in = False
+
+    async def scenario():
+        task = asyncio.ensure_future(automation_loop(a, state, plug, unplug, tick_s=0.01))
+        await asyncio.sleep(0.03)
+        clock.advance(minutes=1, seconds=1)
+        await asyncio.sleep(0.05)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    _run(scenario())
+    assert calls == ["unplug"] and a.unplug_at is None

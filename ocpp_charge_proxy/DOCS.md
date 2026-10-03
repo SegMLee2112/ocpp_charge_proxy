@@ -98,10 +98,22 @@ comes back.
   6 hours in any 24 (Octopus's daily smart charging cap): the times and
   stretches that go over are marked in red and the schedule won't save
   until they're shortened. With the ready time off, there's no limit.
-  At a scheduled unplug during a charging session, it waits up to a minute
-  for your supplier to stop the session itself (so it ends cleanly),
-  then unplugs; if the supplier hasn't stopped it by then, it unplugs
-  anyway. The Overview shows "Unplugging by …" meanwhile.
+  At a scheduled unplug during a charging session, it waits for your
+  supplier to stop the session itself (so it ends cleanly), then unplugs;
+  if the supplier hasn't stopped it in time, it unplugs anyway. The wait
+  is set under the switch (**Wait for the supplier at unplug**, 60 s by
+  default, 0 to unplug straight away). The Overview shows "Unplugging by …"
+  meanwhile.
+  **Supplier's plan check**: while the schedule has the car plugged in,
+  the add-on checks your supplier's planned slots up to the ready time it
+  set against the schedule. With plug-ins 16:00–18:00 and 20:00–22:00, the
+  first stretch is checked from 16:00 (slots up to 18:00) and the second
+  from 20:00 (slots up to 22:00). It's flagged if a slot runs past the
+  unplug, or if the supplier's ready time was changed (e.g. in its app)
+  from the one the schedule set. The check starts 5 minutes after the
+  plug-in, to give the supplier time to plan, and follows the plan as it
+  changes. A mismatch shows on the Schedule tab (with the slots), as a red
+  chip on the Overview, and in the log.
 - **Auto re-plug** (**Settings** tab): Octopus sometimes doesn't start a session after you plug
   in. When Plugged In has been on for the set minutes (default 10) with no
   session and the add-on is connected, it unplugs, waits 30 seconds and

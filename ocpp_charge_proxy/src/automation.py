@@ -20,8 +20,12 @@
   plugged-in stretch (the last schedule time before now was a plug-in) with
   Plugged In off, it plugs in, as if it had been running at that time.
 - Graceful unplug: with the ready time on (Force schedule on supplier), a
-  scheduled unplug during a session waits up to GRACEFUL_UNPLUG_S for the
-  supplier to stop the session itself (RemoteStop), then unplugs.
+  scheduled unplug during a session waits up to `unplug_wait_s` (default
+  GRACEFUL_UNPLUG_S, set on the page; 0 = don't wait) for the supplier to
+  stop the session itself (RemoteStop), then unplugs.
+- Plan check: with the ready time on, while the schedule has the car
+  plugged in, the supplier's planned slots up to the ready time are checked
+  against the schedule (src/plan_check.py); a mismatch is shown on the page.
 - Ready time: optionally, when the schedule plugs in, set your supplier's
   smart charging ready-by time to the schedule's next unplug
   (src/ready_time.py). Only at a scheduled plug-in.
@@ -42,13 +46,15 @@ import uuid
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Optional
 
+from src.plan_check import SETTLE_S, check_plan
 from src.ready_time import check_unplug_times
 
 logger = logging.getLogger(__name__)
 
 REPLUG_WAIT_S = 30
 STARTUP_READY_S = 180  # keep trying to set the ready time this long after start-up
-GRACEFUL_UNPLUG_S = 60  # with Force schedule on supplier: wait this long for it to stop a session
+GRACEFUL_UNPLUG_S = 60  # with Force schedule on supplier: wait this long for it to stop a session (default)
+MAX_UNPLUG_WAIT_S = 600
 PENDING_TICK_S = 2  # check this often while waiting
 TICK_S = 15
 CATCH_UP_S = 300  # a scheduled time is still run if noticed within this
@@ -86,6 +92,16 @@ def _parse_hhmm(value) -> tuple[int, int]:
     if not (0 <= h <= 23 and 0 <= m <= 59):
         raise ValueError(f"Time must be HH:MM, got {value!r}")
     return h, m
+
+
+def _parse_iso(value) -> Optional[datetime.datetime]:
+    if not value:
+        return None
+    try:
+        dt = datetime.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt if dt.tzinfo else dt.astimezone()
 
 
 def _parse_date(value) -> datetime.date:
@@ -187,6 +203,9 @@ class Automation:
         self.skips: list[dict] = []  # [{"entry_id", "date"}]: times skipped once
         self.ready_time = False  # set the supplier's ready time at scheduled plug-ins
         self.ready_status: Optional[dict] = None  # the last time it was set (or why not)
+        self.unplug_wait_s = GRACEFUL_UNPLUG_S
+        self.plan_check: Optional[dict] = None  # the supplier's plan vs the schedule, while plugged in
+        self._plan_problems: tuple = ()
         self.replug = options.as_dict()
         # Runtime (not saved)
         self.attempts_used = 0
@@ -220,6 +239,10 @@ class Automation:
         schedule = data.get("schedule") or {}
         self.schedule_enabled = bool(schedule.get("enabled", False))
         self.ready_time = bool(schedule.get("ready_time", False))
+        try:
+            self.unplug_wait_s = self._valid_wait(schedule.get("unplug_wait_s", GRACEFUL_UNPLUG_S))
+        except ValueError:
+            pass
         entries = []
         for raw in schedule.get("entries") or []:
             try:
@@ -245,7 +268,8 @@ class Automation:
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump({
                     "schedule": {"enabled": self.schedule_enabled, "entries": self.entries,
-                                 "ready_time": self.ready_time, "skips": self.skips},
+                                 "ready_time": self.ready_time, "skips": self.skips,
+                                 "unplug_wait_s": self.unplug_wait_s},
                     "replug": self.replug,
                 }, f, indent=1)
                 f.flush()
@@ -260,12 +284,14 @@ class Automation:
 
     def set_schedule(self, enabled: Optional[bool] = None, entries: Optional[list] = None,
                      ready_time: Optional[bool] = None, ready_times: Optional[list] = None,
-                     provider: str = "your supplier", daily_cap_min: Optional[int] = None) -> None:
+                     provider: str = "your supplier", daily_cap_min: Optional[int] = None,
+                     unplug_wait_s=None) -> None:
         """ready_times: the times your supplier accepts as a ready time (None:
         unknown). While the schedule sets it, unplug times must be among them,
         and with daily_cap_min (Octopus: 360) it can't plug in for longer than
         that in any 24 hours. Checked when times are saved or the ready time
         is turned on, so the schedule can always be switched off."""
+        wait = None if unplug_wait_s is None else self._valid_wait(unplug_wait_s)
         new_entries = self.entries
         if entries is not None:
             if not isinstance(entries, list):
@@ -287,11 +313,23 @@ class Automation:
             self.schedule_enabled = bool(enabled)
         if ready_time is not None:
             self.ready_time = bool(ready_time)
+        if wait is not None:
+            self.unplug_wait_s = wait
         self._save()
         logger.info(
             "Schedule %s, %d entr%s", "on" if self.schedule_enabled else "off",
             len(self.entries), "y" if len(self.entries) == 1 else "ies",
         )
+
+    @staticmethod
+    def _valid_wait(value) -> int:
+        try:
+            wait = int(value)
+        except (TypeError, ValueError):
+            raise ValueError("The unplug wait must be a whole number of seconds") from None
+        if not 0 <= wait <= MAX_UNPLUG_WAIT_S:
+            raise ValueError(f"The unplug wait must be 0 to {MAX_UNPLUG_WAIT_S} seconds")
+        return wait
 
     @staticmethod
     def _valid_replug(values: dict) -> dict:
@@ -469,6 +507,44 @@ class Automation:
                 return {"time": _iso_local(occ), "action": entry["action"], "entry_id": entry["id"]}
         return None
 
+    # --- the supplier's plan vs the schedule ------------------------------------
+
+    def update_plan_check(self, plan: Optional[dict], plugged_in: bool) -> Optional[dict]:
+        """plan: {"found", "provider", "slots", "supplier_ready"} from HaLink.supplier_plan.
+        Checked only with Force schedule on supplier, while the schedule has the
+        car plugged in, up to the ready time set for this stretch."""
+        result = None
+        since = self.in_plug_window() if self.ready_time and plugged_in else None
+        end = self.next_unplug(self._now()) if since is not None else None
+        if end is not None and plan and plan.get("found"):
+            r = self.ready_status or {}
+            ready_at = _parse_iso(r.get("ready_at"))
+            set_at = _parse_iso(r.get("at"))
+            # The ready time set for this stretch (at its plug-in)
+            this_stretch = (not r.get("error") and set_at is not None and set_at >= since - datetime.timedelta(minutes=1))
+            until = ready_at if this_stretch and ready_at is not None and since < ready_at <= end else end
+            settle_from = max(since, set_at) if this_stretch else since
+            check_at = settle_from + datetime.timedelta(seconds=SETTLE_S)
+            if self._now() < check_at:
+                result = {"status": "waiting", "start": _iso_local(since), "end": _iso_local(end),
+                          "until": _iso_local(until), "check_at": _iso_local(check_at), "problems": []}
+            else:
+                result = check_plan(plan.get("slots") or [], since, end, until,
+                                    ready_set=r.get("ready") if this_stretch else None,
+                                    supplier_ready=plan.get("supplier_ready"),
+                                    provider=plan.get("provider") or "Your supplier")
+            result["provider"] = plan.get("provider")
+        problems = tuple(result["problems"]) if result else ()
+        if problems != self._plan_problems:
+            for text in problems:
+                if text not in self._plan_problems:
+                    logger.warning("Supplier plan doesn't match the schedule: %s", text)
+            if not problems and result and result["status"] != "waiting":
+                logger.info("Supplier plan matches the schedule again")
+            self._plan_problems = problems
+        self.plan_check = result
+        return result
+
     # --- re-plug -------------------------------------------------------------
 
     def replug_due(self, plugged_in: bool, in_session: bool, connected: bool,
@@ -563,6 +639,8 @@ class Automation:
                 "last_run": self.last_run,
                 "ready_time": self.ready_time,
                 "ready_status": self.ready_status,
+                "unplug_wait_s": self.unplug_wait_s,
+                "plan_check": self.plan_check,
                 "skips": self.skips,
                 "upcoming": self.upcoming(),
             },
@@ -574,6 +652,7 @@ class Automation:
         shared_state.schedule_next = self.next_action()
         shared_state.replug = self.replug_status()
         shared_state.unplug_pending = _iso_from_epoch(self.unplug_at)
+        shared_state.plan_check = self.plan_check
 
 
 async def apply_ready_time(automation: "Automation",
@@ -603,11 +682,13 @@ async def automation_loop(
     tick_s: float = TICK_S,
     scheduled: Optional[Callable[[], Optional[bool]]] = None,
     set_ready_time: Optional[Callable[[datetime.datetime], Awaitable[dict]]] = None,
+    supplier_plan: Optional[Callable[[], Optional[dict]]] = None,
 ) -> None:
     """Run the schedule and re-plug for the life of the add-on.
 
     scheduled: whether your supplier has a charge slot planned (None if its
-    integration isn't there); also shown as the add-on's status."""
+    integration isn't there); also shown as the add-on's status.
+    supplier_plan: the supplier's slots and ready time, for the plan check."""
     started = automation._clock()
     ready_pending = False  # a start-up plug-in's ready time, until HA is there to take it
     first = True
@@ -639,11 +720,11 @@ async def automation_loop(
                     await plug(source="schedule")
                     if automation.ready_time and set_ready_time is not None:
                         await apply_ready_time(automation, set_ready_time)
-                elif automation.ready_time and shared_state.transaction_id is not None:
+                elif automation.ready_time and automation.unplug_wait_s and shared_state.transaction_id is not None:
                     # Give the supplier a chance to end the session itself
-                    automation.unplug_at = automation._clock() + GRACEFUL_UNPLUG_S
+                    automation.unplug_at = automation._clock() + automation.unplug_wait_s
                     logger.info("Schedule: unplug at %s, waiting up to %d s for the supplier to stop the session",
-                                entry["time"], GRACEFUL_UNPLUG_S)
+                                entry["time"], automation.unplug_wait_s)
                 else:
                     logger.info("Schedule: unplugging at %s", entry["time"])
                     await unplug(source="schedule")
@@ -656,9 +737,11 @@ async def automation_loop(
                     await unplug(source="schedule")
                 elif automation._clock() >= automation.unplug_at:
                     logger.info("Schedule: the supplier didn't stop the session within %d s, unplugging",
-                                GRACEFUL_UNPLUG_S)
+                                automation.unplug_wait_s)
                     automation.unplug_at = None
                     await unplug(source="schedule")
+            automation.update_plan_check(supplier_plan() if supplier_plan is not None else None,
+                                         plugged_in=bool(shared_state.plugged_in))
             if automation.replug_due(
                 # Plugged In and waiting (Preparing); not e.g. Unavailable
                 plugged_in=bool(shared_state.plugged_in) and shared_state.state == "Preparing",

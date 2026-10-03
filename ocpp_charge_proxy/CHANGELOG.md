@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.10.0
+
+- Force schedule on supplier: the supplier's plan is checked against the
+  schedule while plugged in, up to the ready time set for that stretch
+  (each stretch is checked on its own, from its plug-in). A slot running
+  past the unplug, or a ready time changed on the supplier's side, is
+  flagged on the Schedule tab, the Overview and in the log
+- The wait for the supplier to stop a session at a scheduled unplug can be
+  set (0 to 600 s, default 60) under the Force schedule on supplier switch
+- The add-on now follows the supplier's ready time entity live
+- Tests on GitHub also run for tags and on demand, install from
+  requirements-dev.txt (now including pytest-aiohttp), and cache pip
+
 ## 2.9.4
 
 - Force schedule on supplier: at a scheduled unplug during a session, the

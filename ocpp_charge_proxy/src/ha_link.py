@@ -370,6 +370,7 @@ class HaLink:
                 self.plug_sync.reset()
                 ids = self.watched + ([self.plug_sync.entity_id] if self.plug_sync.entity_id else [])
                 ids += self.dispatch_entities[:1]
+                ids += [self.ready_entity] if self.ready_entity else []
                 if ids:
                     counter["id"] += 1
                     counter["sub"] = counter["id"]
@@ -525,10 +526,14 @@ class HaLink:
             first = found[0]
             self.states[first["entity_id"]] = {"state": first.get("state"), "attributes": first.get("attributes") or {}}
         ready = target_time_entity(states, ids[0]) if ids else None
-        self.ready_entity = ready["entity_id"] if ready else None
+        ready_id = ready["entity_id"] if ready else None
+        ready_changed = ready_id != self.ready_entity
+        self.ready_entity = ready_id
         self.ready_times = allowed_times(ready) if ready else None
+        if ready:  # until the subscription brings it
+            self.states[ready_id] = {"state": ready.get("state"), "attributes": ready.get("attributes") or {}}
         if ids == self.dispatch_entities:
-            return False
+            return ready_changed  # follow the ready time entity too
         if ids[:1] != self.dispatch_entities[:1]:
             logger.info("Smart charging: %s", f"following {ids[0]}" if ids else "no supplier sensor found")
         self.dispatch_entities = ids
@@ -575,6 +580,7 @@ class HaLink:
         except Exception as err:
             return {**out, "error": f"Home Assistant refused the ready time: {err}"}
         out["ready"] = ready.strftime("%H:%M")
+        out["ready_at"] = ready.isoformat(timespec="minutes")
         logger.info("Ready time set to %s on %s (schedule unplugs at %s)",
                     out["ready"], entity["entity_id"], unplug.strftime("%a %H:%M"))
         return out
@@ -591,6 +597,16 @@ class HaLink:
                 "%Y-%m-%dT%H:%M:%SZ", time.gmtime(self.dispatch_searched_at)),
             "search_every_s": DISPATCH_SEARCH_S,
         }
+
+    def supplier_plan(self) -> dict:
+        """For the plan check (src/plan_check.py): the supplier's running and
+        planned slots, and its ready time setting as it is now."""
+        info = self.smart_charging()
+        if not info.get("found"):
+            return {"found": False}
+        slots = ([info["current"]] if info.get("current") else []) + list(info.get("planned") or [])
+        ready = (self.states.get(self.ready_entity) or {}).get("state") if self.ready_entity else None
+        return {"found": True, "provider": info.get("provider"), "slots": slots, "supplier_ready": ready}
 
     def scheduled(self) -> Optional[bool]:
         """True if your supplier has a charge slot running or planned; None if

@@ -371,7 +371,8 @@ async def _automation_change(request: web.Request, apply) -> web.Response:
 
 
 async def handle_schedule(request: web.Request) -> web.Response:
-    """{"enabled": bool}, {"ready_time": bool} and/or {"entries": [{time, days, action, enabled}, ...]}."""
+    """{"enabled": bool}, {"ready_time": bool}, {"unplug_wait_s": N} and/or
+    {"entries": [{time, days, action, enabled}, ...]}."""
     link = request.app["ha_link"]
     sc = link.smart_charging() if link is not None else {}
     return await _automation_change(
@@ -380,6 +381,7 @@ async def handle_schedule(request: web.Request) -> web.Response:
             ready_times=sc.get("ready_times"), provider=sc.get("provider") or "your supplier",
             # Octopus schedules at most 6 hours of smart charging a day
             daily_cap_min=360 if sc.get("provider") == "Octopus Energy" else None,
+            unplug_wait_s=b.get("unplug_wait_s"),
         ),
     )
 

@@ -125,6 +125,7 @@ def test_ha_link_sets_the_entity():
     link.dispatch_entities = [DISPATCH]
     out = _run(link.set_ready_time(unplug))
     assert out["ready"] == "09:00" and out["entity_id"].startswith("select.")
+    assert "T09:00" in out["ready_at"] and out["ready_at"].startswith(unplug.date().isoformat())
     assert sent[-1]["service"] == "select_option" and sent[-1]["service_data"] == {"option": "09:00"}
     link.dispatch_entities = []
     assert "wasn't found" in _run(link.set_ready_time(unplug))["error"]
@@ -159,3 +160,26 @@ def test_unplug_times_limited_while_setting_the_ready_time():
     with pytest.raises(ValueError):
         a.set_schedule(entries=good + [{"time": "12:00", "action": "unplug"}], ready_times=DEFAULT_TIMES)
     assert len(a.entries) == 2
+
+
+def test_ha_link_supplier_plan():
+    from src.ha_link import HaLink
+    from src.shared_state import SharedState
+
+    async def noop(*a, **k):
+        pass
+
+    link = HaLink(None, SharedState(), lambda kw: None, noop, noop, token="t")
+    assert link.supplier_plan() == {"found": False}
+    soon = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
+    later = soon + datetime.timedelta(hours=1)
+    link.dispatch_entities = [DISPATCH]
+    link.ready_entity = "time.octopus_energy_abc_intelligent_target_time"
+    link.states = {
+        DISPATCH: {"state": "off", "attributes": {"planned_dispatches": [
+            {"start": soon.isoformat(), "end": later.isoformat(), "charge_in_kwh": 3}]}},
+        link.ready_entity: {"state": "07:30:00", "attributes": {}},
+    }
+    plan = link.supplier_plan()
+    assert plan["found"] and plan["provider"] == "Octopus Energy" and plan["supplier_ready"] == "07:30:00"
+    assert len(plan["slots"]) == 1
