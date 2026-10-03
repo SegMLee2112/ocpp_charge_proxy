@@ -12,6 +12,9 @@
   counts as an answer: no re-plug while one is planned, only when nothing
   has been scheduled `after_min` minutes after plugging in.
 
+- At start-up: if the schedule is on and the add-on starts inside a
+  plugged-in stretch (the last schedule time before now was a plug-in) with
+  Plugged In off, it plugs in, as if it had been running at that time.
 - Ready time: optionally, when the schedule plugs in, set your supplier's
   smart charging ready-by time to the schedule's next unplug
   (src/ready_time.py). Only at a scheduled plug-in.
@@ -37,6 +40,7 @@ from src.ready_time import check_unplug_times
 logger = logging.getLogger(__name__)
 
 REPLUG_WAIT_S = 30
+STARTUP_READY_S = 180  # keep trying to set the ready time this long after start-up
 TICK_S = 15
 CATCH_UP_S = 300  # a scheduled time is still run if noticed within this
 ACTIONS = ("plug", "unplug")
@@ -328,6 +332,28 @@ class Automation:
         due.sort(key=lambda x: x[0])
         return [e for _, e in due]
 
+    def last_event(self, at: datetime.datetime) -> Optional[tuple[datetime.datetime, dict]]:
+        """The schedule's most recent enabled time at or before `at` (within a week)."""
+        best = None
+        start = at.date() - datetime.timedelta(days=7)
+        for entry in self.entries:
+            if not entry["enabled"]:
+                continue
+            for occ in self._occurrences(entry, start, 9):
+                # an unplug at the same minute as a plug wins (it's later in the list)
+                if occ <= at and (best is None or occ > best[0] or
+                                  (occ == best[0] and entry["action"] == "unplug")):
+                    best = (occ, entry)
+        return best
+
+    def in_plug_window(self, at: Optional[datetime.datetime] = None) -> Optional[datetime.datetime]:
+        """When the plugged-in stretch we're in started, if the schedule (on)
+        has the car plugged in at `at` (default now); else None."""
+        if not self.schedule_enabled:
+            return None
+        last = self.last_event(at or self._now())
+        return last[0] if last and last[1]["action"] == "plug" else None
+
     def next_unplug(self, after: datetime.datetime) -> Optional[datetime.datetime]:
         """The schedule's next unplug after `after` (within a week)."""
         best = None
@@ -462,7 +488,8 @@ class Automation:
 
 
 async def apply_ready_time(automation: "Automation",
-                           set_ready_time: Callable[[datetime.datetime], Awaitable[dict]]) -> dict:
+                           set_ready_time: Callable[[datetime.datetime], Awaitable[dict]],
+                           log_errors: bool = True) -> dict:
     """At a scheduled plug-in: ready time = the schedule's next unplug."""
     now = automation._now()
     unplug = automation.next_unplug(now)
@@ -473,7 +500,7 @@ async def apply_ready_time(automation: "Automation",
             result = await set_ready_time(unplug)
         except Exception as err:
             result = {"unplug": unplug.isoformat(timespec="minutes"), "error": str(err)}
-    if result.get("error"):
+    if result.get("error") and log_errors:
         logger.warning("Ready time not set: %s", result["error"])
     automation.ready_status = {**result, "at": _iso_from_epoch(automation._clock())}
     return result
@@ -492,9 +519,26 @@ async def automation_loop(
 
     scheduled: whether your supplier has a charge slot planned (None if its
     integration isn't there); also shown as the add-on's status."""
+    started = automation._clock()
+    ready_pending = False  # a start-up plug-in's ready time, until HA is there to take it
+    first = True
     while True:
         try:
             shared_state.scheduled = scheduled() if scheduled is not None else None
+            if first:
+                first = False
+                since = automation.in_plug_window()
+                if since is not None and not shared_state.plugged_in:
+                    logger.info("Started inside a scheduled plug-in (since %s): plugging in", since.strftime("%a %H:%M"))
+                    automation.last_run = {"entry_id": None, "action": "plug",
+                                           "timestamp": _iso_from_epoch(automation._clock()), "startup": True}
+                    await plug(source="schedule")
+                    ready_pending = automation.ready_time and set_ready_time is not None
+            if ready_pending:
+                # HA (or the supplier's sensor) may not be there yet just after start-up
+                last_try = automation._clock() - started >= STARTUP_READY_S
+                result = await apply_ready_time(automation, set_ready_time, log_errors=last_try)
+                ready_pending = bool(result.get("error")) and not last_try
             for entry in automation.due():
                 logger.info("Schedule: %s at %s", "plugging in" if entry["action"] == "plug" else "unplugging", entry["time"])
                 automation.last_run = {

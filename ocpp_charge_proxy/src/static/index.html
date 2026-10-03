@@ -1622,7 +1622,7 @@ async function refreshAutomation(force) {
   const n = d.schedule.next;
   $('a-next').innerHTML = !d.schedule.enabled ? 'The schedule is off.' :
     n ? `Next: <b>${n.action === 'plug' ? 'plug in' : 'unplug'}</b> ${esc(whenText(n.time))}` : 'Nothing scheduled.';
-  if (d.schedule.last_run) $('a-next').innerHTML += ` · last: ${d.schedule.last_run.action === 'plug' ? 'plugged in' : 'unplugged'} ${ago(d.schedule.last_run.timestamp)}`;
+  if (d.schedule.last_run) $('a-next').innerHTML += ` · last: ${d.schedule.last_run.action === 'plug' ? 'plugged in' : 'unplugged'} ${ago(d.schedule.last_run.timestamp)}${d.schedule.last_run.startup ? ' (when the add-on started)' : ''}`;
   $('a-tz').textContent = `Times are in ${d.timezone} (add-on time now ${d.now ? d.now.slice(11, 16) : '—'}). A time missed while the add-on is stopped isn't caught up later. Unplugging during a session ends it.`;
   if (!rpDirty) {
     $('a-rp-after').value = d.replug.after_min; $('a-rp-tries').value = d.replug.attempts;

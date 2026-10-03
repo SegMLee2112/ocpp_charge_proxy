@@ -74,6 +74,11 @@ comes back.
   whole schedule on and off. Times are in your Home Assistant time zone. A
   time missed while the add-on was stopped isn't run later. Unplugging
   during a session ends the session.
+- **Starting inside a scheduled stretch:** if the add-on starts (or
+  restarts) while the schedule has the car plugged in, e.g. at 02:00 with
+  plug in 23:30 and unplug 07:00, and Plugged In is off, it plugs in
+  straight away (and with Force schedule on supplier, sets the ready time
+  once Home Assistant is connected). It never unplugs at start-up.
 - **Force schedule on supplier** (**Schedule** tab, off by default):
   when the schedule plugs in, the add-on sets your supplier's smart
   charging ready-by time to the schedule's next unplug, for example plug in

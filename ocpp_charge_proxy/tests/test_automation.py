@@ -200,7 +200,8 @@ def test_replug_settings_validated():
 
 def test_loop_runs_schedule_and_publishes():
     a, clock = _automation()
-    a.set_schedule(enabled=True, entries=[{"time": "23:30", "action": "plug"}])
+    # (an unplug too, so 23:00 isn't inside a plugged-in stretch at start-up)
+    a.set_schedule(enabled=True, entries=[{"time": "23:30", "action": "plug"}, {"time": "07:00", "action": "unplug"}])
     state = SharedState(connected_to_server=True)
     calls = []
 
@@ -224,7 +225,7 @@ def test_loop_runs_schedule_and_publishes():
     assert calls == ["plug"]
     assert state.schedule_enabled is True
     assert state.replug["status"] == "waiting"
-    assert state.schedule_next["action"] == "plug"
+    assert state.schedule_next["action"] == "unplug"  # 07:00 next
     json.dumps(state.to_dict())  # serialisable for the API
 
 
@@ -303,3 +304,56 @@ def test_octopus_six_hours_a_day():
         assert a.ready_time is False
     a.set_schedule(enabled=False, daily_cap_min=360)  # switching off is always allowed
     assert a.schedule_enabled is False
+
+
+def test_in_plug_window():
+    every = list(range(7))
+    a, clock = _automation(start=datetime.datetime(2026, 10, 6, 2, 0, tzinfo=TZ))  # Tuesday 02:00
+    a.set_schedule(enabled=True, entries=[
+        {"time": "23:30", "action": "plug", "days": every}, {"time": "07:00", "action": "unplug", "days": every}])
+    assert a.in_plug_window().strftime("%a %H:%M") == "Mon 23:30"
+    clock.advance(hours=6)  # 08:00: unplugged by then
+    assert a.in_plug_window() is None
+    a.set_schedule(enabled=False)
+    clock.advance(hours=16)  # 00:00, inside again, but the schedule is off
+    assert a.in_plug_window() is None
+
+
+def test_startup_plugs_in_inside_a_scheduled_stretch():
+    from src.automation import automation_loop
+    from src.shared_state import SharedState
+    every = list(range(7))
+
+    def run(plugged_in, ready_results):
+        a, clock = _automation(start=datetime.datetime(2026, 10, 6, 2, 0, tzinfo=TZ))
+        a.set_schedule(enabled=True, ready_time=True, entries=[
+            {"time": "23:30", "action": "plug", "days": every}, {"time": "07:00", "action": "unplug", "days": every}])
+        state = SharedState(plugged_in=plugged_in)
+        calls, asked = [], []
+
+        async def plug(source=None):
+            calls.append(("plug", source))
+            state.plugged_in = True
+
+        async def unplug(source=None):
+            calls.append(("unplug", source))
+
+        async def set_ready(unplug_at):
+            asked.append(unplug_at)
+            return ready_results.pop(0) if ready_results else {"ready": "07:00"}
+
+        async def ticks():
+            task = asyncio.ensure_future(automation_loop(a, state, plug, unplug, tick_s=0.01, set_ready_time=set_ready))
+            await asyncio.sleep(0.1)
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+        _run(ticks())
+        return a, calls, asked
+
+    a, calls, asked = run(False, [{"error": "Not connected to Home Assistant"}])
+    assert calls == [("plug", "schedule")]
+    assert len(asked) == 2 and a.ready_status["ready"] == "07:00"  # tried again once HA was there
+    assert a.last_run["startup"] is True
+    _, calls, asked = run(True, [])  # already plugged in: nothing to do
+    assert calls == [] and asked == []

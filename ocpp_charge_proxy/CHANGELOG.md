@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.8.0
+
+- **Start-up check for the schedule.** If the add-on starts (or restarts,
+  e.g. after an update) inside a stretch the schedule has the car plugged
+  in, say at 02:00 with plug in 23:30 and unplug 07:00, and Plugged In is
+  off, it plugs in straight away instead of waiting for the next plug-in
+  time. With Force schedule on supplier on, it also sets your supplier's
+  ready time, trying for up to 3 minutes while Home Assistant connects.
+  The Schedule tab shows it as the last run "(when the add-on started)".
+  It only plugs in, never unplugs, and only while the schedule is on. If
+  you'd unplugged by hand inside the stretch before the restart, it plugs
+  back in.
+
 ## 2.7.6
 
 - The **Automation** tab is now called **Schedule**. Links to `#automation`
