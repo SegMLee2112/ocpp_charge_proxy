@@ -370,9 +370,10 @@ async def _automation_change(request: web.Request, apply) -> web.Response:
 
 
 async def handle_schedule(request: web.Request) -> web.Response:
-    """{"enabled": bool} and/or {"entries": [{time, days, action, enabled}, ...]}."""
+    """{"enabled": bool}, {"ready_time": bool} and/or {"entries": [{time, days, action, enabled}, ...]}."""
     return await _automation_change(
-        request, lambda a, b: a.set_schedule(enabled=b.get("enabled"), entries=b.get("entries")),
+        request, lambda a, b: a.set_schedule(enabled=b.get("enabled"), entries=b.get("entries"),
+                                             ready_time=b.get("ready_time")),
     )
 
 

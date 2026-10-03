@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.7.0
+
+- **Ready time from the schedule** (Automation tab, a switch, off by
+  default). When the schedule plugs in, the add-on sets your supplier's
+  smart charging ready-by time to the schedule's next unplug: with 02:00 to
+  04:00, 06:00 to 08:00 and 10:00 to 12:00 it sets 04:00, then 08:00, then
+  11:00. It's only set at scheduled plug-ins, never otherwise.
+  - Octopus Energy and EDF Energy accept 04:00 to 11:00 in 30-minute
+    steps: the latest of those at or before the unplug is used. If there's
+    none (e.g. plugged in 4pm to 10pm) nothing is set and the page says why.
+  - E.ON Next's integration has no ready time setting, so it can't be used
+    there.
+  - The last time it was set (or why not) is shown under the switch.
+- **6-hour warning:** the Your week card warns when the schedule has the
+  car plugged in for more than 6 hours in any 24 hours, as your supplier
+  may not schedule more smart charging than that in a day.
+
 ## 2.6.2
 
 - Supplier slots on the History chart are drawn in the supplier's colour:

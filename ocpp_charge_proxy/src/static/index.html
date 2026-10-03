@@ -396,11 +396,20 @@
         <button class="btn small" id="a-discard" disabled>Discard</button>
         <button class="btn small primary" id="a-save" disabled>Save</button>
       </div>
+      <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
+        <div class="grow">
+          <div>Set my supplier's ready time</div>
+          <div class="note" style="margin:0">When the schedule plugs in, set your supplier's smart charging ready-by time to the schedule's next unplug. Only at scheduled plug-ins. Octopus and EDF accept 04:00–11:00 in 30-minute steps, so the latest of those before the unplug is used.</div>
+          <div id="a-ready-status" style="margin-top:6px"></div>
+        </div>
+        <label class="switch"><input type="checkbox" id="a-ready-on" aria-label="Set the ready time from the schedule"><span></span></label>
+      </div>
       <div class="note" id="a-tz"></div>
     </div>
     <div class="card">
       <h2>Your week<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400" id="w-note"></span></h2>
       <div class="week" id="w-grid"></div>
+      <div class="sub" id="w-warn" hidden style="margin-top:10px"></div>
       <div class="legend"><span><b class="band" style="background:var(--primary);opacity:.8"></b>Plugged in by the schedule</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span></div>
     </div>
   </section>
@@ -1604,6 +1613,9 @@ async function refreshAutomation(force) {
   auto.data = d;
   if (!auto.dirty || force) { auto.entries = JSON.parse(JSON.stringify(d.schedule.entries)); setDirty(false); drawEntries(); }
   $('a-sched-on').checked = d.schedule.enabled;
+  $('a-ready-on').checked = !!d.schedule.ready_time;
+  if (!smart.data) refreshSmart(true).then(() => drawReadyStatus(auto.data));
+  drawReadyStatus(d);
   const n = d.schedule.next;
   $('a-next').innerHTML = !d.schedule.enabled ? 'The schedule is off.' :
     n ? `Next: <b>${n.action === 'plug' ? 'plug in' : 'unplug'}</b> ${esc(whenText(n.time))}` : 'Nothing scheduled.';
@@ -1615,6 +1627,23 @@ async function refreshAutomation(force) {
   }
   drawReplugStatus(d.replug);
 }
+function drawReadyStatus(d) {
+  if (!d) return;
+  const r = d.schedule.ready_status, on = d.schedule.ready_time;
+  const t = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '—';
+  let html = '';
+  if (on && smart.data && !smart.data.found) html = '<span class="chip warn">Supplier integration not found</span> <span class="muted">Needs the Octopus Energy or EDF Energy integration</span>';
+  else if (on && smart.data && smart.data.provider === 'E.ON Next') html = '<span class="chip warn">Not supported</span> <span class="muted">The E.ON Next integration has no ready time setting</span>';
+  if (r) html += `<div class="sub">${r.error
+    ? `<span class="chip warn">Not set</span> ${esc(r.error)}`
+    : `<span class="chip ok">Set to ${esc(r.ready)}</span> for the unplug at ${t(r.unplug)}`} <span class="muted">· ${ago(r.at)}</span></div>`;
+  else if (on) html += '<div class="sub">Not set yet: happens at the next scheduled plug-in.</div>';
+  $('a-ready-status').innerHTML = html;
+}
+$('a-ready-on').addEventListener('change', async (e) => {
+  if (await post('automation/schedule', {ready_time: e.target.checked})) { toast(e.target.checked ? 'Ready time: set from the schedule' : 'Ready time: left alone'); refreshAutomation(false); }
+  else e.target.checked = !e.target.checked;
+});
 function drawReplugStatus(r) {
   if (!r) return;
   const tries = `${r.attempts_used} of ${r.attempts} tries used`;
@@ -1665,6 +1694,19 @@ function drawWeek() {
   html += '<div></div><div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';
   $('w-grid').innerHTML = html;
   $('w-note').textContent = !events.length ? 'No times set' : on ? (auto.dirty ? 'Preview of unsaved changes' : '') : 'Schedule is off: preview only';
+  // More than 6 hours plugged in within any 24 hours? (rolling, across midnight and the week's end)
+  const all = segs.concat(segs.map(([a, b]) => [a + 10080, b + 10080]));
+  let worst = null;
+  for (const [a] of segs) {
+    const total = all.reduce((sum, [x, y]) => sum + Math.max(0, Math.min(y, a + 1440) - Math.max(x, a)), 0);
+    if (!worst || total > worst.total) worst = {start: a, total};
+  }
+  const warn = worst && worst.total > 360;
+  $('w-warn').hidden = !warn;
+  if (warn) {
+    $('w-warn').innerHTML = `<span class="chip warn">Over 6 hours</span> Plugged in for ${dur(worst.total * 60)} in the 24 hours from ${DAYS[Math.floor(worst.start / 1440) % 7]} ${hhmm(worst.start % 1440)}. `
+      + 'Your supplier may not schedule more than about 6 hours of smart charging in a day, so the rest of the time may go unused.';
+  }
 }
 const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 function drawEntries() {

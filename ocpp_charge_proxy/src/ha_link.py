@@ -24,6 +24,7 @@ import time
 from typing import Awaitable, Callable, Optional
 
 from src.autoplug import DEFAULT_AUTO_PLUG_SOC, AutoPlug, CarConnected
+from src.ready_time import allowed_times, pick_ready_time, service_call, target_time_entity
 from src.smart_charging import find_dispatch_sensors, smart_charging
 from src.ha_entities import (
     ALL_SENSORS, HELPER_ICON, HELPER_ID, HELPER_NAME, PluggedInSync, SensorPublisher,
@@ -538,6 +539,38 @@ class HaLink:
         if info.get("found"):
             info["others"] = self.dispatch_entities[1:]
         return info
+
+    async def set_ready_time(self, unplug) -> dict:
+        """Set your supplier's ready-by time for an unplug at `unplug` (aware
+        datetime), src/ready_time.py. Returns what was done, for the page."""
+        import datetime as _dt
+        out: dict = {"unplug": unplug.isoformat(timespec="minutes")}
+        if self._call is None:
+            return {**out, "error": "Not connected to Home Assistant"}
+        dispatch = self.dispatch_entities[0] if self.dispatch_entities else None
+        if not dispatch:
+            return {**out, "error": "Your supplier's smart charging integration wasn't found"}
+        try:
+            states = await self._call({"type": "get_states"}, timeout=30) or []
+        except Exception as err:
+            return {**out, "error": f"Couldn't read Home Assistant's states: {err}"}
+        entity = target_time_entity(states, dispatch)
+        if entity is None:
+            return {**out, "error": "Your supplier's integration has no ready time (target time) setting"}
+        out["entity_id"] = entity["entity_id"]
+        allowed = allowed_times(entity)
+        ready = pick_ready_time(_dt.datetime.now(unplug.tzinfo), unplug, allowed)
+        if ready is None:
+            return {**out, "error": f"Your supplier only accepts ready times from {allowed[0]} to {allowed[-1]}, "
+                                    f"and there's none before the unplug at {unplug.strftime('%H:%M')}"}
+        try:
+            await self._call(service_call(entity, ready))
+        except Exception as err:
+            return {**out, "error": f"Home Assistant refused the ready time: {err}"}
+        out["ready"] = ready.strftime("%H:%M")
+        logger.info("Ready time set to %s on %s (schedule unplugs at %s)",
+                    out["ready"], entity["entity_id"], unplug.strftime("%a %H:%M"))
+        return out
 
     def smart_charging_health(self) -> dict:
         """For the Health tab: which supplier integration was found, and when it was looked for."""

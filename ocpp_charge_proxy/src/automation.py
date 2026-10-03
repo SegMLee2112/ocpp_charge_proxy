@@ -12,6 +12,10 @@
   counts as an answer: no re-plug while one is planned, only when nothing
   has been scheduled `after_min` minutes after plugging in.
 
+- Ready time: optionally, when the schedule plugs in, set your supplier's
+  smart charging ready-by time to the schedule's next unplug
+  (src/ready_time.py). Only at a scheduled plug-in.
+
 Settings are saved in /data/automation.json and set on the web page
 (Settings tab for re-plug). Until they're saved, re-plug uses the defaults.
 """
@@ -115,6 +119,8 @@ class Automation:
         self._options = options
         self.schedule_enabled = False
         self.entries: list[dict] = []
+        self.ready_time = False  # set the supplier's ready time at scheduled plug-ins
+        self.ready_status: Optional[dict] = None  # the last time it was set (or why not)
         self.replug = options.as_dict()
         # Runtime (not saved)
         self.attempts_used = 0
@@ -146,6 +152,7 @@ class Automation:
             return
         schedule = data.get("schedule") or {}
         self.schedule_enabled = bool(schedule.get("enabled", False))
+        self.ready_time = bool(schedule.get("ready_time", False))
         entries = []
         for raw in schedule.get("entries") or []:
             try:
@@ -168,7 +175,8 @@ class Automation:
             tmp = self._path + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump({
-                    "schedule": {"enabled": self.schedule_enabled, "entries": self.entries},
+                    "schedule": {"enabled": self.schedule_enabled, "entries": self.entries,
+                                 "ready_time": self.ready_time},
                     "replug": self.replug,
                 }, f, indent=1)
                 f.flush()
@@ -181,7 +189,8 @@ class Automation:
 
     # --- settings ------------------------------------------------------------
 
-    def set_schedule(self, enabled: Optional[bool] = None, entries: Optional[list] = None) -> None:
+    def set_schedule(self, enabled: Optional[bool] = None, entries: Optional[list] = None,
+                     ready_time: Optional[bool] = None) -> None:
         if entries is not None:
             if not isinstance(entries, list):
                 raise ValueError("Entries must be a list")
@@ -190,6 +199,8 @@ class Automation:
             self.entries = [validate_entry(e) for e in entries]
         if enabled is not None:
             self.schedule_enabled = bool(enabled)
+        if ready_time is not None:
+            self.ready_time = bool(ready_time)
         self._save()
         logger.info(
             "Schedule %s, %d entr%s", "on" if self.schedule_enabled else "off",
@@ -248,6 +259,19 @@ class Automation:
                     due.append((occ, entry))
         due.sort(key=lambda x: x[0])
         return [e for _, e in due]
+
+    def next_unplug(self, after: datetime.datetime) -> Optional[datetime.datetime]:
+        """The schedule's next unplug after `after` (within a week)."""
+        best = None
+        for entry in self.entries:
+            if not entry["enabled"] or entry["action"] != "unplug":
+                continue
+            for occ in self._occurrences(entry, after.date(), 8):
+                if occ > after:
+                    if best is None or occ < best:
+                        best = occ
+                    break
+        return best
 
     def next_action(self) -> Optional[dict]:
         if not self.schedule_enabled:
@@ -357,6 +381,8 @@ class Automation:
                 "entries": self.entries,
                 "next": self.next_action(),
                 "last_run": self.last_run,
+                "ready_time": self.ready_time,
+                "ready_status": self.ready_status,
             },
             "replug": self.replug_status(),
         }
@@ -367,6 +393,24 @@ class Automation:
         shared_state.replug = self.replug_status()
 
 
+async def apply_ready_time(automation: "Automation",
+                           set_ready_time: Callable[[datetime.datetime], Awaitable[dict]]) -> dict:
+    """At a scheduled plug-in: ready time = the schedule's next unplug."""
+    now = automation._now()
+    unplug = automation.next_unplug(now)
+    if unplug is None:
+        result = {"error": "There's no unplug in the schedule after this plug-in"}
+    else:
+        try:
+            result = await set_ready_time(unplug)
+        except Exception as err:
+            result = {"unplug": unplug.isoformat(timespec="minutes"), "error": str(err)}
+    if result.get("error"):
+        logger.warning("Ready time not set: %s", result["error"])
+    automation.ready_status = {**result, "at": _iso_from_epoch(automation._clock())}
+    return result
+
+
 async def automation_loop(
     automation: Automation,
     shared_state,
@@ -374,6 +418,7 @@ async def automation_loop(
     unplug: Callable[[], Awaitable[None]],
     tick_s: float = TICK_S,
     scheduled: Optional[Callable[[], Optional[bool]]] = None,
+    set_ready_time: Optional[Callable[[datetime.datetime], Awaitable[dict]]] = None,
 ) -> None:
     """Run the schedule and re-plug for the life of the add-on.
 
@@ -389,6 +434,8 @@ async def automation_loop(
                     "timestamp": _iso_from_epoch(automation._clock()),
                 }
                 await (plug if entry["action"] == "plug" else unplug)(source="schedule")
+                if entry["action"] == "plug" and automation.ready_time and set_ready_time is not None:
+                    await apply_ready_time(automation, set_ready_time)
             if automation.replug_due(
                 # Plugged In and waiting (Preparing); not e.g. Unavailable
                 plugged_in=bool(shared_state.plugged_in) and shared_state.state == "Preparing",
