@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.10.2
+
+- Octopus / EDF: the slot running now and the next slots come from the
+  current plan only. A started dispatch keeps its original times after the
+  supplier re-plans (e.g. after a restart mid-slot), so it showed a slot
+  "now, until 10:00 PM" when the next one started at 17:00. Started
+  dispatches are no longer used (also not on the chart)
+
 ## 2.10.1
 
 - New status **Waiting for supplier** (amber): plugged in, your supplier's

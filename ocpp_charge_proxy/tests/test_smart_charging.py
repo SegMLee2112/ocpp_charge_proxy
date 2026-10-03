@@ -70,3 +70,19 @@ def test_eon_next_schedule_sensor():
     assert out["provider"] == "E.ON Next" and out["dispatching"] is True
     assert out["current"]["charge_kwh"] == 0.5
     assert [p["charge_kwh"] for p in out["planned"]] == [3.2]
+
+
+def test_started_dispatches_ignored():
+    # Started 16:01 planned until 22:00; the add-on restarted at 16:41 and
+    # Octopus re-planned 17:00-21:30. At 16:48 there's no slot running.
+    m = 60
+    now = NOW
+    sensor = _octopus(
+        planned=[(now - 47 * m, now - 6.4 * m, -0.92), (now + 12 * m, now + 282 * m, -6.12)],
+        started=[(now - 47 * m, now + 312 * m, -7.0)],
+    )
+    out = smart_charging([sensor], now)
+    assert out["current"] is None and out["dispatching"] is False
+    assert [p["start"] for p in out["planned"]] == [_iso(now + 12 * m).replace("+00:00", "Z")]
+    # Not on the chart either: the 16:41-17:00 gap stays a gap
+    assert [p["charge_kwh"] for p in out["periods"]] == [-0.92, -6.12]

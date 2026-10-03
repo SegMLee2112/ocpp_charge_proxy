@@ -11,6 +11,12 @@ attribute:
 
 Both use the same attributes: planned_dispatches / started_dispatches /
 completed_dispatches, each a list of {start, end, charge_in_kwh, source}.
+Only planned_dispatches (the current plan, including what's already run
+today) and completed_dispatches are used. started_dispatches is ignored: a
+started dispatch keeps the times it had when it began, even after the
+supplier re-plans (e.g. started 16:01 to run until 22:00, re-planned to
+17:00-21:30 after the charger restarted), so it would show a slot that
+isn't there.
 The add-on looks through HA's states for any binary sensor carrying them, so
 a renamed entity, or another integration using the same format, is found
 too.
@@ -125,9 +131,8 @@ def smart_charging(states: list[dict], now: float) -> dict:
         return {"found": False}
     st = sensors[0]
     attrs = st.get("attributes") or {}
-    planned = _merge(sorted(
-        _slots(attrs.get("planned_dispatches")) + _slots(attrs.get("started_dispatches")) + _slots(attrs.get("schedule")),
-        key=lambda s: s["_s"]))
+    planned = _merge(sorted(_slots(attrs.get("planned_dispatches")) + _slots(attrs.get("schedule")),
+                            key=lambda s: s["_s"]))
     completed = _merge(_slots(attrs.get("completed_dispatches")))
     current = next((s for s in planned if s["_s"] <= now < s["_e"]), None)
     upcoming = [s for s in planned if s["_s"] > now]
