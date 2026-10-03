@@ -442,3 +442,56 @@ def test_skip_a_whole_slot():
         assert len(a.skips) == 2
     a.set_skips(slot, skip=False)
     assert a.skips == []
+
+
+def test_graceful_unplug_waits_for_the_supplier():
+    from src import automation as auto_mod
+    from src.automation import automation_loop
+    every = list(range(7))
+
+    def run(ready_time, in_session, supplier_stops):
+        a, clock = _automation(start=datetime.datetime(2026, 10, 6, 6, 59, tzinfo=TZ))
+        a.set_schedule(enabled=True, ready_time=ready_time, entries=[
+            {"time": "23:30", "action": "plug", "days": every}, {"time": "07:00", "action": "unplug", "days": every}])
+        state = SharedState(plugged_in=True, transaction_id=1 if in_session else None)
+        calls = []
+
+        async def plug(source=None):
+            calls.append("plug")
+
+        async def unplug(source=None):
+            calls.append(("unplug", round(clock.epoch() - start)))
+            state.plugged_in = False
+
+        start = 0
+
+        async def scenario():
+            nonlocal start
+            task = asyncio.ensure_future(automation_loop(a, state, plug, unplug, tick_s=0.01))
+            await asyncio.sleep(0.03)
+            clock.advance(minutes=1, seconds=1)  # 07:00:01: unplug due
+            start = clock.epoch()
+            await asyncio.sleep(0.05)
+            waiting = a.unplug_at is not None
+            if supplier_stops:
+                clock.advance(seconds=20)
+                state.transaction_id = None  # RemoteStop
+            else:
+                clock.advance(seconds=61)
+            await asyncio.sleep(0.05)
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            return waiting
+
+        old = auto_mod.PENDING_TICK_S
+        auto_mod.PENDING_TICK_S = 0.01
+        try:
+            waiting = _run(scenario())
+        finally:
+            auto_mod.PENDING_TICK_S = old
+        return calls, waiting
+
+    assert run(False, True, False) == ([("unplug", 0)], False)  # ready time off: straight away
+    assert run(True, False, False) == ([("unplug", 0)], False)  # no session: straight away
+    assert run(True, True, True) == ([("unplug", 20)], True)  # supplier stopped it after 20 s
+    assert run(True, True, False) == ([("unplug", 61)], True)  # gave it a minute

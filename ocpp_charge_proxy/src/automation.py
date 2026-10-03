@@ -19,6 +19,9 @@
 - At start-up: if the schedule is on and the add-on starts inside a
   plugged-in stretch (the last schedule time before now was a plug-in) with
   Plugged In off, it plugs in, as if it had been running at that time.
+- Graceful unplug: with the ready time on (Force schedule on supplier), a
+  scheduled unplug during a session waits up to GRACEFUL_UNPLUG_S for the
+  supplier to stop the session itself (RemoteStop), then unplugs.
 - Ready time: optionally, when the schedule plugs in, set your supplier's
   smart charging ready-by time to the schedule's next unplug
   (src/ready_time.py). Only at a scheduled plug-in.
@@ -45,6 +48,8 @@ logger = logging.getLogger(__name__)
 
 REPLUG_WAIT_S = 30
 STARTUP_READY_S = 180  # keep trying to set the ready time this long after start-up
+GRACEFUL_UNPLUG_S = 60  # with Force schedule on supplier: wait this long for it to stop a session
+PENDING_TICK_S = 2  # check this often while waiting
 TICK_S = 15
 CATCH_UP_S = 300  # a scheduled time is still run if noticed within this
 ACTIONS = ("plug", "unplug")
@@ -191,6 +196,7 @@ class Automation:
         self.scheduled = False  # waiting, but your supplier has a slot planned
         self.last_replug: Optional[float] = None
         self.last_run: Optional[dict] = None  # last schedule entry run
+        self.unplug_at: Optional[float] = None  # a scheduled unplug waiting for the supplier, until
         self._last_check: Optional[datetime.datetime] = None
         self._load()
 
@@ -567,6 +573,7 @@ class Automation:
         shared_state.schedule_enabled = self.schedule_enabled
         shared_state.schedule_next = self.next_action()
         shared_state.replug = self.replug_status()
+        shared_state.unplug_pending = _iso_from_epoch(self.unplug_at)
 
 
 async def apply_ready_time(automation: "Automation",
@@ -622,14 +629,36 @@ async def automation_loop(
                 result = await apply_ready_time(automation, set_ready_time, log_errors=last_try)
                 ready_pending = bool(result.get("error")) and not last_try
             for entry in automation.due():
-                logger.info("Schedule: %s at %s", "plugging in" if entry["action"] == "plug" else "unplugging", entry["time"])
                 automation.last_run = {
                     "entry_id": entry["id"], "action": entry["action"],
                     "timestamp": _iso_from_epoch(automation._clock()),
                 }
-                await (plug if entry["action"] == "plug" else unplug)(source="schedule")
-                if entry["action"] == "plug" and automation.ready_time and set_ready_time is not None:
-                    await apply_ready_time(automation, set_ready_time)
+                if entry["action"] == "plug":
+                    automation.unplug_at = None  # a waiting unplug is overtaken
+                    logger.info("Schedule: plugging in at %s", entry["time"])
+                    await plug(source="schedule")
+                    if automation.ready_time and set_ready_time is not None:
+                        await apply_ready_time(automation, set_ready_time)
+                elif automation.ready_time and shared_state.transaction_id is not None:
+                    # Give the supplier a chance to end the session itself
+                    automation.unplug_at = automation._clock() + GRACEFUL_UNPLUG_S
+                    logger.info("Schedule: unplug at %s, waiting up to %d s for the supplier to stop the session",
+                                entry["time"], GRACEFUL_UNPLUG_S)
+                else:
+                    logger.info("Schedule: unplugging at %s", entry["time"])
+                    await unplug(source="schedule")
+            if automation.unplug_at is not None:
+                if not shared_state.plugged_in:
+                    automation.unplug_at = None  # unplugged meanwhile
+                elif shared_state.transaction_id is None:
+                    logger.info("Schedule: the supplier stopped the session, unplugging")
+                    automation.unplug_at = None
+                    await unplug(source="schedule")
+                elif automation._clock() >= automation.unplug_at:
+                    logger.info("Schedule: the supplier didn't stop the session within %d s, unplugging",
+                                GRACEFUL_UNPLUG_S)
+                    automation.unplug_at = None
+                    await unplug(source="schedule")
             if automation.replug_due(
                 # Plugged In and waiting (Preparing); not e.g. Unavailable
                 plugged_in=bool(shared_state.plugged_in) and shared_state.state == "Preparing",
@@ -644,4 +673,4 @@ async def automation_loop(
             raise
         except Exception:
             logger.warning("Automation cycle failed", exc_info=True)
-        await asyncio.sleep(tick_s)
+        await asyncio.sleep(min(tick_s, PENDING_TICK_S) if automation.unplug_at is not None else tick_s)

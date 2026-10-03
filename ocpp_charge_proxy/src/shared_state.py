@@ -46,6 +46,8 @@ class SharedState:
     # Your supplier has a charge slot running or planned (None: no supplier
     # integration to tell, src/smart_charging.py)
     scheduled: Optional[bool] = None
+    # A scheduled unplug waiting (until this time) for the supplier to stop the session
+    unplug_pending: Optional[str] = None
 
     def to_dict(self) -> dict:
         return asdict(self)

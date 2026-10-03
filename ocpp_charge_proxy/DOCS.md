@@ -98,6 +98,10 @@ comes back.
   6 hours in any 24 (Octopus's daily smart charging cap): the times and
   stretches that go over are marked in red and the schedule won't save
   until they're shortened. With the ready time off, there's no limit.
+  At a scheduled unplug during a charging session, it waits up to a minute
+  for your supplier to stop the session itself (so it ends cleanly),
+  then unplugs; if the supplier hasn't stopped it by then, it unplugs
+  anyway. The Overview shows "Unplugging by …" meanwhile.
 - **Auto re-plug** (**Settings** tab): Octopus sometimes doesn't start a session after you plug
   in. When Plugged In has been on for the set minutes (default 10) with no
   session and the add-on is connected, it unplugs, waits 30 seconds and

@@ -755,6 +755,7 @@ function renderState(s) {
   if (s.power_source === 'entity') chips.push('<span class="chip">Power from sensor</span>');
   if (s.schedule_enabled && s.schedule_next) chips.push(`<span class="chip">${s.schedule_next.action === 'plug' ? 'Plug in' : 'Unplug'} ${whenText(s.schedule_next.time)}</span>`);
   const rp = s.replug || {};
+  if (s.unplug_pending) chips.push(`<span class="chip warn" title="Giving your supplier up to a minute to stop the session first">Unplugging by ${new Date(s.unplug_pending).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'})}</span>`);
   if (rp.status === 'waiting' && rp.next_replug_at) chips.push(`<span class="chip warn">Re-plug ${hm(rp.next_replug_at)} if no session</span>`);
   if (rp.status === 'replugging') chips.push('<span class="chip warn">Re-plugging…</span>');
   if (rp.status === 'gave_up') chips.push('<span class="chip err">No session — re-plug gave up</span>');

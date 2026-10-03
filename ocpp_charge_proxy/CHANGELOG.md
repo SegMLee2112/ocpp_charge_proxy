@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.9.4
+
+- Force schedule on supplier: at a scheduled unplug during a session, the
+  add-on now gives your supplier up to 1 minute to stop the session itself
+  before unplugging (it unplugs as soon as the session ends, or after the
+  minute). The Overview shows an "Unplugging by …" chip while it waits
+
 ## 2.9.3
 
 - The skip panel's line is shorter: "Slot: 03/10 16:00 → 03/10 22:00"
