@@ -153,13 +153,14 @@ async def test_events_stream_sends_state(client, shared_state):
 
 def _gui_app(shared_state, mock_commands):
     from src.gui_data import GuiSources, MessageLog, PowerHistory
+    from src.ha_history import ChartHistory
     log = MessageLog()
     log.record('[2,"a","Heartbeat",{}]', incoming=False)
     log.record('[3,"a",{"currentTime":"2026-10-02T15:00:00Z"}]', incoming=True)
-    history = PowerHistory()
-    history.sample(shared_state)
+    recent = PowerHistory()
+    recent.sample(shared_state)
     gui = GuiSources(
-        message_log=log, history=history,
+        message_log=log, history=ChartHistory(None, soc_entity=lambda: None, recent=recent),
         sessions=lambda: {"current": None, "history": [{"transaction_id": 1}]},
         provider=lambda: {"configuration": [], "charging_profiles": []},
         health=lambda: {"version": "1.1.0", "uptime_s": 5},
@@ -182,9 +183,10 @@ async def test_gui_endpoints(aiohttp_client, shared_state, mock_commands):
     assert (await (await client.get("/api/sessions")).json())["history"][0]["transaction_id"] == 1
     assert len((await (await client.get("/api/history?since=0")).json())["samples"]) == 1
     assert (await (await client.get("/api/history?since=9999999999")).json())["samples"] == []
-    assert (await (await client.get("/api/history?since=0&resolution=long")).json())["samples"] == []  # no full 2 min yet
+    assert (await (await client.get("/api/history?since=0&resolution=long")).json())["samples"] == []  # no HA here
     assert (await (await client.get("/api/provider")).json())["configuration"] == []
-    assert (await client.get("/api/energy/daily")).status == 501  # no daily tracker given
+    days = (await (await client.get("/api/energy/daily?days=3")).json())["days"]
+    assert [d["kwh"] for d in days] == [0.0, 0.0, 0.0]  # no HA, no sessions with energy
     health = await (await client.get("/api/health")).json()
     assert health["version"] == "1.1.0"
     assert health["event_streams"] == {"integration": 0, "gui": 0}

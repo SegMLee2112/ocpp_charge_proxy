@@ -25,7 +25,7 @@ from typing import Awaitable, Callable, Optional
 
 from src.autoplug import DEFAULT_AUTO_PLUG_SOC, AutoPlug, CarConnected
 from src.ha_entities import (
-    HELPER_ICON, HELPER_ID, HELPER_NAME, SENSORS, PluggedInSync, SensorPublisher,
+    ALL_SENSORS, HELPER_ICON, HELPER_ID, HELPER_NAME, PluggedInSync, SensorPublisher,
     helper_entity_id, integration_entities,
 )
 
@@ -128,6 +128,7 @@ class HaLink:
         self.error: Optional[str] = None
         self._changed = asyncio.Event()
         self._entity_cache: tuple[float, list] = (0.0, [])
+        self._call = None  # websocket request function while connected
         self._reset_logic()
         self._load()
 
@@ -364,6 +365,7 @@ class HaLink:
                     await ws.send_json({"id": counter["sub"], "type": "subscribe_entities", "entity_ids": sorted(set(ids))})
 
             reader_task = asyncio.ensure_future(reader())
+            self._call = call
             try:
                 await self._setup_entities(call)
                 self._changed.clear()
@@ -383,6 +385,7 @@ class HaLink:
                         await subscribe()
                     await self._sync_entities(call)
             finally:
+                self._call = None
                 reader_task.cancel()
                 for fut in pending.values():
                     fut.cancel()
@@ -450,8 +453,19 @@ class HaLink:
             ) as resp:
                 resp.raise_for_status()
         except Exception as err:
-            self.publisher.sent.pop(next((k for k, v in SENSORS.items() if v[0] == entity_id), ""), None)
+            self.publisher.forget(entity_id)
             logger.debug("Couldn't post %s: %s", entity_id, err)
+
+    async def query(self, payload: dict, timeout: float = 30):
+        """A websocket request to HA (history, statistics...). Raises if not connected."""
+        if self._call is None:
+            raise ConnectionError("Not connected to Home Assistant")
+        return await self._call(payload, timeout=timeout)
+
+    @property
+    def publishing(self) -> bool:
+        """The add-on's sensors are being posted (so HA is recording them)."""
+        return self.connected and not self.integration_conflict
 
     async def shutdown(self) -> None:
         """Mark the sensors unavailable while the add-on is stopped."""
@@ -519,8 +533,8 @@ class HaLink:
             "configured": self.configured,
             "ha_entities": {
                 "plugged_in": self.plug_sync.entity_id,
-                "sensors": [entity_id for entity_id, _, _ in SENSORS.values()],
-                "publishing": self.connected and not self.integration_conflict,
+                "sensors": list(ALL_SENSORS),
+                "publishing": self.publishing,
                 "integration_conflict": self.integration_conflict,
                 "error": self.entities_error,
             },

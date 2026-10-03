@@ -120,9 +120,10 @@ sensors live through Home Assistant's API.
   - **Header:** a health dot left of the title, green when healthy and amber/red
     when not (hover for the issues), linking to the Health tab.
   - **Overview:** state, power, current, SoC and energy; the current
-    session; and a chart (shaded by state, with session start/end marked,
-    kept across restarts) of power, current (with your max and the provider limit) or
-    SoC over the last 30 minutes to 24 hours, or 14 days.
+    session; and a chart (shaded by state, with session start/end marked)
+    of power, current (with your max and the provider limit) or SoC over
+    the last 30 minutes to 24 hours, or 14 days, read from Home Assistant's
+    history of the add-on's sensors.
   - **Sessions:** energy per day for the last 14 days; the last 20 charging
     sessions (energy, duration, peak power, what ended them, transaction ID
     and ID tag, with details and the power curve on click), and plug-ins that
@@ -203,6 +204,8 @@ The add-on creates these in Home Assistant:
 | `sensor.ocpp_charge_proxy_power` | Sensor | Live power draw (kW) |
 | `sensor.ocpp_charge_proxy_energy` | Sensor | Cumulative energy (kWh, Energy dashboard compatible) |
 | `sensor.ocpp_charge_proxy_current` | Sensor | Current draw (A) |
+| `sensor.ocpp_charge_proxy_status` | Sensor | OCPP state (Available, Preparing, Charging...) |
+| `sensor.ocpp_charge_proxy_current_limit` | Sensor | Current the charger uses (A), with your max and the provider's limit as attributes |
 
 The sensors are updated by the add-on rather than an integration, so they
 can't be renamed in the UI and aren't grouped under a device, and they show as

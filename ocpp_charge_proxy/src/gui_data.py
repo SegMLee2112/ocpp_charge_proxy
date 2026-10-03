@@ -27,12 +27,9 @@ logger = logging.getLogger(__name__)
 MESSAGE_LOG_SIZE = 300
 SESSION_HISTORY_SIZE = 20
 HISTORY_SAMPLE_S = 10
-HISTORY_HOURS = 24  # 10-second samples: the 30 min to 24 h chart views
-LONG_SAMPLE_S = 120  # 2-minute averages: the 14-day view and older session curves
-LONG_DAYS = 14
-
-# Which state a 2-minute average shows when it saw several (most telling first)
-_STATE_RANK = ("Charging", "SuspendedEV", "SuspendedEVSE", "Finishing", "Preparing")
+RECENT_MINUTES = 60  # kept in memory; older chart data comes from HA (src/ha_history.py)
+# Files from before 2.3.0, when the add-on kept its own chart history
+OLD_HISTORY_FILES = ("history.json", "history_long.json", "daily_energy.json")
 
 
 def _now_iso() -> str:
@@ -355,89 +352,16 @@ def _read_json(path: str):
 
 
 class PowerHistory:
-    """The chart's samples, in two resolutions.
+    """The last RECENT_MINUTES of chart samples, every HISTORY_SAMPLE_S seconds.
 
-    - every HISTORY_SAMPLE_S seconds for the last HISTORY_HOURS hours
-    - LONG_SAMPLE_S averages (with the peak) for the last LONG_DAYS days
-
-    With a data_dir both are kept across restarts (history.json and
-    history_long.json, saved by persist_loop every few minutes and at
-    shutdown).
+    Only in memory: anything older is read back from Home Assistant's
+    history, which records the add-on's sensors anyway.
     """
 
-    def __init__(self, size: int = HISTORY_HOURS * 3600 // HISTORY_SAMPLE_S,
-                 clock: Callable[[], float] = time.time, data_dir: Optional[str] = None) -> None:
+    def __init__(self, size: int = RECENT_MINUTES * 60 // HISTORY_SAMPLE_S,
+                 clock: Callable[[], float] = time.time) -> None:
         self._samples: deque[dict] = deque(maxlen=size)
-        self._long: deque[dict] = deque(maxlen=LONG_DAYS * 86400 // LONG_SAMPLE_S)
-        self._bucket: list[dict] = []  # 10 s samples of the 2-minute slot in progress
         self._clock = clock
-        self._path = os.path.join(data_dir, "history.json") if data_dir else None
-        self._long_path = os.path.join(data_dir, "history_long.json") if data_dir else None
-        self._dirty = self._long_dirty = False
-        if self._path:
-            now = self._clock()
-            data = _read_json(self._path)
-            if isinstance(data, list):
-                cutoff = now - HISTORY_HOURS * 3600
-                self._samples.extend(s for s in data if isinstance(s, dict) and s.get("t", 0) > cutoff)
-            data = _read_json(self._long_path)
-            if isinstance(data, list):
-                cutoff = now - LONG_DAYS * 86400
-                self._long.extend(s for s in data if isinstance(s, dict) and s.get("t", 0) > cutoff)
-            # Fill in 2-minute averages the long history hasn't got yet (e.g.
-            # the first start after updating, or the last minutes before a stop)
-            last = self._long[-1]["t"] if self._long else 0.0
-            newer = [s for s in self._samples if self._slot(s["t"]) * LONG_SAMPLE_S > last]
-            for sample in newer:
-                self._add_to_bucket(sample)
-            if newer:
-                self._long_dirty = True
-
-    @staticmethod
-    def _slot(t: float) -> int:
-        return int(t // LONG_SAMPLE_S)
-
-    def _add_to_bucket(self, entry: dict) -> None:
-        if self._bucket and self._slot(entry["t"]) != self._slot(self._bucket[0]["t"]):
-            self._long.append(self._average(self._bucket))
-            self._long_dirty = True
-            self._bucket = []
-        self._bucket.append(entry)
-
-    @staticmethod
-    def _average(samples: list[dict]) -> dict:
-        def mean(key, digits):
-            values = [s[key] for s in samples if s.get(key) is not None]
-            return round(sum(values) / len(values), digits) if values else None
-
-        last = samples[-1]
-        states = [str(s.get("state")) for s in samples]
-        state = next((st for rank in _STATE_RANK for st in states if st.endswith(rank)), states[-1])
-        return {
-            # the middle of the slot, so the line lines up with the 10 s one
-            "t": PowerHistory._slot(samples[0]["t"]) * LONG_SAMPLE_S + LONG_SAMPLE_S / 2,
-            "power_kw": mean("power_kw", 3),
-            "power_max_kw": max((s.get("power_kw") or 0.0) for s in samples),
-            "current_a": mean("current_a", 2),
-            "soc": last.get("soc"),
-            "max_amps": last.get("max_amps"),
-            "effective_amps": last.get("effective_amps"),
-            "provider_limit_amps": last.get("provider_limit_amps"),
-            "state": state,
-        }
-
-    def save(self) -> None:
-        if not self._path:
-            return
-        try:
-            if self._dirty:
-                _write_json(self._path, list(self._samples))
-                self._dirty = False
-            if self._long_dirty:
-                _write_json(self._long_path, list(self._long))
-                self._long_dirty = False
-        except Exception:
-            logger.warning("Could not save the chart history", exc_info=True)
 
     def sample(self, state) -> dict:
         entry = {
@@ -448,98 +372,51 @@ class PowerHistory:
             "max_amps": state.current_amps_setting,
             "effective_amps": state.current_amps_effective,
             "provider_limit_amps": state.current_amps_provider_limit,
-            "state": str(state.state),
+            "state": str(getattr(state.state, "value", state.state)),
         }
         self._samples.append(entry)
-        self._add_to_bucket(entry)
-        self._dirty = True
         return entry
 
     def since(self, after: float = 0.0) -> list[dict]:
         return [s for s in self._samples if s["t"] > after]
 
-    def long_since(self, after: float = 0.0) -> list[dict]:
-        """2-minute averages (each with power_max_kw) newer than `after`."""
-        return [s for s in self._long if s["t"] > after]
+
+def daily_from_sessions(days: int, sessions: Optional[list], today: datetime.date,
+                        metered: Optional[dict] = None) -> list[dict]:
+    """kWh per day for the last `days` days.
+
+    metered: date -> kWh from HA's statistics. Each kept session's energy
+    counts on the day it started, and the larger of the two figures is used
+    (HA's figure lags by up to an hour; sessions cover HA being unreachable)."""
+    from_sessions: dict[str, float] = {}
+    for s in sessions or []:
+        if s.get("type") == "no_session" or s.get("energy_kwh") is None:
+            continue
+        start = _parse_iso(s.get("start"))
+        if start:
+            day = start.astimezone().date().isoformat()
+            from_sessions[day] = from_sessions.get(day, 0.0) + float(s["energy_kwh"])
+    metered = metered or {}
+    out = []
+    for i in range(days - 1, -1, -1):
+        day = (today - datetime.timedelta(days=i)).isoformat()
+        out.append({"date": day, "kwh": round(max(metered.get(day, 0.0), from_sessions.get(day, 0.0)), 3)})
+    return out
 
 
-class DailyEnergy:
-    """kWh delivered per day (local time), from the energy register.
-
-    Keeps the register's first and last reading for each day in
-    daily_energy.json (the last DAILY_DAYS days), so the Sessions tab can draw
-    daily bars that survive restarts and aren't limited to the kept sessions.
-    """
-
-    DAILY_DAYS = 62
-
-    def __init__(self, data_dir: Optional[str] = None,
-                 today: Callable[[], datetime.date] = lambda: datetime.datetime.now().astimezone().date()) -> None:
-        self._path = os.path.join(data_dir, "daily_energy.json") if data_dir else None
-        self._today = today
-        self.days: dict[str, list[float]] = {}  # "YYYY-MM-DD" -> [first_kwh, last_kwh]
-        self._dirty = False
-        if self._path:
-            data = _read_json(self._path)
-            if isinstance(data, dict):
-                self.days = {k: v for k, v in data.items() if isinstance(v, list) and len(v) == 2}
-
-    def update(self, energy_kwh: float) -> None:
-        if energy_kwh is None or energy_kwh <= 0:
-            return
-        day = self._today().isoformat()
-        entry = self.days.get(day)
-        if entry is None:
-            # The day starts where the last one ended (charging while the add-on
-            # was stopped can't happen), else at this reading
-            previous = max(self.days) if self.days else None
-            start = self.days[previous][1] if previous and previous < day else energy_kwh
-            self.days[day] = [start, energy_kwh]
-            for old in sorted(self.days)[:-self.DAILY_DAYS]:
-                del self.days[old]
-            self._dirty = True
-        elif energy_kwh != entry[1]:
-            entry[1] = energy_kwh
-            self._dirty = True
-
-    def snapshot(self, days: int = 14, sessions: Optional[list] = None) -> list[dict]:
-        """kWh per day. Days the meter wasn't tracked for (before 2.1.0, or a
-        restart mid-day) are filled in from the kept sessions: each session's
-        energy counts on the day it started, and the larger figure is used."""
-        from_sessions: dict[str, float] = {}
-        for s in sessions or []:
-            if s.get("type") == "no_session" or s.get("energy_kwh") is None:
-                continue
-            start = _parse_iso(s.get("start"))
-            if start:
-                day = start.astimezone().date().isoformat()
-                from_sessions[day] = from_sessions.get(day, 0.0) + float(s["energy_kwh"])
-        today = self._today()
-        out = []
-        for i in range(days - 1, -1, -1):
-            day = (today - datetime.timedelta(days=i)).isoformat()
-            first_last = self.days.get(day)
-            meter = max(0.0, first_last[1] - first_last[0]) if first_last else 0.0
-            out.append({"date": day, "kwh": round(max(meter, from_sessions.get(day, 0.0)), 3)})
-        return out
-
-    def save(self) -> None:
-        if not self._path or not self._dirty:
-            return
-        try:
-            _write_json(self._path, self.days)
-            self._dirty = False
-        except Exception:
-            logger.warning("Could not save daily energy", exc_info=True)
-
-
-async def persist_loop(*stores, interval: float = 300) -> None:
-    """Save the chart history and daily energy every few minutes."""
-    import asyncio
-    while True:
-        await asyncio.sleep(interval)
-        for store in stores:
-            store.save()
+def remove_old_history_files(data_dir: Optional[str]) -> None:
+    """Delete the chart files older versions kept (now read from HA)."""
+    if not data_dir:
+        return
+    for name in OLD_HISTORY_FILES:
+        for path in (os.path.join(data_dir, name), os.path.join(data_dir, name + ".bak")):
+            try:
+                os.remove(path)
+                logger.info("Removed %s: charts now come from Home Assistant's history", os.path.basename(path))
+            except FileNotFoundError:
+                pass
+            except OSError as err:
+                logger.debug("Couldn't remove %s: %s", path, err)
 
 
 @dataclass
@@ -547,11 +424,10 @@ class GuiSources:
     """Everything the GUI endpoints read, handed to the API in one go."""
 
     message_log: MessageLog
-    history: PowerHistory
+    history: "object"  # ChartHistory (src/ha_history.py): samples / long_samples / daily
     sessions: Callable[[], dict]
     provider: Callable[[], dict]
     health: Callable[[], dict]
-    daily: Optional[DailyEnergy] = None
 
 
 async def sample_loop(history: PowerHistory, shared_state, refresh: Optional[Callable[[], None]] = None,

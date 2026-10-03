@@ -77,6 +77,7 @@ def test_sensor_publishing_throttles_live_values():
     first = pub.due(st, 1000.0)
     assert {e for e, _, _ in first} == {
         "sensor.ocpp_charge_proxy_power", "sensor.ocpp_charge_proxy_energy", "sensor.ocpp_charge_proxy_current",
+        "sensor.ocpp_charge_proxy_status", "sensor.ocpp_charge_proxy_current_limit",
     }
     energy = next(a for e, _, a in first if e.endswith("energy"))
     assert energy["state_class"] == "total_increasing" and energy["device_class"] == "energy"
@@ -84,7 +85,7 @@ def test_sensor_publishing_throttles_live_values():
     assert [e for e, _, _ in pub.due(st, 1002.0)] == ["sensor.ocpp_charge_proxy_energy"]  # power waits
     assert [e for e, _, _ in pub.due(st, 1000.0 + LIVE_INTERVAL_S)] == ["sensor.ocpp_charge_proxy_power"]
     assert pub.due(st, 1000.0 + LIVE_INTERVAL_S + 1) == []
-    assert len(pub.due(st, 1000.0 + LIVE_INTERVAL_S + REFRESH_S)) == 3  # periodic refresh
+    assert len(pub.due(st, 1000.0 + LIVE_INTERVAL_S + REFRESH_S)) == 5  # periodic refresh
     assert all(s == "unavailable" for _, s, _ in SensorPublisher.unavailable())
 
 
@@ -248,3 +249,21 @@ def test_addon_value_wins_on_connect():
     fake = FakeHA(helper_exists=True, helper_state="on")  # HA says on, add-on unplugged
     _, _, calls = _scenario(fake, [])
     assert calls == [] and fake.helper_state == "off"
+
+
+def test_status_and_limit_sensors_posted_on_change():
+    pub = SensorPublisher()
+    st = SharedState(state="Preparing", current_amps_setting=6, current_amps_effective=6,
+                     current_amps_provider_limit=None)
+    pub.due(st, 1000.0)
+    assert pub.due(st, 1001.0) == []
+    st.state = "Charging"
+    st.current_amps_provider_limit = 32.0
+    due = {e: (v, a) for e, v, a in pub.due(st, 1002.0)}
+    assert due["sensor.ocpp_charge_proxy_status"][0] == "Charging"
+    value, attrs = due["sensor.ocpp_charge_proxy_current_limit"]
+    assert value == "6" and attrs["max_amps"] == 6 and attrs["provider_limit_amps"] == 32.0
+    assert attrs["state_class"] == "measurement"
+    pub.forget("sensor.ocpp_charge_proxy_status")  # a failed post is sent again
+    assert [e for e, _, _ in pub.due(st, 1003.0)] == ["sensor.ocpp_charge_proxy_status"]
+    assert len(SensorPublisher.unavailable()) == 5

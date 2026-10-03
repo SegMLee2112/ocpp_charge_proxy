@@ -832,14 +832,16 @@ function drawSessionCard() {
 }
 
 // ---------- chart ----------
-// samples: every 10 s for 24 h. long: 2-minute averages for 14 days (the
+// samples: every 10 s for 24 h. long: 5-minute (hourly when older) points for 14 days (the
 // 14d view and the curves of older sessions), loaded when first needed.
-const LONG_RANGE = 86400, LONG_STEP = 120;
-const chart = {samples: [], long: [], longLoaded: false, series: 'power', range: 3600, lastT: 0, longT: 0};
+// Both come from Home Assistant's history of the add-on's sensors.
+const LONG_RANGE = 86400, LONG_STEP = 300;
+const chart = {samples: [], long: [], longLoaded: false, series: 'power', range: 3600, lastT: 0, longT: 0, longAt: 0, error: null};
 async function refreshHistory(full) {
   try {
     const since = full ? 0 : chart.lastT;
     const d = await api('history?since=' + since);
+    chart.error = d.error || null;
     if (full) chart.samples = d.samples; else chart.samples.push(...d.samples);
     if (chart.samples.length) chart.lastT = chart.samples[chart.samples.length - 1].t;
     const cutoff = Date.now() / 1000 - 24 * 3600 - 60;
@@ -850,9 +852,13 @@ async function refreshHistory(full) {
   } catch (e) {}
 }
 async function refreshLong(full) {
+  // New 5-minute points only appear every 5 minutes: ask at most once a minute
+  if (!full && chart.longLoaded && Date.now() - chart.longAt < 60000) return;
   try {
     if (full || !chart.longLoaded) { chart.long = []; chart.longT = 0; }
+    chart.longAt = Date.now();
     const d = await api('history?resolution=long&since=' + chart.longT);
+    chart.error = d.error || null;
     chart.long.push(...d.samples); chart.longLoaded = true;
     if (chart.long.length) chart.longT = chart.long[chart.long.length - 1].t;
     const cutoff = Date.now() / 1000 - 14 * 86400 - 300;
@@ -918,20 +924,33 @@ function drawChart() {
   }
   if (!data.length) {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(isLong ? (chart.longLoaded ? 'Collecting data — a point every 2 minutes' : 'Loading…')
+    ctx.fillText(chart.error ? 'Home Assistant\'s history isn\'t available: ' + chart.error.replace(/^Home Assistant \w+ not available: /, '')
+      : isLong ? (chart.longLoaded ? 'No history yet — Home Assistant adds a point every 5 minutes' : 'Loading…')
       : 'Collecting data — a sample every 10 seconds', L + pw / 2, T + ph / 2);
   }
-  const GAP = every * 3.5; // seconds: a longer gap (add-on stopped) breaks the line
+  // A longer gap than this after a point (the add-on was stopped) breaks the line
+  const gapAfter = (s) => (s.d || every) * (isLong ? 1.6 : 3.5);
   // State bands behind the lines: charging / paused / waiting for a session
   const bandColor = (st) => /Charging/.test(st) ? cssVar('--ok') : /Suspended/.test(st) ? cssVar('--warn') : /Preparing/.test(st) ? cssVar('--info') : null;
-  for (let i = 0; i < data.length; i++) {
-    const c = bandColor(data[i].state); if (!c) continue;
-    const next = data[i + 1];
-    const t1 = next && next.t - data[i].t <= GAP ? next.t : data[i].t + every;
-    ctx.globalAlpha = /Preparing/.test(data[i].state) ? 0.05 : 0.10; ctx.fillStyle = c;
-    ctx.fillRect(x(data[i].t), T, Math.max(1, x(t1) - x(data[i].t)), ph);
-    ctx.globalAlpha = 0.6; ctx.fillRect(x(data[i].t), T + ph - 3, Math.max(1, x(t1) - x(data[i].t)), 3);
-    ctx.globalAlpha = 1;
+  // One rectangle per run of the same state (many thin ones would overlap and darken)
+  for (let i = 0; i < data.length;) {
+    const c = bandColor(data[i].state);
+    let j = i, t1;
+    for (;;) {
+      const next = data[j + 1];
+      const joined = next && next.t - data[j].t <= gapAfter(data[j]);
+      t1 = joined ? next.t : data[j].t + (data[j].d || every);
+      if (!joined || next.state !== data[i].state) break;
+      j++;
+    }
+    if (c) {
+      const x0 = x(data[i].t), w = Math.max(1, x(t1) - x0);
+      ctx.globalAlpha = /Preparing/.test(data[i].state) ? 0.05 : 0.10; ctx.fillStyle = c;
+      ctx.fillRect(x0, T, w, ph);
+      ctx.globalAlpha = 0.6; ctx.fillRect(x0, T + ph - 3, w, 3);
+      ctx.globalAlpha = 1;
+    }
+    i = j + 1;
   }
   // Session start / stop markers
   const marks = [];
@@ -951,7 +970,7 @@ function drawChart() {
   }
   ctx.font = '11px Roboto, sans-serif';
   for (const l of defs.lines) {
-    const pts = data.map((s) => [s.t, l.get(s)]);
+    const pts = data.map((s) => [s.t, l.get(s), gapAfter(s)]);
     if (!pts.some((p) => p[1] != null)) continue;
     ctx.strokeStyle = l.color; ctx.lineWidth = l.dash ? 1.5 : 2; ctx.setLineDash(l.dash ? [5, 4] : []);
     let run = [];
@@ -971,7 +990,7 @@ function drawChart() {
       run = [];
     };
     for (const p of pts) {
-      if (p[1] == null || (run.length && p[0] - run[run.length - 1][0] > GAP)) flush();
+      if (p[1] == null || (run.length && p[0] - run[run.length - 1][0] > run[run.length - 1][2])) flush();
       if (p[1] != null) run.push(p);
     }
     flush();
@@ -993,11 +1012,11 @@ $('chart-wrap').addEventListener('mousemove', (e) => {
   const t = g.t0 + (mx - g.L) / g.pw * chart.range;
   let best = null;
   for (const s of g.data) if (!best || Math.abs(s.t - t) < Math.abs(best.t - t)) best = s;
-  if (!best || Math.abs(best.t - t) > Math.max(60, g.every * 2)) { tip.style.display = 'none'; return; }
+  if (!best || Math.abs(best.t - t) > Math.max(60, (best.d || g.every) * 1.5)) { tip.style.display = 'none'; return; }
   const when = new Date(best.t * 1000);
   tip.innerHTML = `<b>${g.isLong ? when.toLocaleString([], {weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})
       : chart.range > 6 * 3600 ? when.toLocaleTimeString([], {weekday: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit'}) : when.toLocaleTimeString()}</b>`
-    + (g.isLong ? ' <span class="muted">2-min average</span>' : '') + '<br>' + g.defs.lines.map((l) => {
+    + (g.isLong ? ` <span class="muted">${(best.d || LONG_STEP) >= 3600 ? 'hourly' : Math.round((best.d || LONG_STEP) / 60) + '-min'} average</span>` : '') + '<br>' + g.defs.lines.map((l) => {
     const v = l.get(best); return `${esc(l.name)}: ${v == null ? '—' : fmtAxis(Math.round(v * 100) / 100) + ' ' + g.defs.unit}`;
   }).join('<br>') + (g.isLong && chart.series === 'power' && best.power_max_kw != null ? `<br>Peak: ${fmtAxis(Math.round(best.power_max_kw * 100) / 100)} kW` : '')
     + `<br><span class="muted">${esc(best.state)}</span>`
@@ -1073,19 +1092,19 @@ $('s-rows').addEventListener('click', (ev) => {
   refreshSessions();
 });
 function sparkline(t0, t1) {
-  // The 10 s samples if they cover the whole session, else the 2-minute averages
+  // The 10 s samples if they cover the whole session, else the 5-minute (or hourly) points
   const fine = chart.samples.length && chart.samples[0].t <= t0 + 30;
   const pts = (fine ? chart.samples : chart.long).filter((p) => p.t >= t0 && p.t <= t1);
   if (pts.length < 2) {
-    return `<div class="sub">${Date.now() / 1000 - t0 > 14 * 86400 ? 'Power curve not available: curves are kept for 14 days.'
-      : !chart.longLoaded ? 'Loading power curve…' : 'Power curve not available (no readings saved for this time).'}</div>`;
+    return `<div class="sub">${Date.now() / 1000 - t0 > 14 * 86400 ? 'Power curve not available: curves are shown for the last 14 days.'
+      : !chart.longLoaded ? 'Loading power curve…' : 'Power curve not available: Home Assistant has no history for this time.'}</div>`;
   }
   const max = Math.max(0.1, ...pts.map((p) => fine ? p.power_kw : (p.power_max_kw ?? p.power_kw)));
   const X = (t) => ((t - t0) / Math.max(1, t1 - t0) * 100).toFixed(2), Y = (v) => (58 - v / max * 54).toFixed(2);
   const line = pts.map((p) => `${X(p.t)},${Y(p.power_kw)}`).join(' ');
   return `<svg class="spark" viewBox="0 0 100 60" preserveAspectRatio="none"><polygon points="0,60 ${line} 100,60" fill="var(--primary)" opacity=".15"/>
     <polyline points="${line}" fill="none" stroke="var(--primary)" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
-    <div class="sub">Power over the session · peak ${num(max, 2)} kW${fine ? '' : ' · 2-minute averages'}</div>`;
+    <div class="sub">Power over the session · peak ${num(max, 2)} kW${fine ? '' : pts.some((p) => (p.d || 0) >= 3600) ? ' · hourly averages' : ' · 5-minute averages'}</div>`;
 }
 function sessionDetail(s) {
   const start = s.start && new Date(s.start).getTime() / 1000;

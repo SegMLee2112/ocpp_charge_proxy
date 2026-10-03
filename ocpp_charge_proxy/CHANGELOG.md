@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.3.0
+
+- **Charts and daily energy now come from Home Assistant's history**
+  instead of the add-on's own files. The add-on keeps only the last hour in
+  memory; older chart data, the 14-day view, session power curves and the
+  energy per day are read from what HA's recorder already keeps for the
+  add-on's sensors. Energy per day now matches the Energy dashboard.
+- Two new sensors, so HA records everything the charts show:
+  `sensor.ocpp_charge_proxy_status` (the OCPP state: Charging, Preparing...)
+  and `sensor.ocpp_charge_proxy_current_limit` (the current the charger
+  uses, with your max and the provider's limit as attributes).
+- The 14-day view and older session curves use HA's 5-minute statistics
+  (was 2-minute averages), and hourly ones beyond HA's recorder retention
+  (10 days unless you've changed `purge_keep_days`).
+- history.json, history_long.json and daily_energy.json are deleted on the
+  first start. Sessions, messages and settings stay in the add-on's files.
+- The chart's state shading is drawn as one block per state, so long
+  views are no longer darker than short ones.
+
+> **After updating:** the state shading and limit lines only exist in HA
+> from this version on, so older parts of the charts show power and current
+> without them. If you exclude sensors from HA's recorder, keep the
+> `sensor.ocpp_charge_proxy_*` ones recorded or the charts will be empty
+> beyond the last hour.
+
 ## 2.2.1
 
 - The History chart no longer writes "Session start" / "Session end" on

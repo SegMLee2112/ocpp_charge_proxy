@@ -14,7 +14,8 @@ from src.api import create_api_app
 from src.client import ChargePoint
 from src.config import load_config, starting_current_amps
 from src.console import console_loop
-from src.gui_data import DailyEnergy, GuiSources, Health, PowerHistory, persist_loop, sample_loop
+from src.gui_data import GuiSources, Health, PowerHistory, remove_old_history_files, sample_loop
+from src.ha_history import ChartHistory
 from src.automation import Automation, ReplugOptions, automation_loop
 from src.ha_link import HaLink
 from src import log_filters
@@ -189,8 +190,8 @@ async def run() -> None:
         ramp_up_s=config.ramp_up_s,
     )
     health = Health()
-    history = PowerHistory(data_dir=data_dir)  # chart, kept across restarts
-    daily = DailyEnergy(data_dir)  # kWh per day for the Sessions tab
+    history = PowerHistory()  # the chart's last hour; older comes from HA's history
+    remove_old_history_files(data_dir)
     automation = Automation(data_dir, ReplugOptions(
         enabled=config.replug_enabled,
         after_min=config.replug_after_min,
@@ -218,22 +219,21 @@ async def run() -> None:
         info["home_assistant"] = {"available": ha_link.available, "connected": ha_link.connected, "error": ha_link.error}
         return info
 
+    charts = ChartHistory(ha_link, soc_entity=lambda: ha_link.settings.get("soc_entity") or None, recent=history)
     gui = GuiSources(
         message_log=cp.message_log,
-        history=history,
+        history=charts,
         sessions=cp.sessions_info,
         provider=cp.provider_info,
         health=_health_info,
-        daily=daily,
     )
     charger_tasks = [
         asyncio.create_task(cp.meter_values_loop()),
         asyncio.create_task(cp.clock_aligned_loop()),
         asyncio.create_task(sample_loop(
             history, shared_state, refresh=cp.refresh_live_power,
-            on_sample=lambda s: (cp.sessions.sample(s["power_kw"]), daily.update(shared_state.energy_kwh)),
+            on_sample=lambda s: cp.sessions.sample(s["power_kw"]),
         )),
-        asyncio.create_task(persist_loop(history, daily)),
         asyncio.create_task(automation_loop(automation, shared_state, do_plug, do_unplug)),
         asyncio.create_task(ha_link.run()),
         asyncio.create_task(cp.message_log.save_loop()),
@@ -316,8 +316,6 @@ async def run() -> None:
             logger.debug("Couldn't mark the sensors unavailable", exc_info=True)
         await _cancel_all(charger_tasks)
         cp.message_log.save()  # keep the Messages tab across the restart
-        history.save()
-        daily.save()
         await runner.cleanup()
         logger.info("OCPP Charge Proxy stopped")
 

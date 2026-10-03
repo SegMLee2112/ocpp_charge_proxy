@@ -295,23 +295,25 @@ async def handle_sessions(request: web.Request) -> web.Response:
 
 
 async def handle_history(request: web.Request) -> web.Response:
-    """Chart samples newer than ?since=<unix time>.
-
-    ?resolution=long: the 2-minute averages kept for 14 days instead of the
-    10-second samples kept for 24 hours."""
+    """Chart samples newer than ?since=<unix time>: 10-second ones for up to
+    24 hours, or with ?resolution=long 5-minute / hourly ones for up to 14
+    days (read from Home Assistant's history, see src/ha_history.py)."""
     gui = request.app["gui"]
     if gui is None:
         return _gui_unavailable()
     since = _number_param(request, "since", 0)
-    long = request.query.get("resolution") == "long"
-    samples = gui.history.long_since(since) if long else gui.history.since(since)
-    return web.json_response({"samples": samples, "now": time.time()}, dumps=_dumps)
+    if request.query.get("resolution") == "long":
+        samples = await gui.history.long_samples(since)
+    else:
+        samples = await gui.history.samples(since)
+    return web.json_response(
+        {"samples": samples, "now": time.time(), "error": getattr(gui.history, "error", None)}, dumps=_dumps)
 
 
 async def handle_energy_daily(request: web.Request) -> web.Response:
     """kWh per day for the last ?days=N days (default 14, max 62)."""
     gui = request.app["gui"]
-    if gui is None or gui.daily is None:
+    if gui is None:
         return _gui_unavailable()
     days = int(min(62, max(1, _number_param(request, "days", 14))))
     try:
@@ -319,7 +321,7 @@ async def handle_energy_daily(request: web.Request) -> web.Response:
         kept = list(sessions.get("history") or []) + ([sessions["current"]] if sessions.get("current") else [])
     except Exception:
         kept = []
-    return web.json_response({"days": gui.daily.snapshot(days, kept)}, dumps=_dumps)
+    return web.json_response({"days": await gui.history.daily(days, kept)}, dumps=_dumps)
 
 
 async def handle_provider(request: web.Request) -> web.Response:

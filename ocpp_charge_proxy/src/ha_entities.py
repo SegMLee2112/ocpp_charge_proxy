@@ -10,6 +10,10 @@
   (sensor.ocpp_charge_proxy_power / _energy / _current), with the device and
   state classes the Energy dashboard needs. They're "unavailable" while the
   add-on is stopped, and re-posted when it (or HA) restarts.
+- Status (the OCPP state: Charging, Preparing...) and Current limit (the
+  current the charger uses, with your max and the provider's limit as
+  attributes). HA records all of these, and the web page's charts and daily
+  energy are read back from that history (src/ha_history.py).
 
 Kept free of I/O so the decisions can be tested on their own; HaLink does the
 talking.
@@ -42,6 +46,20 @@ SENSORS = {
     }, 2),
 }
 LIVE_KEYS = {"power_kw", "current_a"}
+
+STATUS_SENSOR = "sensor.ocpp_charge_proxy_status"
+STATUS_ATTRS = {"friendly_name": "OCPP Charge Proxy Status", "icon": "mdi:ev-plug-type2"}
+LIMIT_SENSOR = "sensor.ocpp_charge_proxy_current_limit"
+LIMIT_ATTRS = {
+    "friendly_name": "OCPP Charge Proxy Current limit", "unit_of_measurement": "A",
+    "device_class": "current", "state_class": "measurement", "icon": "mdi:current-ac",
+}
+ALL_SENSORS = [e for e, _, _ in SENSORS.values()] + [STATUS_SENSOR, LIMIT_SENSOR]
+
+
+def status_text(state) -> str:
+    """"Charging", not "ChargePointStatus.charging"."""
+    return str(getattr(state, "value", state))
 
 
 class PluggedInSync:
@@ -93,8 +111,27 @@ class SensorPublisher:
         self.sent.clear()
         self.sent_at.clear()
 
+    def forget(self, entity_id: str) -> None:
+        """A post failed: send it again next time."""
+        key = next((k for k, v in SENSORS.items() if v[0] == entity_id), entity_id)
+        self.sent.pop(key, None)
+
     def due(self, shared_state, now: float) -> list[tuple[str, str, dict]]:
         out = []
+        # Status and current limit: whenever they change (rarely)
+        limit_attrs = {
+            **LIMIT_ATTRS,
+            "max_amps": shared_state.current_amps_setting,
+            "provider_limit_amps": shared_state.current_amps_provider_limit,
+        }
+        for entity_id, value, attrs in (
+            (STATUS_SENSOR, status_text(shared_state.state), STATUS_ATTRS),
+            (LIMIT_SENSOR, str(shared_state.current_amps_effective), limit_attrs),
+        ):
+            key = (value, tuple(sorted((k, str(v)) for k, v in attrs.items())))
+            if key != self.sent.get(entity_id) or now - self.sent_at.get(entity_id, 0.0) >= REFRESH_S:
+                self.sent[entity_id], self.sent_at[entity_id] = key, now
+                out.append((entity_id, value, attrs))
         for key, (entity_id, attrs, digits) in SENSORS.items():
             value = round(float(getattr(shared_state, key) or 0.0), digits)
             last, at = self.sent.get(key), self.sent_at.get(key, 0.0)
@@ -108,7 +145,8 @@ class SensorPublisher:
 
     @staticmethod
     def unavailable() -> list[tuple[str, str, dict]]:
-        return [(entity_id, "unavailable", attrs) for entity_id, attrs, _ in SENSORS.values()]
+        return [(entity_id, "unavailable", attrs) for entity_id, attrs, _ in SENSORS.values()] + [
+            (STATUS_SENSOR, "unavailable", STATUS_ATTRS), (LIMIT_SENSOR, "unavailable", LIMIT_ATTRS)]
 
 
 def integration_entities(registry: list[dict]) -> list[str]:
