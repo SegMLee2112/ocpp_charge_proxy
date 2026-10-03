@@ -84,10 +84,10 @@ pip install pytest pytest-asyncio pytest-aiohttp
 
 # Run tests
 python -m pytest tests/ -v
-
-# Run standalone (outside HA)
-./run_standalone.sh ocpp.example.com CHARGEPOINT_ID PASSWORD
 ```
+
+The add-on only runs under Home Assistant (it needs the Supervisor for its
+sensors, history and settings); test changes by rebuilding it in HA.
 
 ## Testing in HA
 

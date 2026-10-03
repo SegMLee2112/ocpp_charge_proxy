@@ -189,7 +189,7 @@ async def test_gui_endpoints(aiohttp_client, shared_state, mock_commands):
     assert [d["kwh"] for d in days] == [0.0, 0.0, 0.0]  # no HA, no sessions with energy
     health = await (await client.get("/api/health")).json()
     assert health["version"] == "1.1.0"
-    assert health["event_streams"] == {"integration": 0, "gui": 0}
+    assert health["event_streams"] == {"gui": 0}
 
 
 @pytest.mark.asyncio
@@ -206,7 +206,7 @@ async def test_event_streams_counted_by_client(aiohttp_client, shared_state, moc
     line = b""
     while not line.startswith(b"data:"):
         line = await resp.content.readline()
-    assert app["event_clients"] == {"integration": 0, "gui": 1}
+    assert app["event_clients"] == {"gui": 1}
     resp.close()
 
 
@@ -260,11 +260,8 @@ async def test_sensor_settings_endpoints(aiohttp_client, shared_state, mock_comm
     client = await aiohttp_client(app)
     data = await (await client.get("/api/sensors")).json()
     assert data["configured"] is False and data["available"] is False
-    # The integration's one-off migration
-    resp = await client.post("/api/sensors?only_if_unconfigured=1", json={"soc_entity": "sensor.soc"})
+    resp = await client.post("/api/sensors", json={"soc_entity": "sensor.soc"})
     assert (await resp.json())["settings"]["soc_entity"] == "sensor.soc"
-    resp = await client.post("/api/sensors?only_if_unconfigured=1", json={"soc_entity": "sensor.other"})
-    assert (await resp.json())["status"] == "unchanged"
     # The Simulation tab
     resp = await client.post("/api/sensors", json={"auto_plug": True, "auto_plug_soc": 25})
     assert (await resp.json())["monitored_soc"]["threshold"] == 25

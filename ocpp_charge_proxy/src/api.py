@@ -42,8 +42,8 @@ def create_api_app(
     app["automation"] = automation  # src.automation.Automation, or None
     app["ha_link"] = ha_link  # src.ha_link.HaLink, or None
     app["on_set_ramp"] = on_set_ramp
-    # Open /api/events streams: "integration" (HA) and "gui" (the web page)
-    app["event_clients"] = {"integration": 0, "gui": 0}
+    # Open /api/events streams (web pages)
+    app["event_clients"] = {"gui": 0}
     app.on_shutdown.append(_close_event_streams)
 
     # Ingress serves the status page — use relative path for API calls
@@ -151,7 +151,7 @@ async def handle_power(request: web.Request) -> web.Response:
 
 
 async def handle_soc(request: web.Request) -> web.Response:
-    """Car state of charge (%) from the integration; null = unknown / not set."""
+    """Car state of charge (%) set on the web page; null = unknown / not set."""
     on_set_soc = request.app["on_set_soc"]
     if on_set_soc is None:
         return web.json_response(
@@ -216,7 +216,7 @@ def _state_snapshot(app: web.Application) -> dict:
 
 
 async def handle_events(request: web.Request) -> web.StreamResponse:
-    """Stream the state to the integration as Server-Sent Events.
+    """Stream the state to the web page as Server-Sent Events.
 
     One event straight away, then on every significant change (within ~1s),
     and at least every EVENTS_LIVE_INTERVAL seconds with live power (which
@@ -224,7 +224,6 @@ async def handle_events(request: web.Request) -> web.StreamResponse:
     """
     app = request.app
     stop: asyncio.Event = app["events_stop"]
-    client = "gui" if request.query.get("client") == "gui" else "integration"
     resp = web.StreamResponse(headers={
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
@@ -233,7 +232,7 @@ async def handle_events(request: web.Request) -> web.StreamResponse:
     await resp.prepare(request)
     last_sig = None
     last_sent = 0.0
-    app["event_clients"][client] += 1
+    app["event_clients"]["gui"] += 1
     try:
         while not stop.is_set():
             sig = _significant(app["shared_state"].to_dict())
@@ -248,9 +247,9 @@ async def handle_events(request: web.Request) -> web.StreamResponse:
             except asyncio.TimeoutError:
                 pass
     except (ConnectionResetError, ConnectionError):
-        pass  # integration went away
+        pass  # page closed
     finally:
-        app["event_clients"][client] -= 1
+        app["event_clients"]["gui"] -= 1
     return resp
 
 
@@ -399,12 +398,10 @@ async def handle_get_sensors(request: web.Request) -> web.Response:
 
 async def handle_set_sensors(request: web.Request) -> web.Response:
     """Any of power_entity, soc_entity, plug_entity, auto_plug, auto_plug_entity,
-    auto_plug_soc. With ?only_if_unconfigured=1 nothing changes once saved."""
+    auto_plug_soc."""
     link = request.app["ha_link"]
     if link is None:
         return _gui_unavailable()
-    if request.query.get("only_if_unconfigured") and link.configured:
-        return web.json_response({"status": "unchanged", **link.snapshot()}, dumps=_dumps)
     try:
         body = await request.json()
         await link.update_settings(body)

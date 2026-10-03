@@ -122,7 +122,7 @@ class HaLink:
         self.entities_error: Optional[str] = None
         self._token = token if token is not None else os.environ.get("SUPERVISOR_TOKEN", "")
         self.settings = default_settings()
-        self.configured = False  # settings saved at least once (else: integration may migrate)
+        self.configured = False  # settings saved at least once
         self.states: dict[str, dict] = {}  # entity_id -> {"state", "attributes"}
         self.connected = False
         self.error: Optional[str] = None

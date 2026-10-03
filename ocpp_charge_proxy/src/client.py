@@ -902,7 +902,7 @@ class ChargePoint(BaseChargePoint):
             if self._transaction_id is not None:
                 self._save_active_transaction()  # paused, still open
             self._shared_state.energy_kwh = self.energy_register_kwh
-            # Bug 7 fix: zero out power values when idle
+            # Not charging: no power
             self._zero_power_state()
             return None
 
@@ -1136,7 +1136,7 @@ class ChargePoint(BaseChargePoint):
             if self.car_full:
                 await self._apply_profile_state()  # plugged in already full
         except Exception:
-            # Bug 2 fix: reset to consistent state on failure
+            # Start failed: back to a consistent state
             logger.error("Failed to start transaction", exc_info=True)
             self._charger_sim.stop_charging()
             self._transaction_id = None
@@ -1211,7 +1211,7 @@ class ChargePoint(BaseChargePoint):
                 logger.warning("Transaction left open on disk; will be closed on next start")
             self._shared_state.transaction_id = None
             self._zero_power_state()
-            # Bug 3 fix: use caller-specified final state
+            # Where the caller wants the connector to end up
             self.state = final_state
             self._shared_state.state = self.state
         if announce:
@@ -1224,7 +1224,7 @@ class ChargePoint(BaseChargePoint):
 
     @on(Action.RemoteStartTransaction)
     async def on_remote_start_transaction(self, id_tag: str, charging_profile: dict = None, **kwargs):
-        # Bug 6 fix: only accept when car is plugged in (Preparing)
+        # Only when the car is plugged in (Preparing / suspended)
         if self.state not in (ChargePointStatus.preparing, ChargePointStatus.suspended_ev, ChargePointStatus.suspended_evse):
             logger.warning("RemoteStart rejected: state is %s (not plugged in)", self.state)
             return call_result.RemoteStartTransactionPayload(

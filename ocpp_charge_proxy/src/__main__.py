@@ -13,10 +13,9 @@ from aiohttp import web
 from src.api import create_api_app
 from src.client import ChargePoint
 from src.config import load_config, starting_current_amps
-from src.console import console_loop
 from src.gui_data import GuiSources, Health, PowerHistory, remove_old_history_files, sample_loop
 from src.ha_history import ChartHistory
-from src.automation import Automation, ReplugOptions, automation_loop
+from src.automation import Automation, automation_loop
 from src.ha_link import HaLink
 from src import log_filters
 from src.persistence import Persistence
@@ -25,6 +24,9 @@ from src.shared_state import SharedState
 logger = logging.getLogger("ocpp_charge_proxy")
 
 BACKOFF_STEPS = [5, 10, 30, 60, 300]
+# The simulated car: wait after StartTransaction, then ramp up (Settings tab)
+DEFAULT_START_DELAY_S = 3.0
+DEFAULT_RAMP_UP_S = 5.0
 
 # s6-overlay gives services ~3s after SIGTERM before SIGKILL, so the goodbye
 # messages to the server must fit comfortably inside that window.
@@ -129,7 +131,7 @@ async def run() -> None:
         from ocpp.v16.enums import ChargePointStatus as CPS
         if cp is None:
             return
-        # Bug 5 fix: don't plug if already plugged in or charging
+        # Already plugged in (or charging): nothing to do
         if cp.state in (CPS.preparing, CPS.charging, CPS.suspended_ev, CPS.suspended_evse):
             return
         cp.state = CPS.preparing
@@ -148,7 +150,7 @@ async def run() -> None:
         cp.set_plugged_in(False, source)
         shared_state.state = CPS.available
         if cp._transaction_id is not None:
-            # Bug 3 fix: pass final_state so _do_stop_transaction doesn't clobber
+            # final_state, so the stop doesn't put the connector back to Preparing
             from ocpp.v16.enums import Reason
             await cp._do_stop_transaction(
                 final_state=CPS.available, reason=Reason.ev_disconnected,
@@ -186,17 +188,13 @@ async def run() -> None:
         current_amps=starting_current_amps(config, persistence),
         current_amps_option=config.current_amps,
         shared_state=shared_state,
-        start_delay_s=config.start_delay_s,
-        ramp_up_s=config.ramp_up_s,
+        start_delay_s=DEFAULT_START_DELAY_S,  # until set on the Settings tab
+        ramp_up_s=DEFAULT_RAMP_UP_S,
     )
     health = Health()
     history = PowerHistory()  # the chart's last hour; older comes from HA's history
     remove_old_history_files(data_dir)
-    automation = Automation(data_dir, ReplugOptions(
-        enabled=config.replug_enabled,
-        after_min=config.replug_after_min,
-        attempts=config.replug_attempts,
-    ))
+    automation = Automation(data_dir)  # auto re-plug settings: Settings tab
     automation.publish(shared_state)
     # Your HA sensors (power, SoC, car plugged in, auto plug-in: Settings
     # tab) and the add-on's own HA entities (Plugged In helper, Power, Energy,
@@ -270,7 +268,7 @@ async def run() -> None:
                 try:
                     await _run_connection(
                         cp, config, persistence, stop_task,
-                        do_plug, do_unplug, do_set_current,
+                        do_plug, do_unplug,
                     )
                 finally:
                     cp.detach()
@@ -324,7 +322,7 @@ class _BootCancelled(Exception):
     """Shutdown requested while waiting for BootNotification."""
 
 
-async def _run_connection(cp, config, persistence, stop_task, do_plug, do_unplug, do_set_current) -> None:
+async def _run_connection(cp, config, persistence, stop_task, do_plug, do_unplug) -> None:
     """Boot and run one websocket connection until it ends or shutdown."""
     # Start message loop first so incoming messages are handled
     start_task = asyncio.create_task(cp.start())
@@ -355,12 +353,6 @@ async def _run_connection(cp, config, persistence, stop_task, do_plug, do_unplug
         start_task,
         asyncio.create_task(cp.heartbeat_loop(interval)),
     ]
-
-    # Run interactive console when stdin is a terminal
-    if sys.stdin.isatty():
-        tasks.append(asyncio.create_task(
-            console_loop(cp, do_plug, do_unplug, do_set_current)
-        ))
 
     # Wait until ANY task ends (normally the message loop when the
     # socket closes), then cancel the rest. asyncio.gather() does

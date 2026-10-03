@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.4.1
+
+Cleanup, no change to what the add-on does:
+
+- Removed files no longer used: the old Home Assistant bridge, the
+  interactive console and run_standalone.sh (the add-on only runs under
+  Home Assistant).
+- Removed what was left for the old companion integration: its event
+  stream and its one-off settings migration. (The warning if the old
+  integration is still installed stays.)
+- The start delay / ramp-up and auto re-plug options from before 2.0.3 are
+  no longer read. If you changed them then and never saved the Settings
+  tab since, check them there.
+- Tidied code comments.
+
 ## 2.4.0
 
 - **Zoom on the History chart.** Drag across the chart to zoom into that
