@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.9.2
+
+- The skip panel in **Next 7 days** opens right under the row of the slot
+  you clicked, instead of at the bottom of the card.
+- It stays open and updates straight away after **Skip this slot** or
+  **Undo skip** (it used to close, and only showed the change when the
+  slot was clicked again).
+
 ## 2.9.1
 
 - **Skip a slot from the week view:** click a slot in **Next 7 days** and

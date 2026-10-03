@@ -186,7 +186,7 @@
   .week .seg.skip { opacity: 1; background: repeating-linear-gradient(135deg, var(--divider) 0 6px, transparent 6px 12px) !important;
     outline: 1px dashed var(--text2); outline-offset: -1px; }
   .week .seg.picked { box-shadow: 0 0 0 2px var(--text); }
-  .slot-pop { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; padding: 10px 12px;
+  .slot-pop { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px;
     border-radius: 8px; background: var(--hover); }
   .once { font-size: 12px; color: var(--text2); }
   .week .dl { font-size: 12px; color: var(--text2); }
@@ -419,7 +419,6 @@
     <div class="card">
       <h2>Next 7 days<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400" id="w-note"></span></h2>
       <div class="week" id="w-grid"></div>
-      <div class="slot-pop" id="w-pop" hidden></div>
       <div class="sub" id="w-warn" hidden style="margin-top:10px"></div>
       <div class="legend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px)"></b>Skipped</span><span class="hint">Click a slot to skip it once</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span></div>
     </div>
@@ -1696,12 +1695,14 @@ function drawWeek() {
       const x0 = (Math.max(a, lo) - lo) / 14.4, x1 = (Math.min(b, hi) - lo) / 14.4;
       return `<div class="seg ${cls}" ${attrs} style="${style}left:${x0}%;width:${x1 - x0}%" title="${dayLabel(d)} ${hhmm(Math.max(a, lo) - lo)}–${hhmm(Math.min(b, hi) - lo)}${note}"></div>`;
     };
+    const picked = (a) => week.picked && week.picked.start === a ? 'picked' : '';
     const bars = segs.map((sg, k) => [sg, k]).filter(([[a, b]]) => b > lo && a < hi).map(([[a, b], k]) =>
-      bar(a, b, `data-seg="${k}"`, `${on ? '' : 'off'} ${week.picked === 's' + k ? 'picked' : ''}`,
+      bar(a, b, `data-start="${a}" data-day="${d}"`, `${on ? '' : 'off'} ${picked(a)}`,
         badSegs.has(k) ? 'background:var(--err);' : segStyle, badSegs.has(k) ? ' (over Octopus\'s 6 hours a day)' : '')).join('')
-      + skippedSegs.map((sg, k) => [sg, k]).filter(([[a, b]]) => b > lo && a < hi).map(([[a, b], k]) =>
-        bar(a, b, `data-skipped="${k}"`, `skip ${week.picked === 'k' + k ? 'picked' : ''}`, '', ' (skipped)')).join('');
+      + skippedSegs.filter(([a, b]) => b > lo && a < hi).map(([a, b]) =>
+        bar(a, b, `data-start="${a}" data-day="${d}"`, `skip ${picked(a)}`, '', ' (skipped)')).join('');
     html += `<div class="dl ${d === 0 ? 'today' : ''}">${d === 0 ? 'Today' : dayLabel(d)}</div><div class="track">${bars}${d === 0 ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
+    if (week.picked && week.picked.day === d) html += '<div class="slot-pop" id="w-pop"></div>';
   }
   html += '<div></div><div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';
   $('w-grid').innerHTML = html;
@@ -1718,35 +1719,44 @@ const week = {segs: [], skipped: [], day0: null, picked: null};
 function slotTimes(sg) {
   return [sg[4], sg[5]].filter((ev) => ev && ev.id).map((ev) => ({entry_id: ev.id, date: ev.date}));
 }
+function pickedSlot() {
+  const p = week.picked; if (!p) return null;
+  const on = week.segs.find((sg) => sg[0] === p.start);
+  if (on) return {sg: on, skipped: false};
+  const off = week.skipped.find((sg) => sg[0] === p.start);
+  return off ? {sg: off, skipped: true} : null;
+}
 function drawSlotPop() {
-  const pop = $('w-pop'), p = week.picked;
-  const sg = p && (p[0] === 's' ? week.segs : week.skipped)[Number(p.slice(1))];
-  if (!sg) { pop.hidden = true; week.picked = null; return; }
+  const pop = $('w-pop');
+  if (!pop) return;
+  const found = pickedSlot();
+  if (!found) { pop.remove(); week.picked = null; return; }
+  const {sg, skipped} = found;
   const at = (min) => {
     const t = new Date(week.day0); t.setMinutes(min);
     return `${t.toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})} ${t.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}`;
   };
-  const skipped = p[0] === 'k', saved = slotTimes(sg).length > 0;
-  pop.hidden = false;
+  const saved = slotTimes(sg).length > 0;
   pop.innerHTML = `<span class="grow"><b>${skipped ? 'Skipped: ' : ''}Plug in ${at(sg[0])}</b> → ${sg[5] ? 'unplug ' + at(sg[1]) : 'no unplug in the next week'}</span>`
     + (!saved || auto.dirty ? '<span class="muted">Save the schedule first</span>'
       : `<button class="btn small ${skipped ? '' : 'primary'}" id="w-skip">${skipped ? 'Undo skip' : 'Skip this slot'}</button>`)
     + '<button class="btn small" id="w-close">Close</button>';
 }
-$('w-grid').addEventListener('click', (ev) => {
-  const el = ev.target.closest('.seg'); if (!el) return;
-  const id = el.dataset.seg !== undefined ? 's' + el.dataset.seg : 'k' + el.dataset.skipped;
-  week.picked = week.picked === id ? null : id;
-  drawWeek();
-});
-$('w-pop').addEventListener('click', async (ev) => {
+$('w-grid').addEventListener('click', async (ev) => {
   if (ev.target.id === 'w-close') { week.picked = null; drawWeek(); return; }
-  if (ev.target.id !== 'w-skip') return;
-  const p = week.picked, skipped = p[0] === 'k';
-  const sg = (skipped ? week.skipped : week.segs)[Number(p.slice(1))];
-  if (await post('automation/skip', {times: slotTimes(sg), skip: !skipped})) {
-    toast(skipped ? 'Slot back on' : 'Slot skipped'); week.picked = null; refreshAutomation(false);
+  if (ev.target.id === 'w-skip') {
+    const found = pickedSlot(); if (!found) return;
+    ev.target.disabled = true;
+    if (await post('automation/skip', {times: slotTimes(found.sg), skip: !found.skipped})) {
+      toast(found.skipped ? 'Slot back on' : 'Slot skipped');
+      await refreshAutomation(false);  // redraws: the panel stays open, showing the new state
+    } else ev.target.disabled = false;
+    return;
   }
+  const el = ev.target.closest('.seg[data-start]'); if (!el) return;
+  const start = Number(el.dataset.start), day = Number(el.dataset.day);
+  week.picked = week.picked && week.picked.start === start && week.picked.day === day ? null : {start, day};
+  drawWeek();
 });
 // The schedule's plugged-in stretches over a week (minutes from Monday 00:00),
 // and with Octopus, which of them go over its 6 hours of smart charging a day
