@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.12.3
+
+- Clearer line under "Waiting for supplier": "Octopus Energy's charge slot
+  runs until 10:00 PM, but it hasn't started charging yet"
+
 ## 2.12.2
 
 - Auto plug-in: Octopus's 6-hour limit (moving the next scheduled slot) now

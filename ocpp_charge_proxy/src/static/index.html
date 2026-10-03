@@ -1169,7 +1169,7 @@ function drawStateSub() {
   let text = '';
   if (s.state === 'Preparing' && d && d.found) {
     const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-    if (d.current) text = `${esc(d.provider)} slot now, until ${t(d.current.end)}, but no session yet`;
+    if (d.current) text = `${esc(d.provider)}'s charge slot runs until ${t(d.current.end)}, but it hasn't started charging yet`;
     else if (d.planned && d.planned.length) text = `Next slot ${slotText(d.planned[0])}`;
     else text = `Waiting for ${esc(d.provider)} to schedule a charge`;
   }
