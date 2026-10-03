@@ -69,6 +69,7 @@ def create_api_app(
     app.router.add_get("/api/automation", handle_automation)
     app.router.add_post("/api/automation/schedule", handle_schedule)
     app.router.add_post("/api/automation/replug", handle_replug)
+    app.router.add_post("/api/automation/skip", handle_skip)
     # Your HA sensors (Settings tab)
     app.router.add_get("/api/sensors", handle_get_sensors)
     app.router.add_post("/api/sensors", handle_set_sensors)
@@ -380,6 +381,13 @@ async def handle_schedule(request: web.Request) -> web.Response:
             # Octopus schedules at most 6 hours of smart charging a day
             daily_cap_min=360 if sc.get("provider") == "Octopus Energy" else None,
         ),
+    )
+
+
+async def handle_skip(request: web.Request) -> web.Response:
+    """{"entry_id", "date": "YYYY-MM-DD", "skip": bool}: skip one upcoming time (or undo)."""
+    return await _automation_change(
+        request, lambda a, b: a.set_skip(str(b.get("entry_id") or ""), b.get("date"), bool(b.get("skip", True))),
     )
 
 

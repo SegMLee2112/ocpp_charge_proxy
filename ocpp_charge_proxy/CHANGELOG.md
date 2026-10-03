@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.9.0
+
+- **One-off times:** **+ Add a one-off** on the Schedule tab adds a plug-in
+  or unplug for a single date (e.g. unplug at 06:00 next Thursday for an
+  early start). It runs once, alongside the weekly times, and is removed
+  after it has run.
+- **Skip once:** a new **Coming up** card lists the next 7 days of
+  schedule times (weekly and one-off). **Skip** stops one of them running
+  that once, **Undo** puts it back. A skipped unplug isn't used for the
+  supplier ready time (the next one is), and a skipped plug-in doesn't
+  count at start-up. Skips are forgotten a day after.
+- **Next 7 days:** the week view now shows the actual coming week, from
+  today, with one-off times and skips included (it was a Monday-to-Sunday
+  pattern). Octopus's 6-hour check uses the same coming week.
+
 ## 2.8.0
 
 - **Start-up check for the schedule.** If the add-on starts (or restarts,

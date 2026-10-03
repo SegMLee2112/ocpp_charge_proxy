@@ -275,13 +275,10 @@ def test_automation_loop_publishes_scheduled():
 
 
 def test_octopus_six_hours_a_day():
-    from src.automation import longest_day, plugged_segments
     every = list(range(7))
     six = [{"time": "23:30", "action": "plug", "days": every}, {"time": "05:30", "action": "unplug", "days": every}]
     seven = [{"time": "23:30", "action": "plug", "days": every}, {"time": "06:30", "action": "unplug", "days": every}]
-    assert plugged_segments([{**e, "enabled": True} for e in six])[0] == (0, 330)  # Monday 00:00-05:30, from Sunday
-    assert longest_day(six)[0] == 360
-    a = Automation(None)
+    a, clock = _automation()
     a.set_schedule(entries=seven, daily_cap_min=360)  # ready time off: no limit
     a.set_schedule(entries=six, ready_time=True, daily_cap_min=360)  # exactly 6 hours: fine
     try:
@@ -293,7 +290,11 @@ def test_octopus_six_hours_a_day():
     # Two 4-hour stretches 12 hours apart are 8 hours in 24
     split = [{"time": "00:00", "action": "plug", "days": every}, {"time": "04:00", "action": "unplug", "days": every},
              {"time": "12:00", "action": "plug", "days": every}, {"time": "16:00", "action": "unplug", "days": every}]
-    assert longest_day(split)[0] == 480
+    try:
+        a.set_schedule(entries=split, daily_cap_min=360)
+        raise AssertionError("should have refused")
+    except ValueError as err:
+        assert "8h 00m" in str(err)
     a.set_schedule(entries=split)  # no cap (not Octopus): fine
     a.set_schedule(ready_time=False)
     a.set_schedule(entries=seven, daily_cap_min=360)  # ready time off again: fine
@@ -357,3 +358,68 @@ def test_startup_plugs_in_inside_a_scheduled_stretch():
     assert a.last_run["startup"] is True
     _, calls, asked = run(True, [])  # already plugged in: nothing to do
     assert calls == [] and asked == []
+
+
+# --- 2.9.0: one-off times and skips ---------------------------------------------
+
+
+def test_one_off_time_runs_once_and_is_removed(tmp_path):
+    a, clock = _automation(tmp_path)  # Monday 5 Oct 2026, 23:00
+    a.set_schedule(enabled=True, entries=[{"time": "23:30", "action": "plug", "date": "2026-10-06"}])
+    assert a.entries[0]["days"] == [1] and a.entries[0]["date"] == "2026-10-06"
+    a.due()
+    clock.advance(minutes=31)  # Monday 23:31: not today
+    assert a.due() == []
+    assert a.next_action()["time"].startswith("2026-10-06T23:30")
+    clock.advance(days=1)  # Tuesday 23:31
+    assert [e["action"] for e in a.due()] == ["plug"]
+    clock.advance(days=1)  # a day later it's gone (and saved)
+    a.due()
+    assert a.entries == [] and Automation(str(tmp_path)).entries == []
+    try:
+        validate_entry({"time": "07:00", "action": "unplug", "date": "06/10/2026"})
+        raise AssertionError("should have refused")
+    except ValueError:
+        pass
+
+
+def test_skip_one_time(tmp_path):
+    every = list(range(7))
+    a, clock = _automation(tmp_path)  # Monday 23:00
+    a.set_schedule(enabled=True, entries=[
+        {"time": "23:30", "action": "plug", "days": every}, {"time": "07:00", "action": "unplug", "days": every}])
+    plug_id = a.entries[0]["id"]
+    a.set_skip(plug_id, "2026-10-05")  # tonight
+    assert Automation(str(tmp_path)).skips == [{"entry_id": plug_id, "date": "2026-10-05"}]
+    nxt = a.next_action()
+    assert nxt["action"] == "unplug" and nxt["time"].startswith("2026-10-06T07:00")
+    up = a.upcoming()
+    assert up[0]["skipped"] is True and up[0]["action"] == "plug" and not up[1]["skipped"]
+    a.due()
+    clock.advance(minutes=31)
+    assert a.due() == []  # skipped
+    clock.advance(days=1)  # Tuesday 23:31: runs again
+    assert [e["action"] for e in a.due()] == ["plug"]
+    clock.advance(days=1)
+    a.due()
+    assert a.skips == []  # Monday's skip forgotten
+    a.set_skip(plug_id, "2026-10-09")
+    a.set_skip(plug_id, "2026-10-09", skip=False)  # undo
+    assert a.skips == []
+    try:
+        a.set_skip("nope", "2026-10-07")
+        raise AssertionError("should have refused")
+    except ValueError:
+        pass
+
+
+def test_skipped_unplug_moves_the_ready_time_and_start_up():
+    every = list(range(7))
+    a, clock = _automation(start=datetime.datetime(2026, 10, 6, 2, 0, tzinfo=TZ))  # Tuesday 02:00
+    a.set_schedule(enabled=True, entries=[
+        {"time": "23:30", "action": "plug", "days": every}, {"time": "07:00", "action": "unplug", "days": every}])
+    plug_id, unplug_id = a.entries[0]["id"], a.entries[1]["id"]
+    a.set_skip(unplug_id, "2026-10-06")
+    assert a.next_unplug(clock.now()).strftime("%a %H:%M") == "Wed 07:00"
+    a.set_skip(plug_id, "2026-10-05")  # last night's plug-in skipped: not inside a stretch
+    assert a.in_plug_window() is None

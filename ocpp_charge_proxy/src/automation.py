@@ -12,6 +12,10 @@
   counts as an answer: no re-plug while one is planned, only when nothing
   has been scheduled `after_min` minutes after plugging in.
 
+- One-off times: an entry with a `date` runs once, on that day, and is
+  removed after it has run. Skips: any upcoming time (weekly or one-off)
+  can be skipped once; a skipped time doesn't run, and the skip is
+  forgotten a day after.
 - At start-up: if the schedule is on and the add-on starts inside a
   plugged-in stretch (the last schedule time before now was a plug-in) with
   Plugged In off, it plugs in, as if it had been running at that time.
@@ -79,14 +83,32 @@ def _parse_hhmm(value) -> tuple[int, int]:
     return h, m
 
 
+def _parse_date(value) -> datetime.date:
+    try:
+        return datetime.date.fromisoformat(str(value))
+    except ValueError:
+        raise ValueError(f"Date must be YYYY-MM-DD, got {value!r}") from None
+
+
 def validate_entry(raw: dict) -> dict:
-    """A schedule entry: {id, time "HH:MM", days [0=Mon..6=Sun], action, enabled}."""
+    """A schedule entry: {id, time "HH:MM", days [0=Mon..6=Sun], action, enabled},
+    or a one-off: the same with "date": "YYYY-MM-DD" (days is then that day)."""
     if not isinstance(raw, dict):
         raise ValueError("Each entry must be an object")
     h, m = _parse_hhmm(raw.get("time"))
     action = raw.get("action")
     if action not in ACTIONS:
         raise ValueError(f"Action must be one of {ACTIONS}, got {action!r}")
+    if raw.get("date"):
+        date = _parse_date(raw["date"])
+        return {
+            "id": str(raw.get("id") or uuid.uuid4().hex[:8]),
+            "time": f"{h:02d}:{m:02d}",
+            "days": [date.weekday()],
+            "date": date.isoformat(),
+            "action": action,
+            "enabled": bool(raw.get("enabled", True)),
+        }
     days = raw.get("days", list(range(7)))
     if not isinstance(days, list) or not days or any(
         not isinstance(d, int) or isinstance(d, bool) or not 0 <= d <= 6 for d in days
@@ -101,56 +123,36 @@ def validate_entry(raw: dict) -> dict:
     }
 
 
-WEEK_MIN = 7 * 1440
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 
-def plugged_segments(entries: list[dict]) -> list[tuple[int, int]]:
-    """When the schedule has the car plugged in over a week, as (start, end)
-    minutes from Monday 00:00 (the same as the web page's week view)."""
-    events = []
-    for e in entries:
-        if not e.get("enabled", True):
-            continue
-        h, m = _parse_hhmm(e["time"])
-        events += [(d * 1440 + h * 60 + m, e["action"] == "plug") for d in e["days"]]
-    events.sort()
-    segs: list[tuple[int, int]] = []
-    if events:
-        state, since = events[-1][1], 0  # carried over from the end of the week
-        for t, plug in events:
-            if plug != state:
-                if state:
-                    segs.append((since, t))
-                state, since = plug, t
-        if state:
-            segs.append((since, WEEK_MIN))
-    return segs
+def plugged_windows(events):
+    """(time, is_plug) events in time order -> the stretches plugged in, as
+    (start, end). A stretch still open at the last event is left out."""
+    windows = []
+    state, since = None, None
+    for t, plug in events:
+        if plug and state is not True:
+            state, since = True, t
+        elif not plug:
+            if state is True:
+                windows.append((since, t))
+            state = False
+    return windows
 
 
-def longest_day(entries: list[dict]) -> Optional[tuple[int, int]]:
-    """The most plugged-in minutes in any 24 hours, and when that starts."""
-    segs = plugged_segments(entries)
-    both = segs + [(a + WEEK_MIN, b + WEEK_MIN) for a, b in segs]
+def longest_day(windows, after, until):
+    """The most plugged-in minutes in any 24 hours starting at a stretch's
+    start between `after` and `until`: (minutes, start), or None."""
     worst = None
-    for a, _ in segs:
-        total = sum(max(0, min(y, a + 1440) - max(x, a)) for x, y in both)
+    for a, _ in windows:
+        if not after <= a <= until:
+            continue
+        end = a + datetime.timedelta(days=1)
+        total = sum(max(0.0, (min(y, end) - max(x, a)).total_seconds()) for x, y in windows) / 60
         if worst is None or total > worst[0]:
-            worst = (total, a)
+            worst = (int(round(total)), a)
     return worst
-
-
-def check_daily_cap(entries: list[dict], cap_min: int, provider: str) -> None:
-    """Octopus schedules at most 6 hours of smart charging a day: refuse a
-    schedule that plugs in for longer in any 24 hours."""
-    worst = longest_day(entries)
-    if worst and worst[0] > cap_min:
-        total, start = worst
-        raise ValueError(
-            f"{provider} schedules at most {cap_min // 60} hours of smart charging a day, but the schedule "
-            f"plugs in for {total // 60}h {total % 60:02d}m in the 24 hours from "
-            f"{DAYS[start // 1440 % 7]} {start % 1440 // 60:02d}:{start % 60:02d}: shorten it"
-        )
 
 
 def _local_now() -> datetime.datetime:
@@ -177,6 +179,7 @@ class Automation:
         self._options = options
         self.schedule_enabled = False
         self.entries: list[dict] = []
+        self.skips: list[dict] = []  # [{"entry_id", "date"}]: times skipped once
         self.ready_time = False  # set the supplier's ready time at scheduled plug-ins
         self.ready_status: Optional[dict] = None  # the last time it was set (or why not)
         self.replug = options.as_dict()
@@ -218,6 +221,8 @@ class Automation:
             except ValueError:
                 logger.warning("Ignoring invalid schedule entry %r", raw)
         self.entries = entries
+        self.skips = [k for k in schedule.get("skips") or []
+                      if isinstance(k, dict) and k.get("entry_id") and k.get("date")]
         # Saved re-plug settings (set on the web page) win over the defaults
         replug = data.get("replug")
         if isinstance(replug, dict):
@@ -234,7 +239,7 @@ class Automation:
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump({
                     "schedule": {"enabled": self.schedule_enabled, "entries": self.entries,
-                                 "ready_time": self.ready_time},
+                                 "ready_time": self.ready_time, "skips": self.skips},
                     "replug": self.replug,
                 }, f, indent=1)
                 f.flush()
@@ -267,8 +272,11 @@ class Automation:
             if ready_times:
                 check_unplug_times(new_entries, ready_times, provider)
             if daily_cap_min:
-                check_daily_cap(new_entries, daily_cap_min, provider)
+                self.check_daily_cap(new_entries, daily_cap_min, provider)
         self.entries = new_entries
+        ids = {e["id"] for e in self.entries}
+        self.skips = [k for k in self.skips if k["entry_id"] in ids]
+        self._prune()
         if enabled is not None:
             self.schedule_enabled = bool(enabled)
         if ready_time is not None:
@@ -309,10 +317,88 @@ class Automation:
 
     def _occurrences(self, entry: dict, start: datetime.date, days: int):
         h, m = _parse_hhmm(entry["time"])
+        once = entry.get("date")
         for i in range(days):
             day = start + datetime.timedelta(days=i)
-            if day.weekday() in entry["days"]:
+            if (day.isoformat() == once) if once else (day.weekday() in entry["days"]):
                 yield self._localize(datetime.datetime(day.year, day.month, day.day, h, m))
+
+    def timeline(self, start: datetime.date, days: int, entries: Optional[list] = None,
+                 skips: Optional[list] = None) -> list:
+        """Every enabled time from `start` for `days` days: (when, entry, skipped), in order."""
+        skips = self.skips if skips is None else skips
+        out = []
+        for entry in self.entries if entries is None else entries:
+            if not entry["enabled"]:
+                continue
+            for occ in self._occurrences(entry, start, days):
+                out.append((occ, entry, {"entry_id": entry["id"], "date": occ.date().isoformat()} in skips))
+        # an unplug at the same minute as a plug comes after it
+        out.sort(key=lambda x: (x[0], x[1]["action"] == "unplug"))
+        return out
+
+    def windows(self, entries: Optional[list] = None, now: Optional[datetime.datetime] = None) -> list:
+        """The stretches the schedule has the car plugged in, a week back to 8 days on."""
+        now = now or self._now()
+        tl = self.timeline(now.date() - datetime.timedelta(days=7), 16, entries)
+        return plugged_windows([(t, e["action"] == "plug") for t, e, skipped in tl if not skipped])
+
+    def check_daily_cap(self, entries: list, cap_min: int, provider: str) -> None:
+        """Octopus schedules at most 6 hours of smart charging a day: refuse a
+        schedule that plugs in for longer in any 24 hours over the coming week."""
+        now = self._now()
+        worst = longest_day(self.windows(entries, now), now - datetime.timedelta(days=1),
+                            now + datetime.timedelta(days=7))
+        if worst and worst[0] > cap_min:
+            total, start = worst
+            raise ValueError(
+                f"{provider} schedules at most {cap_min // 60} hours of smart charging a day, but the schedule "
+                f"plugs in for {total // 60}h {total % 60:02d}m in the 24 hours from "
+                f"{start.strftime('%a %H:%M')}: shorten it"
+            )
+
+    def _prune(self) -> bool:
+        """Forget one-off times that have run and skips more than a day old."""
+        now = self._now()
+        keep = []
+        for e in self.entries:
+            if e.get("date"):
+                h, m = _parse_hhmm(e["time"])
+                d = _parse_date(e["date"])
+                when = self._localize(datetime.datetime(d.year, d.month, d.day, h, m))
+                if when < now - datetime.timedelta(seconds=CATCH_UP_S):
+                    continue
+            keep.append(e)
+        # (a skip is kept for a day after, e.g. last night's plug-in until it's over)
+        skips = [k for k in self.skips if k["date"] >= (now.date() - datetime.timedelta(days=1)).isoformat()]
+        changed = len(keep) != len(self.entries) or len(skips) != len(self.skips)
+        self.entries, self.skips = keep, skips
+        return changed
+
+    def set_skip(self, entry_id: str, date: str, skip: bool = True) -> None:
+        """Skip (or un-skip) one upcoming time: entry `entry_id` on `date`."""
+        entry = next((e for e in self.entries if e["id"] == entry_id), None)
+        if entry is None:
+            raise ValueError("No such schedule time (save the schedule first)")
+        day = _parse_date(date)
+        if not any(True for _ in self._occurrences(entry, day, 1)):
+            raise ValueError(f"That time doesn't run on {date}")
+        key = {"entry_id": entry_id, "date": day.isoformat()}
+        self.skips = [k for k in self.skips if k != key] + ([key] if skip else [])
+        self._prune()
+        self._save()
+        logger.info("Schedule: %s the %s at %s on %s", "skipping" if skip else "no longer skipping",
+                    "plug-in" if entry["action"] == "plug" else "unplug", entry["time"], day.isoformat())
+
+    def upcoming(self, days: int = 7) -> list:
+        """The next times over `days` days, for the page."""
+        now = self._now()
+        out = []
+        for occ, entry, skipped in self.timeline(now.date(), days + 1):
+            if now < occ <= now + datetime.timedelta(days=days):
+                out.append({"time": _iso_local(occ), "date": occ.date().isoformat(), "entry_id": entry["id"],
+                            "action": entry["action"], "skipped": skipped, "one_off": bool(entry.get("date"))})
+        return out[:30]
 
     def due(self) -> list[dict]:
         """Entries whose time has come since the last check (empty on the first)."""
@@ -323,27 +409,23 @@ class Automation:
         start = prev.date() - datetime.timedelta(days=1)
         span = (now.date() - start).days + 1
         due = []
-        for entry in self.entries:
-            if not entry["enabled"]:
-                continue
-            for occ in self._occurrences(entry, start, span):
-                if prev < occ <= now and (now - occ).total_seconds() <= CATCH_UP_S:
-                    due.append((occ, entry))
-        due.sort(key=lambda x: x[0])
-        return [e for _, e in due]
+        for occ, entry, skipped in self.timeline(start, span):
+            if prev < occ <= now and (now - occ).total_seconds() <= CATCH_UP_S:
+                if skipped:
+                    logger.info("Schedule: %s at %s skipped",
+                                "plug-in" if entry["action"] == "plug" else "unplug", entry["time"])
+                else:
+                    due.append(entry)
+        if prev.date() != now.date() and self._prune():  # tidy up once a day
+            self._save()
+        return due
 
     def last_event(self, at: datetime.datetime) -> Optional[tuple[datetime.datetime, dict]]:
         """The schedule's most recent enabled time at or before `at` (within a week)."""
         best = None
-        start = at.date() - datetime.timedelta(days=7)
-        for entry in self.entries:
-            if not entry["enabled"]:
-                continue
-            for occ in self._occurrences(entry, start, 9):
-                # an unplug at the same minute as a plug wins (it's later in the list)
-                if occ <= at and (best is None or occ > best[0] or
-                                  (occ == best[0] and entry["action"] == "unplug")):
-                    best = (occ, entry)
+        for occ, entry, skipped in self.timeline(at.date() - datetime.timedelta(days=7), 9):
+            if occ <= at and not skipped:
+                best = (occ, entry)  # in order, so the last one wins
         return best
 
     def in_plug_window(self, at: Optional[datetime.datetime] = None) -> Optional[datetime.datetime]:
@@ -356,32 +438,19 @@ class Automation:
 
     def next_unplug(self, after: datetime.datetime) -> Optional[datetime.datetime]:
         """The schedule's next unplug after `after` (within a week)."""
-        best = None
-        for entry in self.entries:
-            if not entry["enabled"] or entry["action"] != "unplug":
-                continue
-            for occ in self._occurrences(entry, after.date(), 8):
-                if occ > after:
-                    if best is None or occ < best:
-                        best = occ
-                    break
-        return best
+        for occ, entry, skipped in self.timeline(after.date(), 8):
+            if occ > after and entry["action"] == "unplug" and not skipped:
+                return occ
+        return None
 
     def next_action(self) -> Optional[dict]:
         if not self.schedule_enabled:
             return None
         now = self._now()
-        best = None
-        for entry in self.entries:
-            if not entry["enabled"]:
-                continue
-            for occ in self._occurrences(entry, now.date(), 8):
-                if occ > now and (best is None or occ < best[0]):
-                    best = (occ, entry)
-                    break
-        if best is None:
-            return None
-        return {"time": _iso_local(best[0]), "action": best[1]["action"], "entry_id": best[1]["id"]}
+        for occ, entry, skipped in self.timeline(now.date(), 8):
+            if occ > now and not skipped:
+                return {"time": _iso_local(occ), "action": entry["action"], "entry_id": entry["id"]}
+        return None
 
     # --- re-plug -------------------------------------------------------------
 
@@ -477,6 +546,8 @@ class Automation:
                 "last_run": self.last_run,
                 "ready_time": self.ready_time,
                 "ready_status": self.ready_status,
+                "skips": self.skips,
+                "upcoming": self.upcoming(),
             },
             "replug": self.replug_status(),
         }

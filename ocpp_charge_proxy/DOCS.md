@@ -74,6 +74,12 @@ comes back.
   whole schedule on and off. Times are in your Home Assistant time zone. A
   time missed while the add-on was stopped isn't run later. Unplugging
   during a session ends the session.
+- **One-off times and skips** (**Schedule** tab): **+ Add a one-off** adds
+  a plug-in or unplug for one date only, removed once it has run. The
+  **Coming up** list shows the next 7 days of times; **Skip** skips one
+  of them once (Undo puts it back). Skipped times don't run, don't count
+  as the next unplug for the ready time, and the **Next 7 days** view
+  (which replaces Your week) leaves them out.
 - **Starting inside a scheduled stretch:** if the add-on starts (or
   restarts) while the schedule has the car plugged in, e.g. at 02:00 with
   plug in 23:30 and unplug 07:00, and Plugged In is off, it plugs in

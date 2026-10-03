@@ -135,7 +135,7 @@ sensors live through Home Assistant's API.
   - **Provider:** what your provider has set: charging limits, charging
     profiles drawn as a timeline, the local authorisation list and every
     configuration key.
-  - **Schedule:** the plug-in schedule (below), with a week view.
+  - **Schedule:** the plug-in schedule (below), with one-off times, a Coming up list to skip any time once, and a view of the next 7 days.
   - **Settings:** controls for Plugged In, max current, a power override and
     a test SoC; the simulated car's start delay and ramp-up; auto re-plug;
     and your power, SoC and car plugged in sensors and auto plug-in, with
