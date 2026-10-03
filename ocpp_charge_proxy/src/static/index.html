@@ -1732,12 +1732,14 @@ function drawSlotPop() {
   const found = pickedSlot();
   if (!found) { pop.remove(); week.picked = null; return; }
   const {sg, skipped} = found;
+  // "03/10 16:00"
   const at = (min) => {
     const t = new Date(week.day0); t.setMinutes(min);
-    return `${t.toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})} ${t.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}`;
+    const two = (n) => String(n).padStart(2, '0');
+    return `${two(t.getDate())}/${two(t.getMonth() + 1)} ${two(t.getHours())}:${two(t.getMinutes())}`;
   };
   const saved = slotTimes(sg).length > 0;
-  pop.innerHTML = `<span class="grow"><b>${skipped ? 'Skipped: ' : ''}Plug in ${at(sg[0])}</b> → ${sg[5] ? 'unplug ' + at(sg[1]) : 'no unplug in the next week'}</span>`
+  pop.innerHTML = `<span class="grow"><b>${skipped ? 'Skipped slot' : 'Slot'}:</b> ${at(sg[0])} → ${sg[5] ? at(sg[1]) : 'no unplug in the next week'}</span>`
     + (!saved || auto.dirty ? '<span class="muted">Save the schedule first</span>'
       : `<button class="btn small ${skipped ? '' : 'primary'}" id="w-skip">${skipped ? 'Undo skip' : 'Skip this slot'}</button>`)
     + '<button class="btn small" id="w-close">Close</button>';

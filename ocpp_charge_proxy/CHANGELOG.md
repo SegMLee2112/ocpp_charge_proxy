@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.9.3
+
+- The skip panel's line is shorter: "Slot: 03/10 16:00 → 03/10 22:00"
+  ("Skipped slot: …" when skipped).
+
 ## 2.9.2
 
 - The skip panel in **Next 7 days** opens right under the row of the slot
