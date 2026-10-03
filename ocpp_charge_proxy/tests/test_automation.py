@@ -373,7 +373,10 @@ def test_one_off_time_runs_once_and_is_removed(tmp_path):
     assert a.next_action()["time"].startswith("2026-10-06T23:30")
     clock.advance(days=1)  # Tuesday 23:31
     assert [e["action"] for e in a.due()] == ["plug"]
-    clock.advance(days=1)  # a day later it's gone (and saved)
+    clock.advance(days=13)  # kept for the Sessions tab...
+    a.due()
+    assert len(a.entries) == 1
+    clock.advance(days=2)  # ... 14 days, then gone (and saved)
     a.due()
     assert a.entries == [] and Automation(str(tmp_path)).entries == []
     try:
@@ -400,9 +403,9 @@ def test_skip_one_time(tmp_path):
     assert a.due() == []  # skipped
     clock.advance(days=1)  # Tuesday 23:31: runs again
     assert [e["action"] for e in a.due()] == ["plug"]
-    clock.advance(days=1)
+    clock.advance(days=15)
     a.due()
-    assert a.skips == []  # Monday's skip forgotten
+    assert a.skips == []  # Monday's skip forgotten (after 14 days)
     a.set_skip(plug_id, "2026-10-09")
     a.set_skip(plug_id, "2026-10-09", skip=False)  # undo
     assert a.skips == []
@@ -673,3 +676,21 @@ def test_auto_plug_charge_sets_the_ready_time():
 
     _run(auto_plug_charge(a, 2, set_ready, cap_min=360))
     assert asked == ["22:00"]  # joined with the 18:00-22:00 slot
+
+
+def test_one_offs_kept_14_days_and_listed_as_runs():
+    a, clock = _sched_18_22(_at(12))
+    a.plan_auto_plug(60)  # 12:00-13:00, auto plug-in
+    a.set_schedule(entries=a.entries + [{"time": "08:00", "action": "plug", "date": "2026-10-04"},
+                                         {"time": "09:00", "action": "unplug", "date": "2026-10-04"}])
+    clock.advance(days=2)
+    runs = a.one_off_runs()
+    assert [(r["start"][:16], r["source"]) for r in runs] == [
+        ("2026-10-04T08:00", "one_off"), ("2026-10-03T12:00", "auto_plug")]
+    clock.advance(days=10)
+    a.set_schedule(enabled=True)  # prunes
+    assert len([e for e in a.entries if e.get("date")]) == 4  # 12 days on: still kept
+    clock.advance(days=3)
+    a.set_schedule(enabled=True)
+    assert [e for e in a.entries if e.get("date")] == []  # over 14 days: gone
+    assert a.snapshot()["schedule"]["one_off_runs"] == []

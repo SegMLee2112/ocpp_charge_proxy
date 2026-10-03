@@ -97,7 +97,9 @@ even with the schedule off.
   time missed while the add-on was stopped isn't run later. Unplugging
   during a session ends the session.
 - **One-off times and skips** (**Schedule** tab): **+ Add a one-off** adds
-  a plug-in or unplug for one date only, removed once it has run. Click a
+  a plug-in or unplug for one date only. Once it has run it's hidden from
+  the list and kept for 14 days: sessions on the **Sessions** tab that ran
+  in a one-off slot are tagged **One-off** (or **Auto plug-in**). Click a
   slot in the **Next 7 days** view to skip it once: its plug-in and unplug
   both don't run (the slot shows hatched; click it again to undo). A
   skipped unplug isn't used for the ready time.

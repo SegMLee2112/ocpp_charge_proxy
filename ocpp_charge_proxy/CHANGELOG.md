@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.12.1
+
+- One-off schedule times (and skips) are kept for 14 days after they run
+  (was a day). They're hidden from the Schedule tab's list once run, and
+  sessions on the Sessions tab that ran in a one-off slot are tagged
+  **One-off** or **Auto plug-in**
+
 ## 2.12.0
 
 - Auto plug-in: new switch **Automatically adjust schedule to fit auto

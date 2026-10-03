@@ -74,7 +74,7 @@ TICK_S = 15
 CATCH_UP_S = 300  # a scheduled time is still run if noticed within this
 ACTIONS = ("plug", "unplug")
 AUTO_SOURCE = "auto_plug"  # entries added by an auto plug-in charge
-ONE_OFF_KEEP = datetime.timedelta(days=1)  # one-off times are forgotten this long after they ran
+ONE_OFF_KEEP = datetime.timedelta(days=14)  # one-off times (and skips) are kept this long after they ran
 
 
 @dataclass(frozen=True)
@@ -323,7 +323,7 @@ class Automation:
         checking = entries is not None or bool(ready_time)
         if checking and (self.ready_time if ready_time is None else bool(ready_time)):
             if ready_times:
-                check_unplug_times(new_entries, ready_times, provider)
+                check_unplug_times([e for e in new_entries if not self._past_one_off(e)], ready_times, provider)
             if daily_cap_min:
                 self.check_daily_cap(new_entries, daily_cap_min, provider)
         self.entries = new_entries
@@ -443,10 +443,33 @@ class Automation:
                     continue
             keep.append(e)
         # (a skip is kept for a day after, e.g. last night's plug-in until it's over)
-        skips = [k for k in self.skips if k["date"] >= (now.date() - datetime.timedelta(days=1)).isoformat()]
+        skips = [k for k in self.skips if k["date"] >= (now.date() - ONE_OFF_KEEP).isoformat()]
         changed = len(keep) != len(self.entries) or len(skips) != len(self.skips)
         self.entries, self.skips = keep, skips
         return changed
+
+    def _past_one_off(self, entry: dict) -> bool:
+        """A one-off time that has already run (kept for the Sessions tab)."""
+        if not entry.get("date"):
+            return False
+        h, m = _parse_hhmm(entry["time"])
+        d = _parse_date(entry["date"])
+        return self._localize(datetime.datetime(d.year, d.month, d.day, h, m)) < self._now()
+
+    def one_off_runs(self) -> list:
+        """The plugged-in stretches of the last 14 days that a one-off time
+        started or ended, newest first: [{"start", "end", "source"}] ("auto_plug"
+        if an auto plug-in charge added it, else "one_off")."""
+        now = self._now()
+        days = ONE_OFF_KEEP.days + 1
+        out = []
+        for s in self._stretches(now.date() - datetime.timedelta(days=days - 1), days, self._active_entries(), self.skips):
+            ones = [e for e in (s["plug"], s["unplug"]) if e.get("date")]
+            if ones and s["start"] <= now:
+                auto = any(e.get("source") == AUTO_SOURCE for e in ones)
+                out.append({"start": _iso_local(s["start"]), "end": _iso_local(s["end"]),
+                            "source": AUTO_SOURCE if auto else "one_off"})
+        return out[::-1]
 
     def _stretches(self, start: datetime.date, days: int, entries: list, skips: list) -> list:
         """Plugged-in stretches with the entries that make them:
@@ -775,6 +798,7 @@ class Automation:
                 "ready_time": self.ready_time,
                 "ready_status": self.ready_status,
                 "auto_plug_last": self.auto_plug_last,
+                "one_off_runs": self.one_off_runs(),
                 "unplug_wait_s": self.unplug_wait_s,
                 "plan_check": self.plan_check,
                 "skips": self.skips,

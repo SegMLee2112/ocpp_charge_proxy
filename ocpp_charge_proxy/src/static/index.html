@@ -1257,7 +1257,14 @@ $('ch-reset').addEventListener('click', () => { chart.view = null; drawChart(); 
 // ---------- Sessions ----------
 async function refreshSessions() {
   try { sessionsData = await api('sessions'); } catch (e) { return; }
+  try { if (!auto.data || Date.now() - (refreshSessions.autoAt || 0) > 60000) { auto.data = await api('automation'); refreshSessions.autoAt = Date.now(); } } catch (e) { /* tags only */ }
   await refreshLong(false);  // older sessions' power curves
+  const runs = (auto.data && auto.data.schedule.one_off_runs) || [];
+  const tag = (startIso) => {
+    const t = new Date(startIso);
+    const r = runs.find((x) => new Date(x.start) <= t && t <= new Date(x.end));
+    return !r ? '' : r.source === 'auto_plug' ? ' <span class="chip info">Auto plug-in</span>' : ' <span class="chip info">One-off</span>';
+  };
   const all = sessionsData.history || [];
   const h = all.filter((s) => s.type !== 'no_session');
   const failed = all.filter((s) => s.type === 'no_session');
@@ -1265,7 +1272,7 @@ async function refreshSessions() {
   const by = (src) => src ? ` <span class="muted">· plugged in by ${esc(src)}</span>` : '';
   if (sessionsData.current) {
     const c = sessionsData.current;
-    rows.push(`<tr class="srow" data-key="${esc(c.start)}"><td>${dateTime(c.start)} <span class="chip ok">charging now</span></td><td class="num">${dur(c.duration_s)}</td><td class="num">${num(c.energy_kwh, 2)} kWh</td><td class="num">${num(c.peak_power_kw, 1)} kW</td><td class="muted">—</td><td class="num">${esc(c.transaction_id)}</td><td><code>${esc(c.id_tag || '—')}</code></td></tr>`);
+    rows.push(`<tr class="srow" data-key="${esc(c.start)}"><td>${dateTime(c.start)} <span class="chip ok">charging now</span>${tag(c.start)}</td><td class="num">${dur(c.duration_s)}</td><td class="num">${num(c.energy_kwh, 2)} kWh</td><td class="num">${num(c.peak_power_kw, 1)} kW</td><td class="muted">—</td><td class="num">${esc(c.transaction_id)}</td><td><code>${esc(c.id_tag || '—')}</code></td></tr>`);
     if (sessionsOpen.has(c.start)) rows.push(`<tr class="detail"><td colspan="7">${sessionDetail({...c, current: true})}</td></tr>`);
   } else if (sessionsData.waiting) {
     const w = sessionsData.waiting;
@@ -1277,9 +1284,9 @@ async function refreshSessions() {
       const why = s.reason === 'replugged'
         ? 'No session from your provider: re-plugged'
         : `Unplugged before a session started${s.unplugged_by ? ' (' + esc(s.unplugged_by) + ')' : ''}`;
-      rows.push(`<tr class="no-session srow" data-key="${esc(s.start)}"><td>${dateTime(s.start)} <span class="chip">no session</span></td><td class="num">${dur(s.duration_s)}</td><td class="num muted">—</td><td class="num muted">—</td><td>${why}${by(s.plugged_by)}</td><td class="num muted">—</td><td class="muted">—</td></tr>`);
+      rows.push(`<tr class="no-session srow" data-key="${esc(s.start)}"><td>${dateTime(s.start)} <span class="chip">no session</span>${tag(s.start)}</td><td class="num">${dur(s.duration_s)}</td><td class="num muted">—</td><td class="num muted">—</td><td>${why}${by(s.plugged_by)}</td><td class="num muted">—</td><td class="muted">—</td></tr>`);
     } else {
-      rows.push(`<tr class="srow" data-key="${esc(s.start)}"><td>${dateTime(s.start)}</td><td class="num">${dur(s.duration_s)}</td><td class="num">${num(s.energy_kwh, 2)} kWh</td><td class="num">${num(s.peak_power_kw, 1)} kW</td><td>${esc(reasonText(s.reason))}</td><td class="num">${esc(s.transaction_id)}</td><td><code>${esc(s.id_tag || '—')}</code></td></tr>`);
+      rows.push(`<tr class="srow" data-key="${esc(s.start)}"><td>${dateTime(s.start)}${tag(s.start)}</td><td class="num">${dur(s.duration_s)}</td><td class="num">${num(s.energy_kwh, 2)} kWh</td><td class="num">${num(s.peak_power_kw, 1)} kW</td><td>${esc(reasonText(s.reason))}</td><td class="num">${esc(s.transaction_id)}</td><td><code>${esc(s.id_tag || '—')}</code></td></tr>`);
     }
     if (open) rows.push(`<tr class="detail"><td colspan="7">${sessionDetail(s)}</td></tr>`);
   });
@@ -1917,7 +1924,10 @@ function readyRules() {
 const badUnplug = (e, rules) => rules && e.enabled && e.action === 'unplug' && /^\d{2}:\d{2}$/.test(e.time) && !rules.times.includes(e.time);
 function drawEntries() {
   const rules = readyRules(), overCap = weekPlan().badEntries;
+  const ranOnce = (e) => e.date && new Date(`${e.date}T${e.time}`) < new Date();
+  const past = auto.entries.filter(ranOnce).length;
   const rows = auto.entries.map((e, i) => {
+    if (ranOnce(e)) return '';  // kept 14 days for the Sessions tab, not shown here
     const lim = rules && e.action === 'unplug' ? ` step="1800"${rules.min ? ` min="${rules.min}" max="${rules.max}"` : ''}` : '';
     return `
     <div class="row sched" data-i="${i}" style="padding:10px 0;border-top:1px solid var(--divider);margin-top:0">
@@ -1943,7 +1953,8 @@ function drawEntries() {
     $('a-rules').innerHTML = (bad.length ? '<span class="chip warn">Change unplug times</span> ' : '')
       + `The schedule sets ${esc(rules.provider)}'s ready time, so unplug times must be ${rules.text}.`;
   }
-  $('a-entries').innerHTML = rows || '<div class="empty">No times yet. Add one, e.g. plug in at 23:30 and unplug at 07:00.</div>';
+  $('a-entries').innerHTML = (rows || '<div class="empty">No times yet. Add one, e.g. plug in at 23:30 and unplug at 07:00.</div>')
+    + (past ? `<div class="note">${past} one-off time${past === 1 ? '' : 's'} that ran in the last 14 days ${past === 1 ? 'is' : 'are'} kept for the Sessions tab.</div>` : '');
 }
 $('a-entries').addEventListener('click', (ev) => {
   const row = ev.target.closest('.sched'); if (!row) return;
