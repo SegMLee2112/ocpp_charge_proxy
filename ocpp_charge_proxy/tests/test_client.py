@@ -1563,3 +1563,24 @@ def test_suspend_needs_option_session_and_plug(mock_connection, tmp_path):
     assert cp.suspend_for_restart() is False  # option off, no session
     cp.resume_on_restart = True
     assert cp.suspend_for_restart() is False  # no session
+
+
+def test_restart_restores_a_decimal_profile(mock_connection, tmp_path):
+    # The ocpp library gives Decimals; saved to disk they became text ("32.0")
+    from decimal import Decimal
+    from src.persistence import Persistence
+    profile = {"charging_profile_id": 0, "stack_level": 0, "charging_profile_purpose": "TxProfile",
+               "charging_profile_kind": "Relative",
+               "charging_schedule": {"charging_rate_unit": "A", "min_charging_rate": Decimal("32.0"),
+                                     "charging_schedule_period": [{"start_period": 0, "limit": Decimal("32.0")}]}}
+    _suspended(mock_connection, tmp_path, profile)
+    cp2 = _resume_cp(None, Persistence(data_dir=str(tmp_path)))
+    assert cp2._profile_scheduler.has_profile
+    assert cp2._profile_scheduler.get_current_limit_kw() == 32 * 230 / 1000
+    # A file saved by 2.11.x (numbers as text) is read too
+    import json
+    path = tmp_path / "active_transaction.json"
+    data = json.loads(path.read_text())
+    from src.charging_profile import normalise_profile
+    old = {"limit": "32.0", "start_period": "0", "stack_level": "0"}
+    assert normalise_profile(old) == {"limit": 32.0, "start_period": 0, "stack_level": 0}

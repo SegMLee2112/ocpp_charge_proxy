@@ -3,9 +3,34 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+
+_FLOAT_KEYS = {"limit", "min_charging_rate", "minChargingRate"}
+_INT_KEYS = {"start_period", "startPeriod", "stack_level", "stackLevel", "charging_profile_id",
+             "chargingProfileId", "duration", "number_phases", "numberPhases", "transaction_id",
+             "transactionId"}
+
+
+def normalise_profile(obj, key=None):
+    """A charging profile with plain numbers: the ocpp library gives Decimals
+    (saved to disk as text), and a profile read back may have numbers as text."""
+    if isinstance(obj, dict):
+        return {k: normalise_profile(v, k) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [normalise_profile(v, key) for v in obj]
+    if isinstance(obj, bool):
+        return obj
+    if isinstance(obj, Decimal) or (isinstance(obj, str) and key in _FLOAT_KEYS | _INT_KEYS):
+        try:
+            f = float(obj)
+        except ValueError:
+            return obj
+        return int(f) if key in _INT_KEYS and f.is_integer() else f
+    return obj
 
 
 def _get(d: dict, *keys):
@@ -31,6 +56,7 @@ class ChargingProfileScheduler:
 
     def set_profile(self, profile: dict) -> None:
         """Store a charging profile."""
+        profile = normalise_profile(profile)
         profile_id = _get(profile, "charging_profile_id", "chargingProfileId", 0)
         stack_level = _get(profile, "stack_level", "stackLevel") or 0
         purpose = _get(profile, "charging_profile_purpose", "chargingProfilePurpose")

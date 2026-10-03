@@ -33,7 +33,7 @@ from ocpp.v16.enums import (
 )
 
 from src.charger_sim import VALID_CURRENT_SETTINGS, ChargerReading, ChargerSimulator
-from src.charging_profile import ChargingProfileScheduler
+from src.charging_profile import ChargingProfileScheduler, normalise_profile
 from src.gui_data import MessageLog, SessionLog
 from src.meter_values import (
     build_charging_meter_values,
@@ -573,7 +573,7 @@ class ChargePoint(BaseChargePoint):
         self._stop_txn_sampled = list(saved.get("stop_txn_sampled") or [])
         self._stop_txn_data = list(saved.get("stop_txn_data") or [])
         if isinstance(saved.get("profile"), dict):
-            self._tx_profile = saved["profile"]
+            self._tx_profile = normalise_profile(saved["profile"])
             try:
                 self._profile_scheduler.set_profile(self._tx_profile)
             except Exception:
@@ -1317,7 +1317,7 @@ class ChargePoint(BaseChargePoint):
 
         if charging_profile:
             self._profile_scheduler.set_profile(charging_profile)
-        self._tx_profile = charging_profile or None
+        self._tx_profile = normalise_profile(charging_profile) if charging_profile else None
 
         self.set_plugged_in(True, "provider")
         self._pending_id_tag = id_tag
@@ -1330,7 +1330,7 @@ class ChargePoint(BaseChargePoint):
         await self._do_stop_transaction(reason=Reason.reboot)
         if charging_profile:
             self._profile_scheduler.set_profile(charging_profile)
-        self._tx_profile = charging_profile or None
+        self._tx_profile = normalise_profile(charging_profile) if charging_profile else None
         self._pending_id_tag = id_tag
         await self._do_start_transaction()
 
@@ -1514,8 +1514,10 @@ class ChargePoint(BaseChargePoint):
     async def on_set_charging_profile(self, connector_id: int, cs_charging_profiles: dict, **kwargs):
         logger.info("SetChargingProfile received for connector %s", connector_id)
         self._profile_scheduler.set_profile(cs_charging_profiles)
-        if (cs_charging_profiles or {}).get("chargingProfilePurpose") == "TxProfile" and self._transaction_id is not None:
-            self._tx_profile = cs_charging_profiles
+        purpose = (cs_charging_profiles or {}).get("charging_profile_purpose",
+                                                    (cs_charging_profiles or {}).get("chargingProfilePurpose"))
+        if str(getattr(purpose, "value", purpose)) == "TxProfile" and self._transaction_id is not None:
+            self._tx_profile = normalise_profile(cs_charging_profiles)
         return call_result.SetChargingProfilePayload(
             status="Accepted"
         )

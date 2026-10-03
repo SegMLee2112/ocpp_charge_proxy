@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.12.4
+
+- Continuing a session after a restart now restores its charging profile:
+  the profile's numbers (Decimals from the ocpp library) were saved as text
+  and couldn't be read back ("Couldn't restore the session's charging
+  profile"). Profiles are now stored with plain numbers, and ones saved as
+  text are read too
+- A charging profile changed mid-session (SetChargingProfile) is now kept
+  for a restart too (its purpose was checked under the wrong key)
+
 ## 2.12.3
 
 - Clearer line under "Waiting for supplier": "Octopus Energy's charge slot
