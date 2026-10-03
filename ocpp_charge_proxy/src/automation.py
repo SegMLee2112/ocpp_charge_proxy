@@ -20,6 +20,15 @@
   removed after it has run. Skips: any upcoming slot (a plug-in and its
   unplug, weekly or one-off) can be skipped once; skipped times don't
   run, and the skips are forgotten a day after.
+- Auto plug-in charge: when auto plug-in (low SoC) switches Plugged In on
+  and its "set my supplier's ready time" option is on, plan_auto_plug adds
+  a one-off slot to the schedule: plug in now, unplug at the first ready
+  time your supplier accepts at least the chosen hours away. If that puts
+  more than Octopus's 6 hours in 24, the next scheduled slot starts that
+  much later (its first hours move to now). If it then meets or overlaps
+  the next scheduled slot, the two become one slot. The ready time is set
+  for the end of the slot. Its entries carry "source": "auto_plug" and run
+  even with the schedule off.
 - At start-up: if the schedule is on and the add-on starts inside a
   plugged-in stretch (the last schedule time before now was a plug-in) with
   Plugged In off, it plugs in, as if it had been running at that time.
@@ -51,7 +60,7 @@ from dataclasses import dataclass
 from typing import Awaitable, Callable, Optional
 
 from src.plan_check import SETTLE_S, check_plan
-from src.ready_time import check_unplug_times
+from src.ready_time import ALL_DAY_TIMES, check_unplug_times
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +73,8 @@ PENDING_TICK_S = 2  # check this often while waiting
 TICK_S = 15
 CATCH_UP_S = 300  # a scheduled time is still run if noticed within this
 ACTIONS = ("plug", "unplug")
+AUTO_SOURCE = "auto_plug"  # entries added by an auto plug-in charge
+ONE_OFF_KEEP = datetime.timedelta(days=1)  # one-off times are forgotten this long after they ran
 
 
 @dataclass(frozen=True)
@@ -127,7 +138,7 @@ def validate_entry(raw: dict) -> dict:
         raise ValueError(f"Action must be one of {ACTIONS}, got {action!r}")
     if raw.get("date"):
         date = _parse_date(raw["date"])
-        return {
+        out = {
             "id": str(raw.get("id") or uuid.uuid4().hex[:8]),
             "time": f"{h:02d}:{m:02d}",
             "days": [date.weekday()],
@@ -135,6 +146,9 @@ def validate_entry(raw: dict) -> dict:
             "action": action,
             "enabled": bool(raw.get("enabled", True)),
         }
+        if raw.get("source") == AUTO_SOURCE:
+            out["source"] = AUTO_SOURCE
+        return out
     days = raw.get("days", list(range(7)))
     if not isinstance(days, list) or not days or any(
         not isinstance(d, int) or isinstance(d, bool) or not 0 <= d <= 6 for d in days
@@ -208,6 +222,7 @@ class Automation:
         self.skips: list[dict] = []  # [{"entry_id", "date"}]: times skipped once
         self.ready_time = False  # set the supplier's ready time at scheduled plug-ins
         self.ready_status: Optional[dict] = None  # the last time it was set (or why not)
+        self.auto_plug_last: Optional[dict] = None  # the last auto plug-in charge planned
         self.unplug_wait_s = GRACEFUL_UNPLUG_S
         self.plan_check: Optional[dict] = None  # the supplier's plan vs the schedule, while plugged in
         self._plan_problems: tuple = ()
@@ -378,7 +393,7 @@ class Automation:
         """Every enabled time from `start` for `days` days: (when, entry, skipped), in order."""
         skips = self.skips if skips is None else skips
         out = []
-        for entry in self.entries if entries is None else entries:
+        for entry in self._active_entries() if entries is None else entries:
             if not entry["enabled"]:
                 continue
             for occ in self._occurrences(entry, start, days):
@@ -387,10 +402,18 @@ class Automation:
         out.sort(key=lambda x: (x[0], x[1]["action"] == "unplug"))
         return out
 
-    def windows(self, entries: Optional[list] = None, now: Optional[datetime.datetime] = None) -> list:
+    def _active_entries(self) -> list:
+        """The entries that run: all of them with the schedule on, else only
+        those an auto plug-in charge added."""
+        if self.schedule_enabled:
+            return self.entries
+        return [e for e in self.entries if e.get("source") == AUTO_SOURCE]
+
+    def windows(self, entries: Optional[list] = None, now: Optional[datetime.datetime] = None,
+                skips: Optional[list] = None) -> list:
         """The stretches the schedule has the car plugged in, a week back to 8 days on."""
         now = now or self._now()
-        tl = self.timeline(now.date() - datetime.timedelta(days=7), 16, entries)
+        tl = self.timeline(now.date() - datetime.timedelta(days=7), 16, entries, skips)
         return plugged_windows([(t, e["action"] == "plug") for t, e, skipped in tl if not skipped])
 
     def check_daily_cap(self, entries: list, cap_min: int, provider: str) -> None:
@@ -416,7 +439,7 @@ class Automation:
                 h, m = _parse_hhmm(e["time"])
                 d = _parse_date(e["date"])
                 when = self._localize(datetime.datetime(d.year, d.month, d.day, h, m))
-                if when < now - datetime.timedelta(seconds=CATCH_UP_S):
+                if when < now - ONE_OFF_KEEP:  # kept a day, so its stretch stays known
                     continue
             keep.append(e)
         # (a skip is kept for a day after, e.g. last night's plug-in until it's over)
@@ -424,6 +447,103 @@ class Automation:
         changed = len(keep) != len(self.entries) or len(skips) != len(self.skips)
         self.entries, self.skips = keep, skips
         return changed
+
+    def _stretches(self, start: datetime.date, days: int, entries: list, skips: list) -> list:
+        """Plugged-in stretches with the entries that make them:
+        [{"start", "plug", "end", "unplug"}] (a stretch still open at the end is left out)."""
+        out, state, cur = [], None, None
+        for t, e, skipped in self.timeline(start, days, entries, skips):
+            if skipped:
+                continue
+            if e["action"] == "plug" and state is not True:
+                state, cur = True, {"start": t, "plug": e}
+            elif e["action"] == "unplug":
+                if state is True:
+                    cur.update(end=t, unplug=e)
+                    out.append(cur)
+                state = False
+        return out
+
+    def first_ready_at(self, target: datetime.datetime, ready_times: Optional[list] = None):
+        """The first ready time your supplier accepts at or after `target`."""
+        best = None
+        for d in range(3):
+            day = target.date() + datetime.timedelta(days=d)
+            for t in ready_times or ALL_DAY_TIMES:
+                h, m = _parse_hhmm(t)
+                dt = self._localize(datetime.datetime(day.year, day.month, day.day, h, m))
+                if dt >= target and (best is None or dt < best):
+                    best = dt
+        return best
+
+    def plan_auto_plug(self, minutes: int, ready_times: Optional[list] = None,
+                       cap_min: Optional[int] = None, provider: str = "your supplier") -> dict:
+        """An auto plug-in just plugged in: add a charge of `minutes` to the
+        schedule as a one-off (see the module docstring). Returns what was done."""
+        now = self._now().replace(second=0, microsecond=0)
+        end = self.first_ready_at(now + datetime.timedelta(minutes=minutes), ready_times)
+        if end is None:
+            raise ValueError("No ready time your supplier accepts in the next 2 days")
+
+        def one_off(t, action):
+            return validate_entry({"time": t.strftime("%H:%M"), "date": t.date().isoformat(),
+                                   "action": action, "source": AUTO_SOURCE})
+
+        active = self._active_entries()
+        skips = list(self.skips)
+        plug, unplug = one_off(now, "plug"), one_off(end, "unplug")
+        added = [plug]
+        notes = []
+        start_day = now.date() - datetime.timedelta(days=1)
+        nxt = next((s for s in self._stretches(start_day, 9, active, skips) if s["end"] > now), None)
+        moved = None
+        if cap_min and nxt is not None and nxt["start"] > now:
+            trial = self.windows(active + [plug, unplug], now, skips)
+            worst = longest_day(trial, now - datetime.timedelta(days=1), now + datetime.timedelta(days=1))
+            if worst and worst[0] > cap_min:
+                # Over the daily cap: the next slot's first hours move to now
+                shift = end - now
+                new_start = nxt["start"] + shift
+                skips.append({"entry_id": nxt["plug"]["id"], "date": nxt["start"].date().isoformat()})
+                if new_start < nxt["end"]:
+                    later = one_off(new_start, "plug")
+                    added.append(later)
+                    nxt = dict(nxt, start=new_start, plug=later)
+                    notes.append(f"the {nxt['end'].strftime('%H:%M')} slot now starts at {new_start.strftime('%H:%M')}")
+                else:
+                    skips.append({"entry_id": nxt["unplug"]["id"], "date": nxt["end"].date().isoformat()})
+                    notes.append("the next scheduled slot is skipped")
+                    nxt = None
+                moved = notes[-1]
+        combined = nxt is not None and end >= nxt["start"]
+        if combined:
+            # One slot: plugged in from now to the scheduled unplug
+            if nxt["start"] > now:
+                if nxt["plug"] in added:
+                    added.remove(nxt["plug"])
+                else:
+                    skips.append({"entry_id": nxt["plug"]["id"], "date": nxt["start"].date().isoformat()})
+            slot_end = nxt["end"]
+            notes.append(f"joined with the scheduled slot until {slot_end.strftime('%H:%M')}")
+        else:
+            added.append(unplug)
+            slot_end = end
+        self.entries = self.entries + added
+        self.skips = [dict(k) for i, k in enumerate(skips) if k not in skips[:i]]
+        self._save()
+        self.auto_plug_last = {
+            "at": _iso_local(now), "minutes": minutes, "ready_for": _iso_local(end),
+            "end": _iso_local(slot_end), "combined": combined, "moved": moved, "notes": notes,
+        }
+        logger.info("Auto plug-in charge: plugged in until %s%s", slot_end.strftime("%a %H:%M"),
+                    f" ({'; '.join(notes)})" if notes else "")
+        if cap_min:
+            worst = longest_day(self.windows(now=now), now - datetime.timedelta(days=1),
+                                now + datetime.timedelta(days=1))
+            if worst and worst[0] > cap_min:
+                logger.warning("Auto plug-in charge: the schedule now plugs in for %dh %02dm in 24 hours, "
+                               "over %s's %d hours", worst[0] // 60, worst[0] % 60, provider, cap_min // 60)
+        return self.auto_plug_last
 
     def set_skip(self, entry_id: str, date: str, skip: bool = True) -> None:
         """Skip (or un-skip) one upcoming time: entry `entry_id` on `date`."""
@@ -465,8 +585,8 @@ class Automation:
         """Entries whose time has come since the last check (empty on the first)."""
         now = self._now()
         prev, self._last_check = self._last_check, now
-        if prev is None or not self.schedule_enabled or now <= prev:
-            return []
+        if prev is None or now <= prev:
+            return []  # (with the schedule off, only auto plug-in times run: see timeline)
         start = prev.date() - datetime.timedelta(days=1)
         span = (now.date() - start).days + 1
         due = []
@@ -654,6 +774,7 @@ class Automation:
                 "last_run": self.last_run,
                 "ready_time": self.ready_time,
                 "ready_status": self.ready_status,
+                "auto_plug_last": self.auto_plug_last,
                 "unplug_wait_s": self.unplug_wait_s,
                 "plan_check": self.plan_check,
                 "skips": self.skips,
@@ -687,6 +808,17 @@ async def apply_ready_time(automation: "Automation",
         logger.warning("Ready time not set: %s", result["error"])
     automation.ready_status = {**result, "at": _iso_from_epoch(automation._clock())}
     return result
+
+
+async def auto_plug_charge(automation: "Automation", hours: float,
+                           set_ready_time: Optional[Callable[[datetime.datetime], Awaitable[dict]]] = None,
+                           ready_times: Optional[list] = None, cap_min: Optional[int] = None,
+                           provider: str = "your supplier") -> dict:
+    """Auto plug-in just plugged in: plan the charge and set the ready time."""
+    plan = automation.plan_auto_plug(int(round(hours * 60)), ready_times, cap_min, provider)
+    if set_ready_time is not None:
+        await apply_ready_time(automation, set_ready_time)
+    return plan
 
 
 async def automation_loop(
@@ -738,7 +870,8 @@ async def automation_loop(
                     await plug(source="schedule")
                     if automation.ready_time and set_ready_time is not None:
                         await apply_ready_time(automation, set_ready_time)
-                elif automation.ready_time and automation.unplug_wait_s and shared_state.transaction_id is not None:
+                elif ((automation.ready_time or entry.get("source") == AUTO_SOURCE)
+                      and automation.unplug_wait_s and shared_state.transaction_id is not None):
                     # Give the supplier a chance to end the session itself
                     automation.unplug_at = automation._clock() + automation.unplug_wait_s
                     logger.info("Schedule: unplug at %s, waiting up to %d s for the supplier to stop the session",

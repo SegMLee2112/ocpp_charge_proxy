@@ -39,7 +39,9 @@ RECONNECT_DELAYS = (2, 5, 10, 20, 30, 60)
 DISPATCH_SEARCH_S = 600  # look for a supplier's dispatching sensor again this often
 ENTITY_LIST_TTL_S = 30
 _UNKNOWN_STATES = ("unavailable", "unknown", "none", "")
-SETTING_KEYS = ("power_entity", "soc_entity", "plug_entity", "auto_plug", "auto_plug_entity", "auto_plug_soc")
+SETTING_KEYS = ("power_entity", "soc_entity", "plug_entity", "auto_plug", "auto_plug_entity", "auto_plug_soc",
+                "auto_plug_ready", "auto_plug_hours")
+DEFAULT_AUTO_PLUG_HOURS = 3.0
 
 
 def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
@@ -66,6 +68,16 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         if not 1 <= soc <= 99:
             raise ValueError("auto_plug_soc must be 1 to 99")
         out["auto_plug_soc"] = soc
+    if "auto_plug_ready" in raw:
+        out["auto_plug_ready"] = bool(raw["auto_plug_ready"])
+    if "auto_plug_hours" in raw:
+        try:
+            hours = float(raw["auto_plug_hours"])
+        except (TypeError, ValueError):
+            raise ValueError("auto_plug_hours must be a number") from None
+        if not 0.5 <= hours <= 12 or hours * 2 != int(hours * 2):
+            raise ValueError("auto_plug_hours must be 0.5 to 12, in half hours")
+        out["auto_plug_hours"] = hours
     return out
 
 
@@ -73,6 +85,7 @@ def default_settings() -> dict:
     return {
         "power_entity": "", "soc_entity": "", "plug_entity": "",
         "auto_plug": False, "auto_plug_entity": "", "auto_plug_soc": DEFAULT_AUTO_PLUG_SOC,
+        "auto_plug_ready": False, "auto_plug_hours": DEFAULT_AUTO_PLUG_HOURS,
     }
 
 
@@ -117,6 +130,9 @@ class HaLink:
         self._set_soc = set_soc
         self._plug = plug
         self._unplug = unplug
+        # Called with the hours to charge after an auto plug-in, if its
+        # "set my supplier's ready time" option is on (set by __main__)
+        self.on_auto_plug = None
         self._session = None
         # The add-on's own HA entities (src/ha_entities.py)
         self.plug_sync = PluggedInSync()
@@ -245,6 +261,11 @@ class HaLink:
                 logger.info("Car SoC %.0f%% dropped below %d%%: switching Plugged In on", soc, s["auto_plug_soc"])
                 if not await self._safe_plug("auto plug-in (low SoC)"):
                     self.auto_plug.armed = True  # try again on the next reading
+                elif s.get("auto_plug_ready") and self.on_auto_plug is not None:
+                    try:
+                        await self.on_auto_plug(s.get("auto_plug_hours") or DEFAULT_AUTO_PLUG_HOURS)
+                    except Exception as err:
+                        logger.warning("Auto plug-in charge not planned: %s", err)
 
     async def _safe_plug(self, source: str) -> bool:
         try:

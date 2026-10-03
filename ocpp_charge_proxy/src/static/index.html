@@ -519,6 +519,18 @@
           <span class="ctl"><input type="number" id="sim-auto-soc" min="1" max="99" step="1" aria-label="Plug in below SoC"> %</span></div>
         <div class="row"><div class="grow">SoC sensor to watch<div class="note" style="margin:0">Leave as "Reporting SoC sensor" or pick another one to watch only for this (it is never reported, e.g. for a car that may be away)</div></div></div>
         <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_plug_entity" data-domain="sensor" data-class="battery" data-units="%" data-none="Reporting SoC sensor"></span></div>
+        <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
+          <div class="grow">Automatically adjust schedule to fit auto plug-in
+            <div class="note" style="margin:0">When auto plug-in plugs in, add the charge to the schedule as a one-off:
+              unplug at the first ready time your supplier accepts after the hours below, and set the supplier's ready time to it.
+              If that meets a scheduled slot they become one; with Octopus, if it takes the day over 6 hours, the next slot starts that much later.</div></div>
+          <label class="switch"><input type="checkbox" id="sim-auto-ready" aria-label="Automatically adjust schedule to fit auto plug-in"><span></span></label>
+        </div>
+        <div class="row" id="sim-auto-hours-row">
+          <div class="grow">Charge for<div class="note" style="margin:0">Hours from plugging in (30-minute steps)</div></div>
+          <span class="ctl"><input type="number" id="sim-auto-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours"> hours</span>
+        </div>
+        <div id="sim-auto-last" class="sub" style="margin-top:8px"></div>
         <dl class="kv" id="sim-monitor" style="margin-top:14px"></dl>
       </div>
     </div>
@@ -1540,6 +1552,16 @@ function drawPickers() {
   });
   $('sim-auto').checked = !!sim.edit.auto_plug;
   if (document.activeElement !== $('sim-auto-soc')) $('sim-auto-soc').value = sim.edit.auto_plug_soc;
+  $('sim-auto-ready').checked = !!sim.edit.auto_plug_ready;
+  if (document.activeElement !== $('sim-auto-hours')) $('sim-auto-hours').value = sim.edit.auto_plug_hours ?? 3;
+  $('sim-auto-hours-row').hidden = !sim.edit.auto_plug_ready;
+}
+function drawAutoPlugLast(d) {
+  const el = $('sim-auto-last'); if (!el) return;
+  const a = d && d.schedule && d.schedule.auto_plug_last;
+  if (!a) { el.innerHTML = ''; return; }
+  const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+  el.innerHTML = `Last: plugged in ${dateTime(a.at)} until ${t(a.end)}${a.notes && a.notes.length ? ` (${a.notes.map(esc).join('; ')})` : ''}`;
 }
 // A text box that filters the list as you type (every word must match the
 // name, entity ID or reading). Arrow keys + Enter, or click, to choose.
@@ -1641,6 +1663,10 @@ $('tab-settings').addEventListener('input', (ev) => {
   if (ev.target.dataset.key && ev.target.tagName === 'INPUT') { sim.edit[ev.target.dataset.key] = ev.target.value.trim(); simSetDirty(true); }
 });
 $('sim-auto').addEventListener('change', (e) => { sim.edit.auto_plug = e.target.checked; simSetDirty(true); });
+$('sim-auto-ready').addEventListener('change', (e) => {
+  sim.edit.auto_plug_ready = e.target.checked; $('sim-auto-hours-row').hidden = !e.target.checked; simSetDirty(true);
+});
+$('sim-auto-hours').addEventListener('input', (e) => { sim.edit.auto_plug_hours = e.target.value; simSetDirty(true); });
 $('sim-auto-soc').addEventListener('input', (e) => { sim.edit.auto_plug_soc = e.target.value; simSetDirty(true); });
 $('sim-all').addEventListener('change', drawPickers);
 $('set-save').onclick = saveSettings;
@@ -1677,6 +1703,7 @@ async function refreshAutomation(force) {
     $('a-rp-on').checked = d.replug.enabled;
   }
   drawReplugStatus(d.replug);
+  drawAutoPlugLast(d);
   drawWeek();
 }
 function drawReadyStatus(d) {
@@ -1901,7 +1928,7 @@ function drawEntries() {
         <option value="unplug" ${e.action === 'unplug' ? 'selected' : ''}>Unplug</option>
       </select>
       ${e.date
-        ? `<span class="once">Once on</span><input type="date" data-f="date" value="${esc(e.date)}" aria-label="Date" required>`
+        ? `<span class="once">${e.source === 'auto_plug' ? 'Auto plug-in, once on' : 'Once on'}</span><input type="date" data-f="date" value="${esc(e.date)}" aria-label="Date" required>`
         : `<div class="seg days" role="group" aria-label="Days">${DAYS.map((d, n) =>
         `<button data-day="${n}" aria-pressed="${e.days.includes(n)}" title="${d}">${d.slice(0, 2)}</button>`).join('')}</div>`}
       <span class="grow"></span>

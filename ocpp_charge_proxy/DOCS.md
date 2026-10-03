@@ -68,6 +68,27 @@ Leave it unset (or clear it) and no SoC is reported and car-full never
 triggers. If the sensor becomes unavailable, SoC reporting pauses until it
 comes back.
 
+### Auto plug-in
+
+**Auto plug-in** (Settings tab) switches Plugged In on once when the SoC
+drops below the level you set. With **Automatically adjust schedule to fit
+auto plug-in** on, it also adds the charge to the schedule as a one-off,
+for the hours you choose (**Charge for**, 0.5 to 12):
+
+- The slot runs from plugging in to the first ready time your supplier
+  accepts at least that long away (rounded up to the half hour; with EDF,
+  the next time between 04:00 and 11:00). It unplugs then, after the
+  supplier stops the session or the unplug wait (60 s by default).
+- Octopus Energy: if that puts more than 6 hours in 24, the next scheduled
+  slot starts that many hours later (or is skipped, if nothing is left).
+- If it meets or overlaps the next scheduled slot, they become one slot,
+  ending at the schedule's unplug.
+- The supplier's ready time is set to the end of the slot (E.ON Next has
+  none to set).
+
+The entries show on the Schedule tab as "Auto plug-in, once on", and run
+even with the schedule off.
+
 ### Schedule, auto re-plug and start-up
 
 - **Schedule** (**Schedule** tab): add as many times as you like, each with a time, the days

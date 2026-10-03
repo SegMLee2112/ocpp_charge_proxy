@@ -586,3 +586,90 @@ def test_planned_slot_still_holds_off_re_plug():
     clock.advance(minutes=30)
     assert not a.replug_due(True, False, True, scheduled=True, slot_now=False)
     assert a.replug_status()["status"] == "scheduled"
+
+
+# --- auto plug-in charge (plan_auto_plug) -------------------------------------
+
+
+def _sched_18_22(start, enabled=True):
+    a, clock = _automation(start=start)
+    a.set_schedule(enabled=enabled, entries=[{"time": "18:00", "action": "plug", "days": list(range(7))},
+                                             {"time": "22:00", "action": "unplug", "days": list(range(7))}])
+    return a, clock
+
+
+def _today_windows(a, clock):
+    day = clock.now().date()
+    return [(x.strftime("%H:%M"), y.strftime("%H:%M")) for x, y in a.windows() if x.date() == day]
+
+
+def _at(h, m=0):
+    return datetime.datetime(2026, 10, 3, h, m, tzinfo=TZ)  # Saturday
+
+
+def test_auto_plug_adds_a_one_off_slot():
+    a, clock = _sched_18_22(_at(12, 10))
+    out = a.plan_auto_plug(90, cap_min=360)  # 13:40 -> next half hour 14:00
+    assert out["ready_for"].startswith("2026-10-03T14:00") and not out["combined"] and out["moved"] is None
+    autos = [(e["time"], e["action"]) for e in a.entries if e.get("source") == "auto_plug"]
+    assert autos == [("12:10", "plug"), ("14:00", "unplug")]
+    assert _today_windows(a, clock) == [("12:10", "14:00"), ("18:00", "22:00")]
+    assert a.next_unplug(clock.now()).strftime("%H:%M") == "14:00"
+
+
+def test_auto_plug_joins_an_overlapping_slot():
+    a, clock = _sched_18_22(_at(16, 30))
+    out = a.plan_auto_plug(120, cap_min=360)  # to 18:30, overlaps 18:00-22:00: 5.5 h in all
+    assert out["combined"] and out["end"].startswith("2026-10-03T22:00")
+    assert _today_windows(a, clock) == [("16:30", "22:00")]
+    assert a.next_unplug(clock.now()).strftime("%H:%M") == "22:00"  # the ready time is set for 22:00
+
+
+def test_auto_plug_over_the_cap_moves_the_next_slot():
+    a, clock = _sched_18_22(_at(12))
+    out = a.plan_auto_plug(180, cap_min=360)  # 12-15 + 18-22 = 7 h: the slot's first 3 h move
+    assert not out["combined"] and "21:00" in out["moved"]
+    assert _today_windows(a, clock) == [("12:00", "15:00"), ("21:00", "22:00")]
+    # Without a cap (EDF, E.ON) nothing moves
+    b, clock_b = _sched_18_22(_at(12))
+    b.plan_auto_plug(180)
+    assert _today_windows(b, clock_b) == [("12:00", "15:00"), ("18:00", "22:00")]
+
+
+def test_auto_plug_over_the_cap_can_skip_the_next_slot():
+    a, clock = _sched_18_22(_at(12))
+    out = a.plan_auto_plug(240, cap_min=360)  # 4 h would move the start to 22:00: nothing left
+    assert "skipped" in out["moved"]
+    assert _today_windows(a, clock) == [("12:00", "16:00")]
+    tomorrow = clock.now().date() + datetime.timedelta(days=1)
+    assert any(x.date() == tomorrow for x, _ in a.windows())  # only today's is skipped
+
+
+def test_auto_plug_ready_time_rounds_to_what_the_supplier_accepts():
+    from src.ready_time import DEFAULT_TIMES
+    a, clock = _sched_18_22(_at(14), enabled=False)
+    out = a.plan_auto_plug(120, ready_times=DEFAULT_TIMES)  # EDF: 04:00-11:00 only
+    assert out["ready_for"].startswith("2026-10-04T04:00")
+
+
+def test_auto_plug_slot_runs_with_the_schedule_off():
+    a, clock = _sched_18_22(_at(12), enabled=False)
+    a.plan_auto_plug(60)
+    assert [x.strftime("%H:%M") for x, _ in a.windows()] == ["12:00"]  # the schedule's own are off
+    a.due()
+    clock.advance(minutes=61)
+    assert [e["action"] for e in a.due()] == ["unplug"]
+    assert a.snapshot()["schedule"]["auto_plug_last"]["end"].startswith("2026-10-03T13:00")
+
+
+def test_auto_plug_charge_sets_the_ready_time():
+    from src.automation import auto_plug_charge
+    a, clock = _sched_18_22(_at(16, 30))
+    asked = []
+
+    async def set_ready(unplug):
+        asked.append(unplug.strftime("%H:%M"))
+        return {"ready": unplug.strftime("%H:%M"), "unplug": unplug.isoformat()}
+
+    _run(auto_plug_charge(a, 2, set_ready, cap_min=360))
+    assert asked == ["22:00"]  # joined with the 18:00-22:00 slot

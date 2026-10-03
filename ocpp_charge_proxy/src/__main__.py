@@ -15,7 +15,7 @@ from src.client import ChargePoint
 from src.config import load_config, starting_current_amps
 from src.gui_data import GuiSources, Health, PowerHistory, remove_old_history_files, sample_loop
 from src.ha_history import ChartHistory
-from src.automation import Automation, automation_loop
+from src.automation import Automation, auto_plug_charge, automation_loop
 from src.ha_link import HaLink
 from src import log_filters
 from src.persistence import Persistence
@@ -232,6 +232,19 @@ async def run() -> None:
         provider=cp.provider_info,
         health=_health_info,
     )
+    async def on_auto_plug(hours: float) -> None:
+        sc = ha_link.smart_charging()
+        await auto_plug_charge(
+            automation, hours,
+            set_ready_time=ha_link.set_ready_time if sc.get("found") else None,
+            ready_times=ha_link.ready_times,
+            # Octopus schedules at most 6 hours of smart charging a day
+            cap_min=360 if sc.get("provider") == "Octopus Energy" else None,
+            provider=sc.get("provider") or "your supplier",
+        )
+        automation.publish(shared_state)
+
+    ha_link.on_auto_plug = on_auto_plug
     charger_tasks = [
         asyncio.create_task(cp.meter_values_loop()),
         asyncio.create_task(cp.clock_aligned_loop()),

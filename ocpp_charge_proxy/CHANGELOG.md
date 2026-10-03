@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.12.0
+
+- Auto plug-in: new switch **Automatically adjust schedule to fit auto
+  plug-in** with **Charge for** (hours). When auto plug-in plugs in, the
+  charge is added to the schedule as a one-off, unplugging at the first
+  ready time the supplier accepts after those hours, and the supplier's
+  ready time is set. With Octopus, if that takes the day over 6 hours, the
+  next scheduled slot's first hours move to it; if it meets the next slot,
+  they become one. Its one-offs run even with the schedule off
+- One-off schedule times are now kept for a day after they run (was 5
+  minutes), so the slot they belong to stays known
+
 ## 2.11.0
 
 - An add-on restart (e.g. an update) no longer ends the charging session:
