@@ -13,9 +13,9 @@
   has been scheduled `after_min` minutes after plugging in.
 
 - One-off times: an entry with a `date` runs once, on that day, and is
-  removed after it has run. Skips: any upcoming time (weekly or one-off)
-  can be skipped once; a skipped time doesn't run, and the skip is
-  forgotten a day after.
+  removed after it has run. Skips: any upcoming slot (a plug-in and its
+  unplug, weekly or one-off) can be skipped once; skipped times don't
+  run, and the skips are forgotten a day after.
 - At start-up: if the schedule is on and the add-on starts inside a
   plugged-in stretch (the last schedule time before now was a plug-in) with
   Plugged In off, it plugs in, as if it had been running at that time.
@@ -377,18 +377,29 @@ class Automation:
 
     def set_skip(self, entry_id: str, date: str, skip: bool = True) -> None:
         """Skip (or un-skip) one upcoming time: entry `entry_id` on `date`."""
-        entry = next((e for e in self.entries if e["id"] == entry_id), None)
-        if entry is None:
-            raise ValueError("No such schedule time (save the schedule first)")
-        day = _parse_date(date)
-        if not any(True for _ in self._occurrences(entry, day, 1)):
-            raise ValueError(f"That time doesn't run on {date}")
-        key = {"entry_id": entry_id, "date": day.isoformat()}
-        self.skips = [k for k in self.skips if k != key] + ([key] if skip else [])
+        self.set_skips([{"entry_id": entry_id, "date": date}], skip)
+
+    def set_skips(self, times: list, skip: bool = True) -> None:
+        """Skip (or un-skip) several times at once, e.g. a slot's plug-in and
+        unplug: [{"entry_id", "date"}, ...]. All or nothing."""
+        if not isinstance(times, list) or not times:
+            raise ValueError("Say which times to skip")
+        keys = []
+        for t in times:
+            entry_id, date = str((t or {}).get("entry_id") or ""), (t or {}).get("date")
+            entry = next((e for e in self.entries if e["id"] == entry_id), None)
+            if entry is None:
+                raise ValueError("No such schedule time (save the schedule first)")
+            day = _parse_date(date)
+            if not any(True for _ in self._occurrences(entry, day, 1)):
+                raise ValueError(f"That time doesn't run on {date}")
+            keys.append(({"entry_id": entry_id, "date": day.isoformat()}, entry))
+        for key, entry in keys:
+            self.skips = [k for k in self.skips if k != key] + ([key] if skip else [])
+            logger.info("Schedule: %s the %s at %s on %s", "skipping" if skip else "no longer skipping",
+                        "plug-in" if entry["action"] == "plug" else "unplug", entry["time"], key["date"])
         self._prune()
         self._save()
-        logger.info("Schedule: %s the %s at %s on %s", "skipping" if skip else "no longer skipping",
-                    "plug-in" if entry["action"] == "plug" else "unplug", entry["time"], day.isoformat())
 
     def upcoming(self, days: int = 7) -> list:
         """The next times over `days` days, for the page."""

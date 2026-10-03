@@ -182,9 +182,12 @@
   .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 24px; }
   .spark { width: 100%; height: 60px; display: block; }
   .week { display: grid; grid-template-columns: 52px 1fr; gap: 6px 8px; align-items: center; }
-  .upnext { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--divider); }
-  .upnext .what { flex: 1; min-width: 0; }
-  .upnext.skipped .what { text-decoration: line-through; color: var(--text2); }
+  .week .seg { cursor: pointer; }
+  .week .seg.skip { opacity: 1; background: repeating-linear-gradient(135deg, var(--divider) 0 6px, transparent 6px 12px) !important;
+    outline: 1px dashed var(--text2); outline-offset: -1px; }
+  .week .seg.picked { box-shadow: 0 0 0 2px var(--text); }
+  .slot-pop { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; padding: 10px 12px;
+    border-radius: 8px; background: var(--hover); }
   .once { font-size: 12px; color: var(--text2); }
   .week .dl { font-size: 12px; color: var(--text2); }
   .week .dl.today { color: var(--primary); font-weight: 500; }
@@ -414,14 +417,11 @@
       <div class="note" id="a-tz"></div>
     </div>
     <div class="card">
-      <h2>Coming up<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400">Next 7 days · skip any time once</span></h2>
-      <div id="a-upcoming"></div>
-    </div>
-    <div class="card">
       <h2>Next 7 days<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400" id="w-note"></span></h2>
       <div class="week" id="w-grid"></div>
+      <div class="slot-pop" id="w-pop" hidden></div>
       <div class="sub" id="w-warn" hidden style="margin-top:10px"></div>
-      <div class="legend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span></div>
+      <div class="legend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px)"></b>Skipped</span><span class="hint">Click a slot to skip it once</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span></div>
     </div>
   </section>
 
@@ -1626,7 +1626,6 @@ async function refreshAutomation(force) {
   if (!auto.dirty || force) { auto.entries = JSON.parse(JSON.stringify(d.schedule.entries)); setDirty(false); drawEntries(); }
   $('a-sched-on').checked = d.schedule.enabled;
   $('a-ready-on').checked = !!d.schedule.ready_time;
-  drawUpcoming(d);
   if (!smart.data) refreshSmart(true).then(() => { drawReadyStatus(auto.data); if (!auto.dirty) drawEntries(); else drawWeek(); });
   drawReadyStatus(d);
   const n = d.schedule.next;
@@ -1641,30 +1640,6 @@ async function refreshAutomation(force) {
   drawReplugStatus(d.replug);
   drawWeek();
 }
-function drawUpcoming(d) {
-  const up = (d && d.schedule.upcoming) || [];
-  const when = (iso) => {
-    const t = new Date(iso), now = new Date(), tom = new Date(now); tom.setDate(now.getDate() + 1);
-    const day = t.toDateString() === now.toDateString() ? 'Today' : t.toDateString() === tom.toDateString() ? 'Tomorrow'
-      : t.toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'});
-    return `${day} ${t.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}`;
-  };
-  $('a-upcoming').innerHTML = !d.schedule.enabled ? '<div class="empty">The schedule is off.</div>'
-    : !up.length ? '<div class="empty">Nothing in the next 7 days.</div>'
-    : (auto.dirty ? '<div class="note" style="margin:0 0 6px">Save the schedule to see your changes here.</div>' : '')
-      + up.slice(0, 10).map((u) => `<div class="upnext ${u.skipped ? 'skipped' : ''}">
-        <span class="what"><b>${u.action === 'plug' ? 'Plug in' : 'Unplug'}</b> ${esc(when(u.time))}${u.one_off ? ' <span class="chip">one-off</span>' : ''}</span>
-        ${u.skipped ? '<span class="chip warn">Skipped</span>' : ''}
-        <button class="btn small" data-skip="${esc(u.entry_id)}" data-date="${esc(u.date)}" data-undo="${u.skipped ? 1 : 0}">${u.skipped ? 'Undo' : 'Skip'}</button>
-      </div>`).join('');
-}
-$('a-upcoming').addEventListener('click', async (ev) => {
-  const b = ev.target.closest('button[data-skip]'); if (!b) return;
-  const undo = b.dataset.undo === '1';
-  if (await post('automation/skip', {entry_id: b.dataset.skip, date: b.dataset.date, skip: !undo})) {
-    toast(undo ? 'No longer skipped' : 'Skipped'); refreshAutomation(false);
-  }
-});
 function drawReadyStatus(d) {
   if (!d) return;
   const r = d.schedule.ready_status, on = d.schedule.ready_time;
@@ -1710,21 +1685,27 @@ function drawWeek() {
   const segStyle = linked ? `background:${providerColor(sc.provider)};` : '';
   $('w-swatch').style.background = linked ? providerColor(sc.provider) : 'var(--primary)';
   $('w-label').textContent = linked ? `Plugged in by the schedule, ready time sent to ${sc.provider}` : 'Plugged in by the schedule';
-  const {events, segs, worst, badSegs, over, today: day0} = weekPlan();
+  const {events, segs, skippedSegs, worst, badSegs, over, today: day0} = weekPlan();
+  week.segs = segs; week.skipped = skippedSegs; week.day0 = day0;
   const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
   const dayLabel = (d) => { const t = new Date(day0); t.setDate(day0.getDate() + d); return t.toLocaleDateString([], {weekday: 'short', day: 'numeric'}); };
   let html = '';
   for (let d = 0; d < 7; d++) {
     const lo = d * 1440, hi = lo + 1440;
-    const bars = segs.map((sg, k) => [sg, k]).filter(([[a, b]]) => b > lo && a < hi).map(([[a, b], k]) => {
+    const bar = (a, b, attrs, cls, style, note) => {
       const x0 = (Math.max(a, lo) - lo) / 14.4, x1 = (Math.min(b, hi) - lo) / 14.4;
-      const style = badSegs.has(k) ? 'background:var(--err);' : segStyle;
-      return `<div class="seg ${on ? '' : 'off'}" style="${style}left:${x0}%;width:${x1 - x0}%" title="${dayLabel(d)} ${hhmm(Math.max(a, lo) - lo)}–${hhmm(Math.min(b, hi) - lo)}${badSegs.has(k) ? ' (over Octopus\'s 6 hours a day)' : ''}"></div>`;
-    }).join('');
+      return `<div class="seg ${cls}" ${attrs} style="${style}left:${x0}%;width:${x1 - x0}%" title="${dayLabel(d)} ${hhmm(Math.max(a, lo) - lo)}–${hhmm(Math.min(b, hi) - lo)}${note}"></div>`;
+    };
+    const bars = segs.map((sg, k) => [sg, k]).filter(([[a, b]]) => b > lo && a < hi).map(([[a, b], k]) =>
+      bar(a, b, `data-seg="${k}"`, `${on ? '' : 'off'} ${week.picked === 's' + k ? 'picked' : ''}`,
+        badSegs.has(k) ? 'background:var(--err);' : segStyle, badSegs.has(k) ? ' (over Octopus\'s 6 hours a day)' : '')).join('')
+      + skippedSegs.map((sg, k) => [sg, k]).filter(([[a, b]]) => b > lo && a < hi).map(([[a, b], k]) =>
+        bar(a, b, `data-skipped="${k}"`, `skip ${week.picked === 'k' + k ? 'picked' : ''}`, '', ' (skipped)')).join('');
     html += `<div class="dl ${d === 0 ? 'today' : ''}">${d === 0 ? 'Today' : dayLabel(d)}</div><div class="track">${bars}${d === 0 ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
   }
   html += '<div></div><div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';
   $('w-grid').innerHTML = html;
+  drawSlotPop();
   $('w-note').textContent = !events.length ? 'No times set' : on ? (auto.dirty ? 'Preview of unsaved changes' : '') : 'Schedule is off: preview only';
   $('w-warn').hidden = !over;
   if (over) {
@@ -1732,6 +1713,41 @@ function drawWeek() {
       + 'Octopus schedules at most 6 hours of smart charging in a day: shorten the times marked in red to save the schedule.';
   }
 }
+// Click a slot in the week view to skip it once (its plug-in and unplug), or undo
+const week = {segs: [], skipped: [], day0: null, picked: null};
+function slotTimes(sg) {
+  return [sg[4], sg[5]].filter((ev) => ev && ev.id).map((ev) => ({entry_id: ev.id, date: ev.date}));
+}
+function drawSlotPop() {
+  const pop = $('w-pop'), p = week.picked;
+  const sg = p && (p[0] === 's' ? week.segs : week.skipped)[Number(p.slice(1))];
+  if (!sg) { pop.hidden = true; week.picked = null; return; }
+  const at = (min) => {
+    const t = new Date(week.day0); t.setMinutes(min);
+    return `${t.toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})} ${t.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}`;
+  };
+  const skipped = p[0] === 'k', saved = slotTimes(sg).length > 0;
+  pop.hidden = false;
+  pop.innerHTML = `<span class="grow"><b>${skipped ? 'Skipped: ' : ''}Plug in ${at(sg[0])}</b> → ${sg[5] ? 'unplug ' + at(sg[1]) : 'no unplug in the next week'}</span>`
+    + (!saved || auto.dirty ? '<span class="muted">Save the schedule first</span>'
+      : `<button class="btn small ${skipped ? '' : 'primary'}" id="w-skip">${skipped ? 'Undo skip' : 'Skip this slot'}</button>`)
+    + '<button class="btn small" id="w-close">Close</button>';
+}
+$('w-grid').addEventListener('click', (ev) => {
+  const el = ev.target.closest('.seg'); if (!el) return;
+  const id = el.dataset.seg !== undefined ? 's' + el.dataset.seg : 'k' + el.dataset.skipped;
+  week.picked = week.picked === id ? null : id;
+  drawWeek();
+});
+$('w-pop').addEventListener('click', async (ev) => {
+  if (ev.target.id === 'w-close') { week.picked = null; drawWeek(); return; }
+  if (ev.target.id !== 'w-skip') return;
+  const p = week.picked, skipped = p[0] === 'k';
+  const sg = (skipped ? week.skipped : week.segs)[Number(p.slice(1))];
+  if (await post('automation/skip', {times: slotTimes(sg), skip: !skipped})) {
+    toast(skipped ? 'Slot back on' : 'Slot skipped'); week.picked = null; refreshAutomation(false);
+  }
+});
 // The schedule's plugged-in stretches over a week (minutes from Monday 00:00),
 // and with Octopus, which of them go over its 6 hours of smart charging a day
 const OCTOPUS_CAP_MIN = 360;
@@ -1746,19 +1762,26 @@ function weekPlan() {
     auto.entries.forEach((e, i) => {
       if (!e.enabled || !/^\d{2}:\d{2}$/.test(e.time)) return;
       if (e.date ? e.date !== iso : !e.days.includes(wd)) return;
-      if (e.id && skips.has(e.id + '|' + iso)) return;
       const [h, m] = e.time.split(':').map(Number);
-      events.push({t: d * 1440 + h * 60 + m, plug: e.action === 'plug', i});
+      events.push({t: d * 1440 + h * 60 + m, plug: e.action === 'plug', i, id: e.id, date: iso,
+        skipped: !!(e.id && skips.has(e.id + '|' + iso))});
     });
   }
   events.sort((a, b) => a.t - b.t || (a.plug === b.plug ? 0 : a.plug ? -1 : 1));
-  const segs = [];  // [startMin, endMin, plug entry, unplug entry]
-  let state = null, since = 0, from = null;
-  for (const ev of events) {
-    if (ev.plug && state !== true) { state = true; since = ev.t; from = ev.i; }
-    else if (!ev.plug) { if (state === true) segs.push([since, ev.t, from, ev.i]); state = false; }
-  }
-  if (state === true) segs.push([since, 9 * 1440, from, null]);
+  // [startMin, endMin, plug entry, unplug entry, plug event, unplug event]
+  const stretches = (evs) => {
+    const out = [];
+    let state = null, start = null;
+    for (const ev of evs) {
+      if (ev.plug && state !== true) { state = true; start = ev; }
+      else if (!ev.plug) { if (state === true) out.push([start.t, ev.t, start.i, ev.i, start, ev]); state = false; }
+    }
+    if (state === true) out.push([start.t, 9 * 1440, start.i, null, start, null]);
+    return out;
+  };
+  const segs = stretches(events.filter((ev) => !ev.skipped));  // what will happen
+  // Skipped slots, drawn hatched so they can be put back
+  const skippedSegs = stretches(events).filter((sg) => sg[4].skipped);
   // Most plugged-in minutes in any 24 hours (from a stretch's start, yesterday to a week on)
   const nowMin = (Date.now() - today.getTime()) / 60000;
   let worst = null;
@@ -1775,7 +1798,7 @@ function weekPlan() {
   });
   const badEntries = new Set();
   badSegs.forEach((k) => { if (segs[k][2] !== null) badEntries.add(segs[k][2]); if (segs[k][3] !== null) badEntries.add(segs[k][3]); });
-  return {events, segs, worst, badSegs, badEntries, over: badSegs.size > 0, today};
+  return {events, segs, skippedSegs, worst, badSegs, badEntries, over: badSegs.size > 0, today};
 }
 const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 // While the schedule sets your supplier's ready time, unplug times are limited

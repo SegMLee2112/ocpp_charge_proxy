@@ -385,9 +385,14 @@ async def handle_schedule(request: web.Request) -> web.Response:
 
 
 async def handle_skip(request: web.Request) -> web.Response:
-    """{"entry_id", "date": "YYYY-MM-DD", "skip": bool}: skip one upcoming time (or undo)."""
+    """{"times": [{"entry_id", "date": "YYYY-MM-DD"}, ...], "skip": bool}: skip
+    upcoming times once (a slot: its plug-in and unplug), or undo. A single
+    {"entry_id", "date"} works too."""
     return await _automation_change(
-        request, lambda a, b: a.set_skip(str(b.get("entry_id") or ""), b.get("date"), bool(b.get("skip", True))),
+        request, lambda a, b: a.set_skips(
+            b.get("times") if "times" in b else [{"entry_id": b.get("entry_id"), "date": b.get("date")}],
+            bool(b.get("skip", True)),
+        ),
     )
 
 

@@ -423,3 +423,22 @@ def test_skipped_unplug_moves_the_ready_time_and_start_up():
     assert a.next_unplug(clock.now()).strftime("%a %H:%M") == "Wed 07:00"
     a.set_skip(plug_id, "2026-10-05")  # last night's plug-in skipped: not inside a stretch
     assert a.in_plug_window() is None
+
+
+def test_skip_a_whole_slot():
+    every = list(range(7))
+    a, clock = _automation()  # Monday 23:00
+    a.set_schedule(enabled=True, entries=[
+        {"time": "23:30", "action": "plug", "days": every}, {"time": "07:00", "action": "unplug", "days": every}])
+    plug_id, unplug_id = a.entries[0]["id"], a.entries[1]["id"]
+    slot = [{"entry_id": plug_id, "date": "2026-10-05"}, {"entry_id": unplug_id, "date": "2026-10-06"}]
+    a.set_skips(slot)
+    nxt = a.next_action()
+    assert nxt["action"] == "plug" and nxt["time"].startswith("2026-10-06T23:30")  # the whole night skipped
+    try:
+        a.set_skips(slot + [{"entry_id": "nope", "date": "2026-10-07"}], skip=False)  # all or nothing
+        raise AssertionError("should have refused")
+    except ValueError:
+        assert len(a.skips) == 2
+    a.set_skips(slot, skip=False)
+    assert a.skips == []

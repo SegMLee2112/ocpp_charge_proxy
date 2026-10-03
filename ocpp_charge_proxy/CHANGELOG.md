@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.9.1
+
+- **Skip a slot from the week view:** click a slot in **Next 7 days** and
+  choose **Skip this slot** to skip it once, both its plug-in and its
+  unplug. Skipped slots show hatched; click one and **Undo skip** to put it
+  back. This replaces the Coming up list, which is gone.
+
 ## 2.9.0
 
 - **One-off times:** **+ Add a one-off** on the Schedule tab adds a plug-in
