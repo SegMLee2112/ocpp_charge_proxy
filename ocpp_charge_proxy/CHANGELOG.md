@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.12.2
+
+- Auto plug-in: Octopus's 6-hour limit (moving the next scheduled slot) now
+  only applies while Force schedule on supplier is on, as for the schedule.
+  With it off, the schedule and auto plug-in can plug in for longer
+
 ## 2.12.1
 
 - One-off schedule times (and skips) are kept for 14 days after they run

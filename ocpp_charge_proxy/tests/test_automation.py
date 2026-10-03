@@ -694,3 +694,21 @@ def test_one_offs_kept_14_days_and_listed_as_runs():
     a.set_schedule(enabled=True)
     assert [e for e in a.entries if e.get("date")] == []  # over 14 days: gone
     assert a.snapshot()["schedule"]["one_off_runs"] == []
+
+
+def test_six_hour_limit_only_with_force_schedule_on():
+    long_day = [{"time": "12:00", "action": "plug", "days": list(range(7))},
+                {"time": "22:00", "action": "unplug", "days": list(range(7))}]  # 10 h a day
+    a, clock = _automation()
+    a.set_schedule(enabled=True, ready_time=False, entries=long_day, daily_cap_min=360)  # off: fine
+    assert len(a.entries) == 2
+    try:
+        a.set_schedule(ready_time=True, daily_cap_min=360)
+        raise AssertionError("should have refused")
+    except ValueError as err:
+        assert "6 hours" in str(err)
+    assert a.ready_time is False
+    # Auto plug-in with no cap (Force off) adds to it without moving anything
+    b, clock_b = _sched_18_22(_at(12))
+    b.plan_auto_plug(300, cap_min=None)  # 12-17 + 18-22 = 9 h
+    assert _today_windows(b, clock_b) == [("12:00", "17:00"), ("18:00", "22:00")]

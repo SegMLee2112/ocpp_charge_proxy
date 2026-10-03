@@ -238,8 +238,9 @@ async def run() -> None:
             automation, hours,
             set_ready_time=ha_link.set_ready_time if sc.get("found") else None,
             ready_times=ha_link.ready_times,
-            # Octopus schedules at most 6 hours of smart charging a day
-            cap_min=360 if sc.get("provider") == "Octopus Energy" else None,
+            # Octopus schedules at most 6 hours of smart charging a day: kept
+            # to only while Force schedule on supplier is on, as for the schedule
+            cap_min=360 if sc.get("provider") == "Octopus Energy" and automation.ready_time else None,
             provider=sc.get("provider") or "your supplier",
         )
         automation.publish(shared_state)

@@ -24,7 +24,8 @@
   and its "set my supplier's ready time" option is on, plan_auto_plug adds
   a one-off slot to the schedule: plug in now, unplug at the first ready
   time your supplier accepts at least the chosen hours away. If that puts
-  more than Octopus's 6 hours in 24, the next scheduled slot starts that
+  more than Octopus's 6 hours in 24 (only checked with Force schedule on
+  supplier on, as for the schedule), the next scheduled slot starts that
   much later (its first hours move to now). If it then meets or overlaps
   the next scheduled slot, the two become one slot. The ready time is set
   for the end of the slot. Its entries carry "source": "auto_plug" and run
