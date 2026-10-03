@@ -27,12 +27,19 @@ The version is in `ocpp_charge_proxy/config.yaml` (`version`). It uses [semver](
 
 1. **Make your changes** on master (or a feature branch merged to master)
 
-2. **Update the changelog** — edit `ocpp_charge_proxy/CHANGELOG.md`:
+2. **Update the changelog** — edit `ocpp_charge_proxy/CHANGELOG.md`. Each
+   version gets a short title, and each line a tag saying what kind of
+   change it is:
    ```markdown
-   ## 0.2.0
+   ## 2.13.0 — Supplier slots on the schedule
 
-   - Description of changes
+   - **Feature:** something new you can do
+   - **Improvement:** something that works better or reads more clearly
+   - **Fix:** something that was wrong and now isn't
+   - **Change:** existing behaviour that now works differently
+   - **Docs:** documentation only
    ```
+   Newest version first, right under `# Changelog`.
 
 3. **Bump the version** in `ocpp_charge_proxy/config.yaml` → `version: "0.2.0"`
 
