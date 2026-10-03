@@ -120,7 +120,8 @@ sensors live through Home Assistant's API.
   - **Header:** a health dot left of the title, green when healthy and amber/red
     when not (hover for the issues), linking to the Health tab.
   - **Overview:** state, power, current, SoC and energy; the current
-    session; and a chart (shaded by state, with session start/end marked)
+    session; your supplier's planned smart charging slots (found
+    automatically from the Octopus Energy or EDF Energy integration); and a chart (shaded by state, with session start/end marked)
     of power, current (with your max and the provider limit) or SoC over
     the last 30 minutes to 24 hours, or 14 days, read from Home Assistant's
     history of the add-on's sensors. Drag or scroll on it to zoom.

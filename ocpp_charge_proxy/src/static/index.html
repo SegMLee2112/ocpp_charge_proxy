@@ -282,6 +282,10 @@
         <h2>Current session</h2>
         <div id="o-session"><div class="empty">No session</div></div>
       </div>
+      <div class="card">
+        <h2>Smart charging<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400" id="sc-provider"></span></h2>
+        <div id="sc-body"><div class="empty">Looking for your supplier's integration…</div></div>
+      </div>
     </div>
 
     <div class="card">
@@ -850,6 +854,7 @@ const LONG_RANGE = 86400, LONG_STEP = 300;
 // view: [t0, t1] while zoomed in (drag or scroll on the chart), else null
 const chart = {samples: [], long: [], longLoaded: false, series: 'power', range: 3600, lastT: 0, longT: 0, longAt: 0, error: null, view: null};
 const MIN_SPAN = 120, MAX_SPAN = 14 * 86400;
+const smart = {data: null, at: 0};  // your supplier's charge slots (smart charging card)
 async function refreshHistory(full) {
   try {
     const since = full ? 0 : chart.lastT;
@@ -978,6 +983,14 @@ function drawChart() {
     }
     i = j + 1;
   }
+  // Your supplier's charge slots (completed and planned): a strip along the top
+  const slots = smart.data && smart.data.found ? smart.data.periods || [] : [];
+  for (const p of slots) {
+    const a = new Date(p.start).getTime() / 1000, b = new Date(p.end).getTime() / 1000;
+    if (b < t0 || a > t1) continue;
+    ctx.globalAlpha = 0.85; ctx.fillStyle = cssVar('--primary');
+    ctx.fillRect(x(a), T, Math.max(2, x(b) - x(a)), 4); ctx.globalAlpha = 1;
+  }
   // Session start / stop markers
   const marks = [];
   const sd = sessionsData || {};
@@ -1027,6 +1040,7 @@ function drawChart() {
   $('chart-legend').innerHTML = defs.lines.map((l) => `<span><i class="${l.dash ? 'dash' : ''}" style="border-color:${l.color}"></i>${esc(l.name)}</span>`).join('') +
     [['--ok', 'Charging'], ['--warn', 'Paused'], ['--info', 'Waiting for a session']].map(([v, n]) =>
       `<span><b class="band" style="background:${cssVar(v)}"></b>${n}</span>`).join('') +
+    (smart.data && smart.data.found ? `<span><b class="band" style="background:${cssVar('--primary')};height:4px;vertical-align:top"></b>${esc(smart.data.provider)} slot</span>` : '') +
     '<span class="hint">Drag or scroll to zoom · double-click to reset</span>';
 }
 function niceMax(v) {
@@ -1066,6 +1080,41 @@ $('ch-range').addEventListener('click', (e) => {
   if (chart.range > LONG_RANGE && !chart.longLoaded) refreshLong(true).then(drawChart);
 });
 window.addEventListener('resize', () => drawChart());
+
+// ---------- smart charging: your supplier's planned slots ----------
+async function refreshSmart(force) {
+  if (!force && smart.data && Date.now() - smart.at < 60000) return;
+  smart.at = Date.now();
+  try { smart.data = await api('smart_charging'); } catch (e) { return; }
+  drawSmart(); drawChart();
+}
+function slotText(s) {
+  const a = new Date(s.start), b = new Date(s.end), now = new Date();
+  const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
+  const day = a.toDateString() === now.toDateString() ? 'Today' : a.toDateString() === tomorrow.toDateString() ? 'Tomorrow'
+    : a.toLocaleDateString([], {weekday: 'short', day: 'numeric'});
+  const t = (d) => d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+  return `${day} ${t(a)}–${t(b)}` + (s.charge_kwh != null ? ` <span class="muted">· ${num(Math.abs(s.charge_kwh), 1)} kWh</span>` : '');
+}
+function drawSmart() {
+  const d = smart.data; if (!d) return;
+  $('sc-provider').textContent = d.found ? d.provider : '';
+  if (!d.found) {
+    $('sc-body').innerHTML = `<div class="empty">Smart charging information not found</div>
+      <div class="sub">${d.error ? esc(d.error) : 'Install your supplier\'s Home Assistant integration (e.g. Octopus Energy or EDF Energy) to see the charge slots it plans.'}</div>`;
+    return;
+  }
+  const now = d.current
+    ? `<span class="chip ok">Slot now</span> <span class="muted">until ${new Date(d.current.end).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</span>`
+    : '<span class="chip">No slot right now</span>';
+  const next = d.planned.length
+    ? d.planned.slice(0, 4).map((s) => `<div style="margin-top:4px">${slotText(s)}</div>`).join('')
+      + (d.planned.length > 4 ? `<div class="sub">and ${d.planned.length - 4} more</div>` : '')
+    : '<div class="muted" style="margin-top:4px">None planned yet</div>';
+  $('sc-body').innerHTML = `<div class="row">${now}</div>
+    <div style="margin-top:12px"><span class="label">Planned</span>${d.planned_kwh != null ? ` <span class="muted" style="font-size:12px">· ${num(Math.abs(d.planned_kwh), 1)} kWh</span>` : ''}</div>${next}
+    <div class="sub" style="margin-top:10px;overflow-wrap:anywhere">From <code>${esc(d.entity_id)}</code>${d.others && d.others.length ? ` (also found: ${d.others.map(esc).join(', ')})` : ''}</div>`;
+}
 
 // ---------- zoom: drag across the chart, or scroll over it ----------
 const zoom = {dragging: false, x0: 0};
@@ -1693,7 +1742,7 @@ async function refreshHealth() {
 
 // ---------- refresh loop ----------
 function refreshTab(full) {
-  if (activeTab === 'overview') { refreshSessionCard(); refreshHistory(full && !chart.samples.length); }
+  if (activeTab === 'overview') { refreshSessionCard(); refreshHistory(full && !chart.samples.length); refreshSmart(full); }
   else if (activeTab === 'sessions') refreshSessions();
   else if (activeTab === 'messages') refreshMessages();
   else if (activeTab === 'provider') refreshProvider();

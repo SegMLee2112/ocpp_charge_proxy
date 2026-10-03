@@ -169,6 +169,9 @@ Open the add-on from the sidebar (or **Open Web UI**). It updates live and
 follows your Home Assistant theme.
 
 - **Overview:** state, power, current, SoC and energy; the current session;
+  **smart charging** (the charge slots your supplier plans, found
+  automatically from the Octopus Energy or EDF Energy integration, also
+  shown along the top of the chart);
   and a chart of power, current (with your max and the provider limit) or
   SoC over the last 30 minutes to 24 hours, or 14 days. Drag across the
   chart or scroll over it to zoom (double-click or **Reset zoom** to go

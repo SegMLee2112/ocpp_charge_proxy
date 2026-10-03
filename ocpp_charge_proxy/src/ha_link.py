@@ -24,6 +24,7 @@ import time
 from typing import Awaitable, Callable, Optional
 
 from src.autoplug import DEFAULT_AUTO_PLUG_SOC, AutoPlug, CarConnected
+from src.smart_charging import smart_charging
 from src.ha_entities import (
     ALL_SENSORS, HELPER_ICON, HELPER_ID, HELPER_NAME, PluggedInSync, SensorPublisher,
     helper_entity_id, integration_entities,
@@ -127,7 +128,7 @@ class HaLink:
         self.connected = False
         self.error: Optional[str] = None
         self._changed = asyncio.Event()
-        self._entity_cache: tuple[float, list] = (0.0, [])
+        self._states_cache: tuple[float, list] = (0.0, [])  # all of HA's states, briefly
         self._call = None  # websocket request function while connected
         self._reset_logic()
         self._load()
@@ -475,9 +476,9 @@ class HaLink:
             await self._post_state(entity_id, state, attrs)
 
 
-    async def list_entities(self) -> list[dict]:
-        """Sensors and binary sensors for the pickers (cached briefly)."""
-        cached_at, cached = self._entity_cache
+    async def all_states(self) -> list[dict]:
+        """Every entity's state in HA (cached briefly)."""
+        cached_at, cached = self._states_cache
         if cached and time.monotonic() - cached_at < ENTITY_LIST_TTL_S:
             return cached
         if not self.available:
@@ -492,6 +493,16 @@ class HaLink:
             ) as resp:
                 resp.raise_for_status()
                 states = await resp.json()
+        self._states_cache = (time.monotonic(), states)
+        return states
+
+    async def smart_charging(self) -> dict:
+        """Your supplier's planned charge slots, if its integration is installed."""
+        return smart_charging(await self.all_states(), time.time())
+
+    async def list_entities(self) -> list[dict]:
+        """Sensors and binary sensors for the pickers."""
+        states = await self.all_states()
         out = []
         for st in states:
             entity_id = st.get("entity_id", "")
@@ -507,7 +518,6 @@ class HaLink:
                 "state": st.get("state"),
             })
         out.sort(key=lambda e: (e["name"] or "").lower())
-        self._entity_cache = (time.monotonic(), out)
         return out
 
     # --- status ------------------------------------------------------------------

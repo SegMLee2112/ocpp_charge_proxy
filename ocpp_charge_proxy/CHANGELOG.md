@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.5.0
+
+- **Smart charging card** on the Overview tab: the charge slots your
+  supplier plans for the car, whether one is running now, and how much
+  energy each should deliver. Found automatically: the add-on looks for the
+  dispatching sensor of the Octopus Energy integration
+  (`binary_sensor.octopus_energy_*_intelligent_dispatching`) or the EDF
+  Energy one (`binary_sensor.edf_energy_*_intelligent_dispatching`), or any
+  sensor with the same `planned_dispatches` attribute. Nothing to set up;
+  if none is found the card says "Smart charging information not found".
+- The History chart shows your supplier's slots (completed and planned) as
+  a strip along the top, so you can compare what was planned with what
+  charged.
+
 ## 2.4.1
 
 Cleanup, no change to what the add-on does:

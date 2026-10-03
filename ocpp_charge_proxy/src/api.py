@@ -73,6 +73,7 @@ def create_api_app(
     app.router.add_get("/api/sensors", handle_get_sensors)
     app.router.add_post("/api/sensors", handle_set_sensors)
     app.router.add_get("/api/sensors/entities", handle_sensor_entities)
+    app.router.add_get("/api/smart_charging", handle_smart_charging)
 
     return app
 
@@ -408,6 +409,17 @@ async def handle_set_sensors(request: web.Request) -> web.Response:
     except (ValueError, TypeError, json.JSONDecodeError) as err:
         return web.json_response({"status": "error", "message": str(err)}, status=400)
     return web.json_response({"status": "ok", **link.snapshot()}, dumps=_dumps)
+
+
+async def handle_smart_charging(request: web.Request) -> web.Response:
+    """Your supplier's smart charging plan (src/smart_charging.py)."""
+    link = request.app["ha_link"]
+    if link is None or not link.available:
+        return web.json_response({"found": False, "error": "Not connected to Home Assistant"})
+    try:
+        return web.json_response(await link.smart_charging(), dumps=_dumps)
+    except Exception as err:
+        return web.json_response({"found": False, "error": f"Couldn't read Home Assistant's states: {err}"})
 
 
 async def handle_sensor_entities(request: web.Request) -> web.Response:
