@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.7.6
+
+- The **Automation** tab is now called **Schedule**. Links to `#automation`
+  still work, and `#schedule` opens it too.
+
 ## 2.7.5
 
 - The Automation tab's "Set my supplier's ready time" switch is now called

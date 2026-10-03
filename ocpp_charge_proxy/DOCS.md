@@ -69,12 +69,12 @@ comes back.
 
 ### Schedule, auto re-plug and start-up
 
-- **Schedule** (**Automation** tab): add as many times as you like, each with a time, the days
+- **Schedule** (**Schedule** tab): add as many times as you like, each with a time, the days
   it runs on, and whether it plugs in or unplugs; turn single times or the
   whole schedule on and off. Times are in your Home Assistant time zone. A
   time missed while the add-on was stopped isn't run later. Unplugging
   during a session ends the session.
-- **Force schedule on supplier** (**Automation** tab, off by default):
+- **Force schedule on supplier** (**Schedule** tab, off by default):
   when the schedule plugs in, the add-on sets your supplier's smart
   charging ready-by time to the schedule's next unplug, for example plug in
   02:00 and unplug 04:00 sets 04:00; plug in 06:00 and unplug 08:00 sets
@@ -210,7 +210,7 @@ follows your Home Assistant theme.
 - **Provider:** what your provider has set: charging limits, charging
   profiles drawn as a timeline, the local authorisation list and every
   configuration key.
-- **Automation:** the plug-in schedule (see below), with a week view of when
+- **Schedule:** the plug-in schedule (see below), with a week view of when
   it has the car plugged in.
 - **Settings:** controls for Plugged In, max current, a power override and a
   test SoC; auto re-plug (see below); and your power, SoC and car plugged in
