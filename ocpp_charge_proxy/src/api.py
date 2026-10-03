@@ -371,9 +371,13 @@ async def _automation_change(request: web.Request, apply) -> web.Response:
 
 async def handle_schedule(request: web.Request) -> web.Response:
     """{"enabled": bool}, {"ready_time": bool} and/or {"entries": [{time, days, action, enabled}, ...]}."""
+    link = request.app["ha_link"]
+    sc = link.smart_charging() if link is not None else {}
     return await _automation_change(
-        request, lambda a, b: a.set_schedule(enabled=b.get("enabled"), entries=b.get("entries"),
-                                             ready_time=b.get("ready_time")),
+        request, lambda a, b: a.set_schedule(
+            enabled=b.get("enabled"), entries=b.get("entries"), ready_time=b.get("ready_time"),
+            ready_times=sc.get("ready_times"), provider=sc.get("provider") or "your supplier",
+        ),
     )
 
 

@@ -79,8 +79,9 @@ comes back.
   charging ready-by time to the schedule's next unplug, for example plug in
   02:00 and unplug 04:00 sets 04:00; plug in 06:00 and unplug 08:00 sets
   08:00. Only at scheduled plug-ins. Ready times are in 30-minute steps:
-  Octopus Energy accepts any time of day, EDF Energy 04:00 to 11:00, and
-  the latest one at or before the unplug is used. E.ON Next's integration
+  Octopus Energy accepts any time of day, EDF Energy 04:00 to 11:00. While
+  it's on, unplug times in the schedule are limited to those (the page
+  marks any that aren't, and won't save them). E.ON Next's integration
   has no ready time setting. While it's on, the Your week card shows the
   schedule in your supplier's colour (Octopus purple, EDF yellow, E.ON
   red), and with Octopus it warns if the schedule has the car plugged in

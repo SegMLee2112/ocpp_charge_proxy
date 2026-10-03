@@ -187,6 +187,7 @@
   .week .track { position: relative; height: 18px; background: var(--hover); border-radius: 4px; overflow: hidden; }
   .week .seg { position: absolute; top: 0; bottom: 0; background: var(--primary); opacity: .8; }
   .week .seg.off { opacity: .35; }
+  .sched input.bad { border-color: var(--err); color: var(--err); }
   .week .now { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--err); }
   .week .axis { grid-column: 2; display: flex; justify-content: space-between; font-size: 10px; color: var(--text2); }
   .daybars { display: flex; align-items: flex-end; gap: 6px; height: 150px; padding-top: 18px; }
@@ -389,6 +390,7 @@
       </h2>
       <div class="sub" id="a-next" style="margin-bottom:12px"></div>
       <div id="a-entries"></div>
+      <div class="note" id="a-rules" hidden></div>
       <div class="row" style="margin-top:12px">
         <button class="btn small" id="a-add">+ Add a time</button>
         <span class="grow"></span>
@@ -399,7 +401,7 @@
       <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
         <div class="grow">
           <div>Set my supplier's ready time</div>
-          <div class="note" style="margin:0">When the schedule plugs in, set your supplier's smart charging ready-by time to the schedule's next unplug. Only at scheduled plug-ins. Ready times are in 30-minute steps (Octopus: any time of day; EDF: 04:00–11:00), so the latest one at or before the unplug is used.</div>
+          <div class="note" style="margin:0">When the schedule plugs in, set your supplier's smart charging ready-by time to the schedule's next unplug. Only at scheduled plug-ins. Ready times are in 30-minute steps (Octopus: any time of day; EDF: 04:00–11:00), so while this is on, unplug times are limited to those.</div>
           <div id="a-ready-status" style="margin-top:6px"></div>
         </div>
         <label class="switch"><input type="checkbox" id="a-ready-on" aria-label="Set the ready time from the schedule"><span></span></label>
@@ -1614,7 +1616,7 @@ async function refreshAutomation(force) {
   if (!auto.dirty || force) { auto.entries = JSON.parse(JSON.stringify(d.schedule.entries)); setDirty(false); drawEntries(); }
   $('a-sched-on').checked = d.schedule.enabled;
   $('a-ready-on').checked = !!d.schedule.ready_time;
-  if (!smart.data) refreshSmart(true).then(() => { drawReadyStatus(auto.data); drawWeek(); });
+  if (!smart.data) refreshSmart(true).then(() => { drawReadyStatus(auto.data); if (!auto.dirty) drawEntries(); else drawWeek(); });
   drawReadyStatus(d);
   const n = d.schedule.next;
   $('a-next').innerHTML = !d.schedule.enabled ? 'The schedule is off.' :
@@ -1642,7 +1644,7 @@ function drawReadyStatus(d) {
   $('a-ready-status').innerHTML = html;
 }
 $('a-ready-on').addEventListener('change', async (e) => {
-  if (await post('automation/schedule', {ready_time: e.target.checked})) { toast(e.target.checked ? 'Ready time: set from the schedule' : 'Ready time: left alone'); refreshAutomation(false); }
+  if (await post('automation/schedule', {ready_time: e.target.checked})) { toast(e.target.checked ? 'Ready time: set from the schedule' : 'Ready time: left alone'); await refreshAutomation(false); drawEntries(); }
   else e.target.checked = !e.target.checked;
 });
 function drawReplugStatus(r) {
@@ -1717,10 +1719,24 @@ function drawWeek() {
   }
 }
 const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+// While the schedule sets your supplier's ready time, unplug times are limited
+// to the ready times it accepts (30-minute steps; EDF 04:00-11:00)
+function readyRules() {
+  const d = smart.data;
+  if (!d || !d.found || !d.ready_times || !auto.data || !auto.data.schedule.ready_time) return null;
+  const all = d.ready_times.length === 48, first = d.ready_times[0], last = d.ready_times[d.ready_times.length - 1];
+  return {times: d.ready_times, provider: d.provider, min: all ? null : first, max: all ? null : last,
+    text: all ? 'on the hour or half hour' : `from ${first} to ${last}, on the hour or half hour`};
+}
+const badUnplug = (e, rules) => rules && e.enabled && e.action === 'unplug' && /^\d{2}:\d{2}$/.test(e.time) && !rules.times.includes(e.time);
 function drawEntries() {
-  const rows = auto.entries.map((e, i) => `
+  const rules = readyRules();
+  const rows = auto.entries.map((e, i) => {
+    const lim = rules && e.action === 'unplug' ? ` step="1800"${rules.min ? ` min="${rules.min}" max="${rules.max}"` : ''}` : '';
+    return `
     <div class="row sched" data-i="${i}" style="padding:10px 0;border-top:1px solid var(--divider);margin-top:0">
-      <input type="time" value="${esc(e.time)}" data-f="time" aria-label="Time" required>
+      <input type="time" value="${esc(e.time)}" data-f="time" aria-label="Time" required${lim} class="${badUnplug(e, rules) ? 'bad' : ''}"
+        ${badUnplug(e, rules) ? `title="${esc(rules.provider)} only accepts ready times ${rules.text}"` : ''}>
       <select data-f="action" aria-label="Action">
         <option value="plug" ${e.action === 'plug' ? 'selected' : ''}>Plug in</option>
         <option value="unplug" ${e.action === 'unplug' ? 'selected' : ''}>Unplug</option>
@@ -1730,8 +1746,15 @@ function drawEntries() {
       <span class="grow"></span>
       <label class="switch" title="Enabled"><input type="checkbox" data-f="enabled" ${e.enabled ? 'checked' : ''} aria-label="Enabled"><span></span></label>
       <button class="btn small" data-del aria-label="Delete">Delete</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   drawWeek();
+  const bad = rules ? auto.entries.filter((e) => badUnplug(e, rules)) : [];
+  $('a-rules').hidden = !rules;
+  if (rules) {
+    $('a-rules').innerHTML = (bad.length ? '<span class="chip warn">Change unplug times</span> ' : '')
+      + `The schedule sets ${esc(rules.provider)}'s ready time, so unplug times must be ${rules.text}.`;
+  }
   $('a-entries').innerHTML = rows || '<div class="empty">No times yet. Add one, e.g. plug in at 23:30 and unplug at 07:00.</div>';
 }
 $('a-entries').addEventListener('click', (ev) => {
@@ -1751,6 +1774,7 @@ $('a-entries').addEventListener('change', (ev) => {
   const e = auto.entries[Number(row.dataset.i)], f = ev.target.dataset.f;
   if (f === 'enabled') e.enabled = ev.target.checked; else if (f) e[f] = ev.target.value;
   setDirty(true);
+  if (readyRules() && (f === 'time' || f === 'action' || f === 'enabled')) drawEntries();
 });
 $('a-add').onclick = () => {
   const last = auto.entries[auto.entries.length - 1];
@@ -1760,6 +1784,8 @@ $('a-add').onclick = () => {
 $('a-discard').onclick = () => refreshAutomation(true);
 $('a-save').onclick = async () => {
   if (auto.entries.some((e) => !/^\d{2}:\d{2}$/.test(e.time))) { toast('Every row needs a time'); return; }
+  const rules = readyRules();
+  if (rules && auto.entries.some((e) => badUnplug(e, rules))) { toast(`Unplug times must be ${rules.text} (${rules.provider} ready time)`); return; }
   if (await post('automation/schedule', {entries: auto.entries})) { toast('Schedule saved'); setDirty(false); refreshAutomation(true); }
 };
 $('a-sched-on').addEventListener('change', async (e) => {

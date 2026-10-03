@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.7.2
+
+- While the schedule sets your supplier's ready time, **unplug times are
+  limited to the ready times your supplier accepts**: on the hour or half
+  hour, and for EDF Energy from 04:00 to 11:00 (Octopus Energy: any time
+  of day). The time picker steps in 30 minutes within that range, unplug
+  times outside it are marked in red with a note, and the schedule won't
+  save until they're changed. Turning the ready time on is refused while
+  the saved schedule has unplug times outside it. Plug-in times aren't
+  limited. If the integration has a select entity, its list of times is
+  what's allowed.
+
 ## 2.7.1
 
 - **Octopus ready times at any time of day:** Octopus now accepts ready

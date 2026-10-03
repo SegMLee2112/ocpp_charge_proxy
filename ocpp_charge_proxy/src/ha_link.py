@@ -134,6 +134,8 @@ class HaLink:
         # Your supplier's smart charging sensor(s) (src/smart_charging.py); the
         # first is followed live with the other entities
         self.dispatch_entities: list[str] = []
+        self.ready_entity: Optional[str] = None  # its ready (target) time entity, if any
+        self.ready_times: Optional[list[str]] = None  # the times that accepts
         self._dispatch_searched = 0.0
         self.dispatch_searched_at: Optional[float] = None  # wall clock, for the Health tab
         self._call = None  # websocket request function while connected
@@ -522,6 +524,9 @@ class HaLink:
         if found:  # until the subscription brings it
             first = found[0]
             self.states[first["entity_id"]] = {"state": first.get("state"), "attributes": first.get("attributes") or {}}
+        ready = target_time_entity(states, ids[0]) if ids else None
+        self.ready_entity = ready["entity_id"] if ready else None
+        self.ready_times = allowed_times(ready) if ready else None
         if ids == self.dispatch_entities:
             return False
         if ids[:1] != self.dispatch_entities[:1]:
@@ -538,6 +543,8 @@ class HaLink:
         info = smart_charging([{"entity_id": entity_id, **st}], time.time())
         if info.get("found"):
             info["others"] = self.dispatch_entities[1:]
+            info["ready_time_entity"] = self.ready_entity
+            info["ready_times"] = self.ready_times
         return info
 
     async def set_ready_time(self, unplug) -> dict:

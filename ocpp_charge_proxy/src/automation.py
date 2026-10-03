@@ -32,6 +32,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Optional
 
+from src.ready_time import check_unplug_times
+
 logger = logging.getLogger(__name__)
 
 REPLUG_WAIT_S = 30
@@ -190,13 +192,20 @@ class Automation:
     # --- settings ------------------------------------------------------------
 
     def set_schedule(self, enabled: Optional[bool] = None, entries: Optional[list] = None,
-                     ready_time: Optional[bool] = None) -> None:
+                     ready_time: Optional[bool] = None, ready_times: Optional[list] = None,
+                     provider: str = "your supplier") -> None:
+        """ready_times: the times your supplier accepts as a ready time (None:
+        unknown). While the schedule sets it, unplug times must be among them."""
+        new_entries = self.entries
         if entries is not None:
             if not isinstance(entries, list):
                 raise ValueError("Entries must be a list")
             if len(entries) > 50:
                 raise ValueError("At most 50 schedule entries")
-            self.entries = [validate_entry(e) for e in entries]
+            new_entries = [validate_entry(e) for e in entries]
+        if ready_times and (self.ready_time if ready_time is None else bool(ready_time)):
+            check_unplug_times(new_entries, ready_times, provider)
+        self.entries = new_entries
         if enabled is not None:
             self.schedule_enabled = bool(enabled)
         if ready_time is not None:

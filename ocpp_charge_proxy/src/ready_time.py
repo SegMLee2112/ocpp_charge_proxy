@@ -56,6 +56,27 @@ def allowed_times(entity: Optional[dict]) -> list[str]:
     return list(DEFAULT_TIMES)
 
 
+def describe_times(allowed: list[str]) -> str:
+    """"on the hour or half hour", "04:00 to 11:00 on the hour or half hour"..."""
+    if set(allowed) == set(ALL_DAY_TIMES):
+        return "on the hour or half hour"
+    if set(allowed) == {t for t in ALL_DAY_TIMES if allowed[0] <= t <= allowed[-1]}:
+        return f"from {allowed[0]} to {allowed[-1]}, on the hour or half hour"
+    return "one of " + ", ".join(allowed)
+
+
+def check_unplug_times(entries: list[dict], allowed: list[str], provider: str = "your supplier") -> None:
+    """While the schedule sets the ready time, every unplug must be a time the
+    supplier accepts. Raises ValueError naming the ones that aren't."""
+    bad = sorted({e["time"] for e in entries if e.get("enabled", True) and e["action"] == "unplug"
+                  and e["time"] not in allowed})
+    if bad:
+        raise ValueError(
+            f"The schedule sets {provider}'s ready time, which must be {describe_times(allowed)}: "
+            f"change the unplug time{'s' if len(bad) > 1 else ''} {', '.join(bad)}"
+        )
+
+
 def pick_ready_time(now: datetime.datetime, unplug: datetime.datetime,
                     allowed: list[str]) -> Optional[datetime.datetime]:
     """The latest allowed time of day after `now` and at or before `unplug`."""

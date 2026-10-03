@@ -128,3 +128,34 @@ def test_ha_link_sets_the_entity():
     assert sent[-1]["service"] == "select_option" and sent[-1]["service_data"] == {"option": "09:00"}
     link.dispatch_entities = []
     assert "wasn't found" in _run(link.set_ready_time(unplug))["error"]
+
+
+def test_unplug_times_limited_while_setting_the_ready_time():
+    import pytest
+    from src.ready_time import check_unplug_times, describe_times
+    assert describe_times(ALL_DAY_TIMES) == "on the hour or half hour"
+    assert describe_times(DEFAULT_TIMES) == "from 04:00 to 11:00, on the hour or half hour"
+    entries = [{"time": "23:30", "action": "plug", "enabled": True},  # plug times aren't limited
+               {"time": "07:15", "action": "unplug", "enabled": True},
+               {"time": "12:00", "action": "unplug", "enabled": True},
+               {"time": "03:10", "action": "unplug", "enabled": False}]  # off: ignored
+    check_unplug_times(entries[:1], DEFAULT_TIMES)
+    try:
+        check_unplug_times(entries, DEFAULT_TIMES, "EDF Energy")
+        raise AssertionError("should have refused")
+    except ValueError as err:
+        assert "07:15, 12:00" in str(err) and "EDF Energy" in str(err)
+    with pytest.raises(ValueError):
+        check_unplug_times(entries, ALL_DAY_TIMES)  # 07:15 isn't on the half hour
+    check_unplug_times([entries[0], {**entries[2]}], ALL_DAY_TIMES)  # Octopus: 12:00 is fine
+
+    a = Automation(None)
+    good = [{"time": "23:30", "action": "plug"}, {"time": "07:00", "action": "unplug"}]
+    a.set_schedule(entries=good + [{"time": "07:15", "action": "unplug"}])  # ready time off: anything goes
+    with pytest.raises(ValueError):
+        a.set_schedule(ready_time=True, ready_times=DEFAULT_TIMES)  # turning it on checks the saved times
+    assert a.ready_time is False and len(a.entries) == 3  # nothing changed
+    a.set_schedule(entries=good, ready_time=True, ready_times=DEFAULT_TIMES)
+    with pytest.raises(ValueError):
+        a.set_schedule(entries=good + [{"time": "12:00", "action": "unplug"}], ready_times=DEFAULT_TIMES)
+    assert len(a.entries) == 2
