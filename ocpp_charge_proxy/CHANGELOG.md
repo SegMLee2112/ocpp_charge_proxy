@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.1
+
+- The History chart no longer writes "Session start" / "Session end" on
+  the chart (they overlapped when sessions were close together). The
+  dotted lines stay; hover near one to see which it is and when.
+
 ## 2.2.0
 
 - **History chart: 12h, 24h and 14d views.** The 10-second readings are now

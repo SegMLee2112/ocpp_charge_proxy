@@ -942,13 +942,12 @@ function drawChart() {
     if (st && st >= t0 && st <= now) marks.push([st, 'start']);
     if (sp && sp >= t0 && sp <= now) marks.push([sp, 'stop']);
   }
-  ctx.font = '10px Roboto, sans-serif'; ctx.textBaseline = 'top';
-  for (const [t, kind] of marks) {
+  // Dotted lines only (labels overlapped when sessions were close together);
+  // hovering near one names it in the tooltip
+  for (const [t] of marks) {
     const xx = Math.round(x(t)) + 0.5;
     ctx.strokeStyle = text2; ctx.setLineDash([2, 3]); ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(xx, T); ctx.lineTo(xx, T + ph); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = text2; ctx.textAlign = kind === 'start' ? 'left' : 'right';
-    ctx.fillText(kind === 'start' ? ' Session start' : 'Session end ', xx, T + 2);
   }
   ctx.font = '11px Roboto, sans-serif';
   for (const l of defs.lines) {
@@ -978,7 +977,7 @@ function drawChart() {
     flush();
   }
   ctx.setLineDash([]);
-  chart.geom = {x, y, t0, L, pw, data, defs, every, isLong};
+  chart.geom = {x, y, t0, L, pw, data, defs, every, isLong, marks};
   $('chart-legend').innerHTML = defs.lines.map((l) => `<span><i class="${l.dash ? 'dash' : ''}" style="border-color:${l.color}"></i>${esc(l.name)}</span>`).join('') +
     [['--ok', 'Charging'], ['--warn', 'Paused'], ['--info', 'Waiting for a session']].map(([v, n]) =>
       `<span><b class="band" style="background:${cssVar(v)}"></b>${n}</span>`).join('');
@@ -1001,7 +1000,9 @@ $('chart-wrap').addEventListener('mousemove', (e) => {
     + (g.isLong ? ' <span class="muted">2-min average</span>' : '') + '<br>' + g.defs.lines.map((l) => {
     const v = l.get(best); return `${esc(l.name)}: ${v == null ? '—' : fmtAxis(Math.round(v * 100) / 100) + ' ' + g.defs.unit}`;
   }).join('<br>') + (g.isLong && chart.series === 'power' && best.power_max_kw != null ? `<br>Peak: ${fmtAxis(Math.round(best.power_max_kw * 100) / 100)} kW` : '')
-    + `<br><span class="muted">${esc(best.state)}</span>`;
+    + `<br><span class="muted">${esc(best.state)}</span>`
+    + g.marks.filter(([mt]) => Math.abs(g.x(mt) - mx) <= 6).map(([mt, kind]) =>
+      `<br><b>Session ${kind === 'start' ? 'start' : 'end'}</b> <span class="muted">${new Date(mt * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</span>`).join('');
   tip.style.display = 'block';
   const left = Math.min(Math.max(g.x(best.t) + 10, 0), rect.width - tip.offsetWidth - 4);
   tip.style.left = left + 'px'; tip.style.top = '8px';
