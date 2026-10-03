@@ -112,8 +112,9 @@ comes back.
   unplug, or if the supplier's ready time was changed (e.g. in its app)
   from the one the schedule set. The check starts 5 minutes after the
   plug-in, to give the supplier time to plan, and follows the plan as it
-  changes. A mismatch shows on the Schedule tab (with the slots), as a red
-  chip on the Overview, and in the log.
+  changes. The result shows on the Overview's Smart charging card and the
+  Schedule tab (with the slots); a mismatch also as a red chip on the
+  Overview, and in the log.
 - **Auto re-plug** (**Settings** tab): Octopus sometimes doesn't start a session after you plug
   in. When Plugged In has been on for the set minutes (default 10) with no
   session and the add-on is connected, it unplugs, waits 30 seconds and

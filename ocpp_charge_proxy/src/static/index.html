@@ -296,6 +296,8 @@
       <div class="card">
         <h2>Smart charging<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400" id="sc-provider"></span></h2>
         <div id="sc-body"><div class="empty">Looking for your supplier's integration…</div></div>
+        <div id="sc-check"></div>
+        <div id="sc-src"></div>
       </div>
     </div>
 
@@ -771,6 +773,7 @@ function renderState(s) {
   const rp = s.replug || {};
   if (s.unplug_pending) chips.push(`<span class="chip warn" title="Giving your supplier time to stop the session first">Unplugging by ${new Date(s.unplug_pending).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'})}</span>`);
   const pc = s.plan_check;
+  drawSmartCheck(pc);
   if (pc && pc.status === 'error') chips.push(`<span class="chip err" title="${esc(pc.problems.join('\n'))}">Supplier plan doesn't match the schedule</span>`);
   if (activeTab === 'automation') drawPlanCheck(pc);
   if (rp.status === 'waiting' && rp.next_replug_at) chips.push(`<span class="chip warn">Re-plug ${hm(rp.next_replug_at)} if no session</span>`);
@@ -1134,6 +1137,21 @@ async function refreshSmart(force) {
 function providerColor(name) {
   return {'Octopus Energy': '#8e24aa', 'EDF Energy': '#f9a825', 'E.ON Next': '#e53935'}[name] || cssVar('--primary');
 }
+function drawSmartCheck(pc) {
+  const el = $('sc-check'); if (!el) return;
+  if (!pc || !(smart.data && smart.data.found)) { el.innerHTML = ''; return; }
+  const t = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '—';
+  const span = `${t(pc.start)}–${t(pc.end)}`;
+  const line = {
+    waiting: `<span class="chip">Checking at ${t(pc.check_at)}</span> <span class="muted">against your schedule (plugged in ${span})</span>`,
+    none: `<span class="chip">No slots yet</span> <span class="muted">to check against your schedule before ${t(pc.until)}</span>`,
+    ok: `<span class="chip ok">Matches your schedule</span> <span class="muted">Slots up to ${t(pc.until)} are inside ${span}</span>`,
+    error: `<span class="chip err">Doesn't match your schedule</span> <span class="muted">Plugged in ${span}</span>`,
+  }[pc.status] || '';
+  const problems = (pc.problems || []).map((p) => `<div class="sub" style="color:var(--err)">${esc(p)}</div>`).join('');
+  el.innerHTML = `<div style="margin-top:12px"><span class="label">Schedule check</span> <a class="muted" style="font-size:12px" href="#schedule">Schedule tab</a></div>
+    <div style="margin-top:4px">${line}</div>${problems}`;
+}
 function drawStateSub() {
   const s = state || {}, d = smart.data;
   let text = '';
@@ -1157,20 +1175,24 @@ function drawSmart() {
   const d = smart.data; if (!d) return;
   $('sc-provider').textContent = d.found ? d.provider : '';
   if (!d.found) {
+    $('sc-src').innerHTML = '';
     $('sc-body').innerHTML = `<div class="empty">Smart charging information not found</div>
       <div class="sub">${d.error ? esc(d.error) : 'Install your supplier\'s Home Assistant integration (Octopus Energy, EDF Energy or E.ON Next) to see the charge slots it plans.'}</div>`;
     return;
   }
-  const now = d.current
-    ? `<span class="chip ok">Slot now</span> <span class="muted">until ${new Date(d.current.end).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</span>`
+  const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+  const c = d.current;
+  const now = c
+    ? `<span class="chip ok">Slot now</span> <span>${t(c.start)}–${t(c.end)}</span>${c.charge_kwh != null
+        ? ` <span class="muted">· ${num(Math.abs(c.charge_kwh), 1)} kWh</span>` : ''} <span class="muted">· ends in ${dur((new Date(c.end) - Date.now()) / 1000)}</span>`
     : '<span class="chip">No slot right now</span>';
   const next = d.planned.length
     ? d.planned.slice(0, 4).map((s) => `<div style="margin-top:4px">${slotText(s)}</div>`).join('')
       + (d.planned.length > 4 ? `<div class="sub">and ${d.planned.length - 4} more</div>` : '')
-    : '<div class="muted" style="margin-top:4px">None planned yet</div>';
+    : `<div class="muted" style="margin-top:4px">${c ? 'Nothing more planned after this slot' : 'None planned yet'}</div>`;
   $('sc-body').innerHTML = `<div class="row">${now}</div>
-    <div style="margin-top:12px"><span class="label">Planned</span>${d.planned_kwh != null ? ` <span class="muted" style="font-size:12px">· ${num(Math.abs(d.planned_kwh), 1)} kWh</span>` : ''}</div>${next}
-    <div class="sub" style="margin-top:10px;overflow-wrap:anywhere">From <code>${esc(d.entity_id)}</code>${d.others && d.others.length ? ` (also found: ${d.others.map(esc).join(', ')})` : ''}</div>`;
+    <div style="margin-top:12px"><span class="label">${c ? 'After this slot' : 'Planned'}</span>${d.planned_kwh != null ? ` <span class="muted" style="font-size:12px">· ${num(Math.abs(d.planned_kwh), 1)} kWh</span>` : ''}</div>${next}`;
+  $('sc-src').innerHTML = `<div class="sub" style="margin-top:10px;overflow-wrap:anywhere">From <code>${esc(d.entity_id)}</code>${d.others && d.others.length ? ` (also found: ${d.others.map(esc).join(', ')})` : ''}</div>`;
 }
 
 // ---------- zoom: drag across the chart, or scroll over it ----------

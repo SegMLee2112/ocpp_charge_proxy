@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.10.3
+
+- Smart charging card: the slot running now shows its start and end, the
+  energy planned for it and when it ends. Below it, "After this slot" (was
+  "Planned", which read "None planned yet" while a slot was running)
+- Smart charging card: the schedule check (Force schedule on supplier):
+  matches / doesn't match / checking, with what's wrong, and a link to the
+  Schedule tab
+
 ## 2.10.2
 
 - Octopus / EDF: the slot running now and the next slots come from the
