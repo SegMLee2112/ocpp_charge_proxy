@@ -196,6 +196,9 @@
   .week .track { position: relative; height: 18px; background: var(--hover); border-radius: 4px; overflow: hidden; }
   .week .seg { position: absolute; top: 0; bottom: 0; background: var(--primary); opacity: .8; }
   .week .seg.off { opacity: .35; }
+  .week .seg.linked { box-shadow: inset 0 0 0 2px var(--text2); }
+  .week .sup { position: absolute; top: 0; bottom: 0; box-sizing: border-box; border: 2px solid; border-radius: 4px;
+    pointer-events: none; }
   .sched input.bad { border-color: var(--err); color: var(--err); }
   .week .now { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--err); }
   .week .axis { grid-column: 2; display: flex; justify-content: space-between; font-size: 10px; color: var(--text2); }
@@ -434,7 +437,7 @@
       <h2>Next 7 days<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400" id="w-note"></span></h2>
       <div class="week" id="w-grid"></div>
       <div class="sub" id="w-warn" hidden style="margin-top:10px"></div>
-      <div class="legend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px)"></b>Skipped</span><span class="hint">Click a slot to skip it once</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span></div>
+      <div class="legend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span id="w-sup-legend" hidden><b class="band" id="w-sup-swatch" style="background:transparent;border:2px solid;box-sizing:border-box"></b><span id="w-sup-label"></span></span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px)"></b>Skipped</span><span class="hint">Click a slot to skip it once</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span></div>
     </div>
   </section>
 
@@ -521,9 +524,13 @@
         <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_plug_entity" data-domain="sensor" data-class="battery" data-units="%" data-none="Reporting SoC sensor"></span></div>
         <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
           <div class="grow">Automatically adjust schedule to fit auto plug-in
-            <div class="note" style="margin:0">When auto plug-in plugs in, add the charge to the schedule as a one-off:
-              unplug at the first ready time your supplier accepts after the hours below, and set the supplier's ready time to it.
-              If that meets a scheduled slot they become one; with Octopus and Force schedule on supplier on, if it takes the day over 6 hours, the next slot starts that much later.</div></div>
+            <div class="note" style="margin:0">When auto plug-in plugs in, add the charge to the schedule as a one-off that unplugs when it's done,
+              and set your supplier's ready time to that unplug. If it meets a scheduled slot they become one.
+              <br><b>Octopus Energy:</b> unplugs after the hours below (rounded up to the half hour); with Force schedule on supplier on,
+              if that takes the day over 6 hours, the next scheduled slot starts that much later.
+              <br><b>EDF Energy:</b> ready times can only be 04:00–11:00, so it unplugs at the first of those after the hours below
+              (e.g. plugging in at 18:00 for 3 hours unplugs at 04:00 the next morning).
+              <br><b>E.ON Next:</b> unplugs after the hours below (rounded up to the half hour); its integration has no ready time, so none is set.</div></div>
           <label class="switch"><input type="checkbox" id="sim-auto-ready" aria-label="Automatically adjust schedule to fit auto plug-in"><span></span></label>
         </div>
         <div class="row" id="sim-auto-hours-row">
@@ -1144,6 +1151,7 @@ async function refreshSmart(force) {
   smart.at = Date.now();
   try { smart.data = await api('smart_charging'); } catch (e) { return; }
   drawSmart(); drawStateSub(); drawChart();
+  if (auto.data) drawWeek();
 }
 // Each supplier's slots in its own colour on the chart
 function providerColor(name) {
@@ -1699,6 +1707,7 @@ async function refreshAutomation(force) {
   $('a-sched-on').checked = d.schedule.enabled;
   $('a-ready-on').checked = !!d.schedule.ready_time;
   if (!smart.data) refreshSmart(true).then(() => { drawReadyStatus(auto.data); if (!auto.dirty) drawEntries(); else drawWeek(); });
+  else refreshSmart(false);  // the supplier's slots on the week view
   drawReadyStatus(d);
   const n = d.schedule.next;
   $('a-next').innerHTML = !d.schedule.enabled ? 'The schedule is off.' :
@@ -1737,13 +1746,11 @@ function drawPlanCheck(pc) {
   const head = {
     waiting: `<span class="chip">Checking at ${t(pc.check_at)}</span> <span class="muted">Giving your supplier a few minutes to plan (plugged in ${span})</span>`,
     none: `<span class="chip">No slots yet</span> <span class="muted">Nothing planned before ${t(pc.until)} (plugged in ${span})</span>`,
-    ok: `<span class="chip ok">Matches</span> <span class="muted">Every slot up to ${t(pc.until)} is inside ${span}</span>`,
+    ok: `<span class="chip ok">Matches</span> <span class="muted">${esc(pc.provider || 'Your supplier')}'s slots are shown with a coloured border on the schedule below</span>`,
     error: `<span class="chip err">Doesn't match</span> <span class="muted">Plugged in ${span}, checked up to ${t(pc.until)}</span>`,
   }[pc.status] || '';
   const problems = (pc.problems || []).map((p) => `<div class="sub" style="color:var(--err)">${esc(p)}</div>`).join('');
-  const slots = (pc.slots || []).length ? `<div class="plan-slots">${pc.slots.map((sl) =>
-    `<span class="chip ${sl.ok ? '' : 'err'}">${t(sl.start)}–${t(sl.end)}</span>`).join('')}</div>` : '';
-  el.innerHTML = head + problems + slots;
+  el.innerHTML = head + problems;
 }
 $('a-wait').addEventListener('change', async (e) => {
   const v = parseInt(e.target.value, 10);
@@ -1777,12 +1784,16 @@ function setDirty(v) {
 // the next "unplug" time, carrying over midnight and the end of the week.
 function drawWeek() {
   const on = auto.data ? auto.data.schedule.enabled : false;
-  // In your supplier's colour when the schedule sets its ready time
+  // Grey outline when the schedule sets the supplier's ready time; the
+  // supplier's planned slots as outlines in its colour
   const sc = smart.data && smart.data.found ? smart.data : null;
   const linked = sc && auto.data && auto.data.schedule.ready_time;
-  const segStyle = linked ? `background:${providerColor(sc.provider)};` : '';
-  $('w-swatch').style.background = linked ? providerColor(sc.provider) : 'var(--primary)';
+  const segStyle = '';
+  $('w-swatch').style.boxShadow = linked ? 'inset 0 0 0 2px var(--text2)' : '';
   $('w-label').textContent = linked ? `Plugged in by the schedule, ready time sent to ${sc.provider}` : 'Plugged in by the schedule';
+  const supColor = sc ? providerColor(sc.provider) : null;
+  $('w-sup-legend').hidden = !sc;
+  if (sc) { $('w-sup-swatch').style.borderColor = supColor; $('w-sup-label').textContent = `Planned by ${sc.provider}`; }
   const {events, segs, skippedSegs, worst, badSegs, over, today: day0} = weekPlan();
   week.segs = segs; week.skipped = skippedSegs; week.day0 = day0;
   const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
@@ -1796,11 +1807,16 @@ function drawWeek() {
     };
     const picked = (a) => week.picked && week.picked.start === a ? 'picked' : '';
     const bars = segs.map((sg, k) => [sg, k]).filter(([[a, b]]) => b > lo && a < hi).map(([[a, b], k]) =>
-      bar(a, b, `data-start="${a}" data-day="${d}"`, `${on ? '' : 'off'} ${picked(a)}`,
+      bar(a, b, `data-start="${a}" data-day="${d}"`, `${on ? '' : 'off'} ${linked ? 'linked' : ''} ${picked(a)}`,
         badSegs.has(k) ? 'background:var(--err);' : segStyle, badSegs.has(k) ? ' (over Octopus\'s 6 hours a day)' : '')).join('')
       + skippedSegs.filter(([a, b]) => b > lo && a < hi).map(([a, b]) =>
         bar(a, b, `data-start="${a}" data-day="${d}"`, `skip ${picked(a)}`, '', ' (skipped)')).join('');
-    html += `<div class="dl ${d === 0 ? 'today' : ''}">${d === 0 ? 'Today' : dayLabel(d)}</div><div class="track">${bars}${d === 0 ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
+    const sup = (sc ? sc.periods || [] : []).map((p) => [(new Date(p.start) - day0) / 60000, (new Date(p.end) - day0) / 60000])
+      .filter(([a, b]) => b > lo && a < hi).map(([a, b]) => {
+        const x0 = (Math.max(a, lo) - lo) / 14.4, x1 = (Math.min(b, hi) - lo) / 14.4;
+        return `<div class="sup" style="border-color:${supColor};left:${x0}%;width:${x1 - x0}%" title="Planned by ${esc(sc.provider)}: ${hhmm(Math.max(a, lo) - lo)}–${hhmm(Math.min(b, hi) - lo)}"></div>`;
+      }).join('');
+    html += `<div class="dl ${d === 0 ? 'today' : ''}">${d === 0 ? 'Today' : dayLabel(d)}</div><div class="track">${bars}${sup}${d === 0 ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
     if (week.picked && week.picked.day === d) html += '<div class="slot-pop" id="w-pop"></div>';
   }
   html += '<div></div><div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';

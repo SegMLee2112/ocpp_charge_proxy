@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.12.5
+
+- Schedule tab, Next 7 days: your supplier's planned slots are shown as
+  outlines in its colour (Octopus purple, EDF yellow, E.ON red). The
+  schedule's own slots stay blue; with Force schedule on supplier on they
+  get a grey outline (instead of turning the supplier's colour)
+- Supplier's plan check: "Matches" now says the supplier's slots are shown
+  with a coloured border below (the list of slots is gone)
+- Auto plug-in: the "Automatically adjust schedule" text explains what
+  happens with Octopus, EDF (ready times 04:00-11:00) and E.ON (no ready
+  time)
+
 ## 2.12.4
 
 - Continuing a session after a restart now restores its charging profile:
