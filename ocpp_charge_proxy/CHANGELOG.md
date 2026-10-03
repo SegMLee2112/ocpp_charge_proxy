@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.6.1
+
+- The **Health** tab shows whether your supplier's smart charging
+  integration was found (Octopus Energy, EDF Energy or E.ON Next), which
+  sensor the add-on follows, any others found, and when it last looked
+  (it looks again every 10 minutes).
+
 ## 2.6.0
 
 - **Scheduled status.** While the car is plugged in and your supplier has a

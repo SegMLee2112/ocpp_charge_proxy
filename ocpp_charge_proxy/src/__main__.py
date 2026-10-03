@@ -215,6 +215,7 @@ async def run() -> None:
         info["server"] = config.server_hostname
         info["chargepoint_id"] = config.chargepoint_id
         info["home_assistant"] = {"available": ha_link.available, "connected": ha_link.connected, "error": ha_link.error}
+        info["smart_charging"] = ha_link.smart_charging_health()
         return info
 
     charts = ChartHistory(ha_link, soc_entity=lambda: ha_link.settings.get("soc_entity") or None, recent=history)

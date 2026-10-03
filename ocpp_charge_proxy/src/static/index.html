@@ -1749,6 +1749,15 @@ async function refreshHealth() {
     ['Sensor link', !h.home_assistant ? '—' : !h.home_assistant.available ? '<span class="chip err">Not available</span>'
       : h.home_assistant.connected ? '<span class="chip ok">Connected</span>' : `<span class="chip warn">Not connected</span><div class="sub">${esc(h.home_assistant.error || '')}</div>`],
     ['Power source', state ? (state.power_source === 'entity' ? 'Your power sensor' : 'Simulated') : '—'],
+    ['Smart charging', (() => {
+      const sc = h.smart_charging;
+      if (!sc) return '—';
+      const when = sc.searched ? `Last looked ${ago(sc.searched)}, again every ${Math.round(sc.search_every_s / 60)} min` : 'Not looked yet (waiting for Home Assistant)';
+      return sc.found
+        ? `<span class="chip ok">${esc(sc.provider)}</span><div class="sub" style="overflow-wrap:anywhere"><code>${esc(sc.entity_id)}</code>`
+          + (sc.others && sc.others.length ? `<br>Also found: ${sc.others.map((e) => `<code>${esc(e)}</code>`).join(', ')}` : '') + `<br>${when}</div>`
+        : `<span class="chip">Not found</span><div class="sub">No Octopus Energy, EDF Energy or E.ON Next smart charging sensor in Home Assistant. ${when}.</div>`;
+    })()],
   ]);
   const held = h.held_messages || [];
   $('h-held').innerHTML = held.length

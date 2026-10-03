@@ -134,6 +134,7 @@ class HaLink:
         # first is followed live with the other entities
         self.dispatch_entities: list[str] = []
         self._dispatch_searched = 0.0
+        self.dispatch_searched_at: Optional[float] = None  # wall clock, for the Health tab
         self._call = None  # websocket request function while connected
         self._reset_logic()
         self._load()
@@ -509,6 +510,7 @@ class HaLink:
     async def _find_dispatch_sensor(self, call) -> bool:
         """Look for a supplier's dispatching sensor. True if what's found changed."""
         self._dispatch_searched = time.monotonic()
+        self.dispatch_searched_at = time.time()
         try:
             states = await call({"type": "get_states"}, timeout=30) or []
         except Exception as err:
@@ -536,6 +538,19 @@ class HaLink:
         if info.get("found"):
             info["others"] = self.dispatch_entities[1:]
         return info
+
+    def smart_charging_health(self) -> dict:
+        """For the Health tab: which supplier integration was found, and when it was looked for."""
+        info = self.smart_charging()
+        return {
+            "found": bool(info.get("found")),
+            "provider": info.get("provider"),
+            "entity_id": info.get("entity_id"),
+            "others": self.dispatch_entities[1:],
+            "searched": None if self.dispatch_searched_at is None else time.strftime(
+                "%Y-%m-%dT%H:%M:%SZ", time.gmtime(self.dispatch_searched_at)),
+            "search_every_s": DISPATCH_SEARCH_S,
+        }
 
     def scheduled(self) -> Optional[bool]:
         """True if your supplier has a charge slot running or planned; None if
