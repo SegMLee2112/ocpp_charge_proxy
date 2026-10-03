@@ -156,7 +156,7 @@ def test_chart_history_kept_across_restarts(tmp_path):
     history.save()
     again = PowerHistory(clock=lambda: now[0], data_dir=str(tmp_path))
     assert [s["power_kw"] for s in again.since(0)] == [1.4]
-    now[0] += 7 * 3600  # older than the chart window: dropped
+    now[0] += 25 * 3600  # older than the 10 s window: dropped
     assert PowerHistory(clock=lambda: now[0], data_dir=str(tmp_path)).since(0) == []
 
 
@@ -192,3 +192,58 @@ def test_daily_energy_filled_in_from_sessions(tmp_path):
     daily.update(6625.83)  # 6 kWh metered today: more than the sessions
     assert daily.snapshot(1, sessions)[0]["kwh"] == 6.0
 
+
+
+def test_long_history_averages_two_minutes():
+    from src.gui_data import LONG_SAMPLE_S
+    now = [1_200_000.0]  # the start of a 2-minute slot
+    history = PowerHistory(clock=lambda: now[0])
+    state = SharedState(power_kw=0.0, state="Preparing")
+    for i in range(LONG_SAMPLE_S // 10 + 1):  # one full slot, then the next begins
+        state.power_kw = 7.0 if i == 3 else 1.0
+        state.state = "Charging" if i == 3 else "Preparing"
+        history.sample(state)
+        now[0] += 10
+    (avg,) = history.long_since(0)
+    assert avg["t"] == 1_200_000.0 + LONG_SAMPLE_S / 2
+    assert avg["power_kw"] == round((11 * 1.0 + 7.0) / 12, 3)
+    assert avg["power_max_kw"] == 7.0
+    assert avg["state"] == "Charging"  # the most telling state in the slot
+    assert history.long_since(avg["t"]) == []
+
+
+def test_long_history_kept_and_filled_in_from_short(tmp_path):
+    now = [1_200_000.0]
+    history = PowerHistory(clock=lambda: now[0], data_dir=str(tmp_path))
+    for _ in range(30):  # 5 minutes: two full slots and part of a third
+        history.sample(SharedState(power_kw=2.0))
+        now[0] += 10
+    history.save()
+    assert len(history.long_since(0)) == 2
+    # The slot in progress at the stop is filled in from the 10 s samples
+    again = PowerHistory(clock=lambda: now[0], data_dir=str(tmp_path))
+    assert len(again.long_since(0)) == 2
+    again.sample(SharedState(power_kw=2.0))
+    now[0] += 120
+    again.sample(SharedState(power_kw=2.0))
+    assert len(again.long_since(0)) == 3
+    # Kept for 14 days, after the 10 s samples have gone
+    again.save()
+    now[0] += 3 * 86400
+    later = PowerHistory(clock=lambda: now[0], data_dir=str(tmp_path))
+    assert later.since(0) == [] and len(later.long_since(0)) == 3
+    now[0] += 12 * 86400
+    assert PowerHistory(clock=lambda: now[0], data_dir=str(tmp_path)).long_since(0) == []
+
+
+def test_long_history_built_from_old_short_history(tmp_path):
+    """First start after updating: the 10 s history already on disk is averaged."""
+    import json
+    samples = [{"t": 1_200_000.0 + i * 10, "power_kw": 3.0, "current_a": 13.0, "soc": None,
+                "max_amps": 16, "effective_amps": 13, "provider_limit_amps": None, "state": "Charging"}
+               for i in range(36)]
+    (tmp_path / "history.json").write_text(json.dumps(samples))
+    history = PowerHistory(clock=lambda: 1_200_400.0, data_dir=str(tmp_path))
+    assert [s["power_kw"] for s in history.long_since(0)] == [3.0, 3.0]
+    history.save()
+    assert (tmp_path / "history_long.json").exists()

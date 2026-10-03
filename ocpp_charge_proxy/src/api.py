@@ -295,14 +295,17 @@ async def handle_sessions(request: web.Request) -> web.Response:
 
 
 async def handle_history(request: web.Request) -> web.Response:
-    """Chart samples newer than ?since=<unix time>."""
+    """Chart samples newer than ?since=<unix time>.
+
+    ?resolution=long: the 2-minute averages kept for 14 days instead of the
+    10-second samples kept for 24 hours."""
     gui = request.app["gui"]
     if gui is None:
         return _gui_unavailable()
-    return web.json_response(
-        {"samples": gui.history.since(_number_param(request, "since", 0)), "now": time.time()},
-        dumps=_dumps,
-    )
+    since = _number_param(request, "since", 0)
+    long = request.query.get("resolution") == "long"
+    samples = gui.history.long_since(since) if long else gui.history.since(since)
+    return web.json_response({"samples": samples, "now": time.time()}, dumps=_dumps)
 
 
 async def handle_energy_daily(request: web.Request) -> web.Response:
@@ -336,7 +339,7 @@ async def handle_health(request: web.Request) -> web.Response:
 
 
 def _dumps(data) -> str:
-    return json.dumps(data, default=str)
+    return json.dumps(data, default=str, separators=(",", ":"))
 
 
 # --- Schedule and auto re-plug ----------------------------------------------

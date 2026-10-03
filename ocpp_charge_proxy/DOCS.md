@@ -168,7 +168,7 @@ follows your Home Assistant theme.
 
 - **Overview:** state, power, current, SoC and energy; the current session;
   and a chart of power, current (with your max and the provider limit) or
-  SoC over the last 30 minutes to 6 hours.
+  SoC over the last 30 minutes to 24 hours, or 14 days.
 - **Header:** a health dot left of the title (green / amber / red) that
   opens the Health tab.
 - **Sessions:** energy per day for the last 14 days, and the last 20 charging sessions (energy, duration, peak

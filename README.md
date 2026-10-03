@@ -122,7 +122,7 @@ sensors live through Home Assistant's API.
   - **Overview:** state, power, current, SoC and energy; the current
     session; and a chart (shaded by state, with session start/end marked,
     kept across restarts) of power, current (with your max and the provider limit) or
-    SoC over the last 30 minutes to 6 hours.
+    SoC over the last 30 minutes to 24 hours, or 14 days.
   - **Sessions:** energy per day for the last 14 days; the last 20 charging
     sessions (energy, duration, peak power, what ended them, transaction ID
     and ID tag, with details and the power curve on click), and plug-ins that

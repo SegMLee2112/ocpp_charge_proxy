@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.2.0
+
+- **History chart: 12h, 24h and 14d views.** The 10-second readings are now
+  kept for 24 hours (was 6), and 2-minute averages, with each one's peak,
+  for 14 days. The 14d view uses the averages; hover over it for the peak.
+  The time axis shows days on the longer views.
+- **Power curves for older sessions.** Opening a session on the Sessions
+  tab shows its power curve for any session in the last 14 days (was 6
+  hours). Sessions from the last day use the 10-second readings; older ones
+  the 2-minute averages.
+- The **Hide Heartbeat** / **Hide MeterValues** (Messages) and **Set by
+  provider only** (Provider) tick boxes are remembered in your browser, so
+  they stay as you left them after a reload or restart. **Pause** is not
+  remembered.
+- The 14-day averages are saved in history_long.json in the add-on's data
+  folder (about 1–2 MB when full). On the first start after updating it's
+  filled in from the history already kept, so the 14d view starts with the
+  last 6 hours and grows from there.
+
 ## 2.1.8
 
 - The web page is no longer cached by the browser, so an update shows

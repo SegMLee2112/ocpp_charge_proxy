@@ -27,7 +27,12 @@ logger = logging.getLogger(__name__)
 MESSAGE_LOG_SIZE = 300
 SESSION_HISTORY_SIZE = 20
 HISTORY_SAMPLE_S = 10
-HISTORY_HOURS = 6
+HISTORY_HOURS = 24  # 10-second samples: the 30 min to 24 h chart views
+LONG_SAMPLE_S = 120  # 2-minute averages: the 14-day view and older session curves
+LONG_DAYS = 14
+
+# Which state a 2-minute average shows when it saw several (most telling first)
+_STATE_RANK = ("Charging", "SuspendedEV", "SuspendedEVSE", "Finishing", "Preparing")
 
 
 def _now_iso() -> str:
@@ -350,30 +355,87 @@ def _read_json(path: str):
 
 
 class PowerHistory:
-    """Samples every HISTORY_SAMPLE_S seconds for the last HISTORY_HOURS hours.
+    """The chart's samples, in two resolutions.
 
-    With a data_dir the samples are kept in history.json across restarts
-    (saved by persist_loop every few minutes and at shutdown).
+    - every HISTORY_SAMPLE_S seconds for the last HISTORY_HOURS hours
+    - LONG_SAMPLE_S averages (with the peak) for the last LONG_DAYS days
+
+    With a data_dir both are kept across restarts (history.json and
+    history_long.json, saved by persist_loop every few minutes and at
+    shutdown).
     """
 
     def __init__(self, size: int = HISTORY_HOURS * 3600 // HISTORY_SAMPLE_S,
                  clock: Callable[[], float] = time.time, data_dir: Optional[str] = None) -> None:
         self._samples: deque[dict] = deque(maxlen=size)
+        self._long: deque[dict] = deque(maxlen=LONG_DAYS * 86400 // LONG_SAMPLE_S)
+        self._bucket: list[dict] = []  # 10 s samples of the 2-minute slot in progress
         self._clock = clock
         self._path = os.path.join(data_dir, "history.json") if data_dir else None
-        self._dirty = False
+        self._long_path = os.path.join(data_dir, "history_long.json") if data_dir else None
+        self._dirty = self._long_dirty = False
         if self._path:
+            now = self._clock()
             data = _read_json(self._path)
-            cutoff = self._clock() - HISTORY_HOURS * 3600
             if isinstance(data, list):
+                cutoff = now - HISTORY_HOURS * 3600
                 self._samples.extend(s for s in data if isinstance(s, dict) and s.get("t", 0) > cutoff)
+            data = _read_json(self._long_path)
+            if isinstance(data, list):
+                cutoff = now - LONG_DAYS * 86400
+                self._long.extend(s for s in data if isinstance(s, dict) and s.get("t", 0) > cutoff)
+            # Fill in 2-minute averages the long history hasn't got yet (e.g.
+            # the first start after updating, or the last minutes before a stop)
+            last = self._long[-1]["t"] if self._long else 0.0
+            newer = [s for s in self._samples if self._slot(s["t"]) * LONG_SAMPLE_S > last]
+            for sample in newer:
+                self._add_to_bucket(sample)
+            if newer:
+                self._long_dirty = True
+
+    @staticmethod
+    def _slot(t: float) -> int:
+        return int(t // LONG_SAMPLE_S)
+
+    def _add_to_bucket(self, entry: dict) -> None:
+        if self._bucket and self._slot(entry["t"]) != self._slot(self._bucket[0]["t"]):
+            self._long.append(self._average(self._bucket))
+            self._long_dirty = True
+            self._bucket = []
+        self._bucket.append(entry)
+
+    @staticmethod
+    def _average(samples: list[dict]) -> dict:
+        def mean(key, digits):
+            values = [s[key] for s in samples if s.get(key) is not None]
+            return round(sum(values) / len(values), digits) if values else None
+
+        last = samples[-1]
+        states = [str(s.get("state")) for s in samples]
+        state = next((st for rank in _STATE_RANK for st in states if st.endswith(rank)), states[-1])
+        return {
+            # the middle of the slot, so the line lines up with the 10 s one
+            "t": PowerHistory._slot(samples[0]["t"]) * LONG_SAMPLE_S + LONG_SAMPLE_S / 2,
+            "power_kw": mean("power_kw", 3),
+            "power_max_kw": max((s.get("power_kw") or 0.0) for s in samples),
+            "current_a": mean("current_a", 2),
+            "soc": last.get("soc"),
+            "max_amps": last.get("max_amps"),
+            "effective_amps": last.get("effective_amps"),
+            "provider_limit_amps": last.get("provider_limit_amps"),
+            "state": state,
+        }
 
     def save(self) -> None:
-        if not self._path or not self._dirty:
+        if not self._path:
             return
         try:
-            _write_json(self._path, list(self._samples))
-            self._dirty = False
+            if self._dirty:
+                _write_json(self._path, list(self._samples))
+                self._dirty = False
+            if self._long_dirty:
+                _write_json(self._long_path, list(self._long))
+                self._long_dirty = False
         except Exception:
             logger.warning("Could not save the chart history", exc_info=True)
 
@@ -389,11 +451,16 @@ class PowerHistory:
             "state": str(state.state),
         }
         self._samples.append(entry)
+        self._add_to_bucket(entry)
         self._dirty = True
         return entry
 
     def since(self, after: float = 0.0) -> list[dict]:
         return [s for s in self._samples if s["t"] > after]
+
+    def long_since(self, after: float = 0.0) -> list[dict]:
+        """2-minute averages (each with power_max_kw) newer than `after`."""
+        return [s for s in self._long if s["t"] > after]
 
 
 class DailyEnergy:
