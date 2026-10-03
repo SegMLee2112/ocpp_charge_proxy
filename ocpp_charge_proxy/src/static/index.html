@@ -992,7 +992,7 @@ function drawChart() {
   for (const p of slots) {
     const a = new Date(p.start).getTime() / 1000, b = new Date(p.end).getTime() / 1000;
     if (b < t0 || a > t1) continue;
-    ctx.globalAlpha = 0.85; ctx.fillStyle = cssVar('--primary');
+    ctx.globalAlpha = 0.85; ctx.fillStyle = providerColor(smart.data.provider);
     ctx.fillRect(x(a), T, Math.max(2, x(b) - x(a)), 4); ctx.globalAlpha = 1;
   }
   // Session start / stop markers
@@ -1044,7 +1044,7 @@ function drawChart() {
   $('chart-legend').innerHTML = defs.lines.map((l) => `<span><i class="${l.dash ? 'dash' : ''}" style="border-color:${l.color}"></i>${esc(l.name)}</span>`).join('') +
     [['--ok', 'Charging'], ['--warn', 'Paused'], ...(smart.data && smart.data.found ? [['--violet', 'Scheduled']] : []), ['--info', 'Waiting for a session']].map(([v, n]) =>
       `<span><b class="band" style="background:${cssVar(v)}"></b>${n}</span>`).join('') +
-    (smart.data && smart.data.found ? `<span><b class="band" style="background:${cssVar('--primary')};height:4px;vertical-align:top"></b>${esc(smart.data.provider)} slot</span>` : '') +
+    (smart.data && smart.data.found ? `<span><b class="band" style="background:${providerColor(smart.data.provider)};height:4px;vertical-align:top"></b>${esc(smart.data.provider)} slot</span>` : '') +
     '<span class="hint">Drag or scroll to zoom · double-click to reset</span>';
 }
 function niceMax(v) {
@@ -1091,6 +1091,10 @@ async function refreshSmart(force) {
   smart.at = Date.now();
   try { smart.data = await api('smart_charging'); } catch (e) { return; }
   drawSmart(); drawStateSub(); drawChart();
+}
+// Each supplier's slots in its own colour on the chart
+function providerColor(name) {
+  return {'Octopus Energy': '#8e24aa', 'EDF Energy': '#f9a825', 'E.ON Next': '#e53935'}[name] || cssVar('--primary');
 }
 function drawStateSub() {
   const s = state || {}, d = smart.data;

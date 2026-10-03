@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.6.2
+
+- Supplier slots on the History chart are drawn in the supplier's colour:
+  purple for Octopus Energy, yellow for EDF Energy, red for E.ON Next
+  (other suppliers: blue).
+
 ## 2.6.1
 
 - The **Health** tab shows whether your supplier's smart charging
