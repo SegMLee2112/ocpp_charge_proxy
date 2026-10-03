@@ -74,7 +74,7 @@ comes back.
   whole schedule on and off. Times are in your Home Assistant time zone. A
   time missed while the add-on was stopped isn't run later. Unplugging
   during a session ends the session.
-- **Ready time from the schedule** (**Automation** tab, off by default):
+- **Force schedule on supplier** (**Automation** tab, off by default):
   when the schedule plugs in, the add-on sets your supplier's smart
   charging ready-by time to the schedule's next unplug, for example plug in
   02:00 and unplug 04:00 sets 04:00; plug in 06:00 and unplug 08:00 sets

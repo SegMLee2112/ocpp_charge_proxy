@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.7.5
+
+- The Automation tab's "Set my supplier's ready time" switch is now called
+  **Force schedule on supplier**. It works the same.
+
 ## 2.7.4
 
 - Octopus's 6-hours-a-day limit only applies while **Set my supplier's
