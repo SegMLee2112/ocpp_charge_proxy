@@ -1675,48 +1675,62 @@ function drawWeek() {
   const segStyle = linked ? `background:${providerColor(sc.provider)};` : '';
   $('w-swatch').style.background = linked ? providerColor(sc.provider) : 'var(--primary)';
   $('w-label').textContent = linked ? `Plugged in by the schedule, ready time sent to ${sc.provider}` : 'Plugged in by the schedule';
-  const events = [];
-  for (const e of auto.entries) {
-    if (!e.enabled || !/^\d{2}:\d{2}$/.test(e.time)) continue;
-    const [h, m] = e.time.split(':').map(Number);
-    for (const d of e.days) events.push({t: d * 1440 + h * 60 + m, plug: e.action === 'plug'});
-  }
-  events.sort((a, b) => a.t - b.t);
-  const segs = [];  // [startMin, endMin] within 0..10080
-  if (events.length) {
-    let state = events[events.length - 1].plug, since = 0;
-    for (const ev of events) {
-      if (ev.plug !== state) { if (state) segs.push([since, ev.t]); state = ev.plug; since = ev.t; }
-    }
-    if (state) segs.push([since, 10080]);
-  }
+  const {events, segs, worst, badSegs, over} = weekPlan();
   const now = new Date(), today = (now.getDay() + 6) % 7, nowMin = now.getHours() * 60 + now.getMinutes();
   let html = '';
   for (let d = 0; d < 7; d++) {
     const lo = d * 1440, hi = lo + 1440;
-    const bars = segs.filter(([a, b]) => b > lo && a < hi).map(([a, b]) => {
+    const bars = segs.map((sg, k) => [sg, k]).filter(([[a, b]]) => b > lo && a < hi).map(([[a, b], k]) => {
       const x0 = (Math.max(a, lo) - lo) / 14.4, x1 = (Math.min(b, hi) - lo) / 14.4;
-      return `<div class="seg ${on ? '' : 'off'}" style="${segStyle}left:${x0}%;width:${x1 - x0}%" title="${DAYS[d]} ${hhmm(Math.max(a, lo) - lo)}–${hhmm(Math.min(b, hi) - lo)}"></div>`;
+      const style = badSegs.has(k) ? 'background:var(--err);' : segStyle;
+      return `<div class="seg ${on ? '' : 'off'}" style="${style}left:${x0}%;width:${x1 - x0}%" title="${DAYS[d]} ${hhmm(Math.max(a, lo) - lo)}–${hhmm(Math.min(b, hi) - lo)}${badSegs.has(k) ? ' (over Octopus\'s 6 hours a day)' : ''}"></div>`;
     }).join('');
     html += `<div class="dl ${d === today ? 'today' : ''}">${DAYS[d]}</div><div class="track">${bars}${d === today ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
   }
   html += '<div></div><div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';
   $('w-grid').innerHTML = html;
   $('w-note').textContent = !events.length ? 'No times set' : on ? (auto.dirty ? 'Preview of unsaved changes' : '') : 'Schedule is off: preview only';
-  // More than 6 hours plugged in within any 24 hours? (rolling, across midnight and the week's end)
+  $('w-warn').hidden = !over;
+  if (over) {
+    $('w-warn').innerHTML = `<span class="chip err">Over 6 hours</span> Plugged in for ${dur(worst.total * 60)} in the 24 hours from ${DAYS[Math.floor(worst.start / 1440) % 7]} ${hhmm(worst.start % 1440)}. `
+      + 'Octopus schedules at most 6 hours of smart charging in a day: shorten the times marked in red to save the schedule.';
+  }
+}
+// The schedule's plugged-in stretches over a week (minutes from Monday 00:00),
+// and with Octopus, which of them go over its 6 hours of smart charging a day
+const OCTOPUS_CAP_MIN = 360;
+function weekPlan() {
+  const events = [];
+  auto.entries.forEach((e, i) => {
+    if (!e.enabled || !/^\d{2}:\d{2}$/.test(e.time)) return;
+    const [h, m] = e.time.split(':').map(Number);
+    for (const d of e.days) events.push({t: d * 1440 + h * 60 + m, plug: e.action === 'plug', i});
+  });
+  events.sort((a, b) => a.t - b.t);
+  const segs = [];  // [startMin, endMin, plug entry, unplug entry] within 0..10080
+  if (events.length) {
+    const last = events[events.length - 1];
+    let state = last.plug, since = 0, from = last.i;
+    for (const ev of events) {
+      if (ev.plug !== state) { if (state) segs.push([since, ev.t, from, ev.i]); state = ev.plug; since = ev.t; from = ev.i; }
+    }
+    if (state) segs.push([since, 10080, from, null]);
+  }
+  // Most plugged-in minutes in any 24 hours (rolling, across midnight and the week's end)
   const all = segs.concat(segs.map(([a, b]) => [a + 10080, b + 10080]));
   let worst = null;
+  const badSegs = new Set();
+  const capped = smart.data && smart.data.found && smart.data.provider === 'Octopus Energy';
   for (const [a] of segs) {
-    const total = all.reduce((sum, [x, y]) => sum + Math.max(0, Math.min(y, a + 1440) - Math.max(x, a)), 0);
+    let total = 0;
+    const hit = [];
+    all.forEach(([x, y], k) => { const o = Math.max(0, Math.min(y, a + 1440) - Math.max(x, a)); if (o) { total += o; hit.push(k % segs.length); } });
     if (!worst || total > worst.total) worst = {start: a, total};
+    if (capped && total > OCTOPUS_CAP_MIN) hit.forEach((k) => badSegs.add(k));
   }
-  // Octopus only schedules up to 6 hours of smart charging a day
-  const warn = worst && worst.total > 360 && sc && sc.provider === 'Octopus Energy';
-  $('w-warn').hidden = !warn;
-  if (warn) {
-    $('w-warn').innerHTML = `<span class="chip warn">Over 6 hours</span> Plugged in for ${dur(worst.total * 60)} in the 24 hours from ${DAYS[Math.floor(worst.start / 1440) % 7]} ${hhmm(worst.start % 1440)}. `
-      + 'Octopus schedules at most 6 hours of smart charging in a day, so the rest of the time may go unused.';
-  }
+  const badEntries = new Set();
+  badSegs.forEach((k) => { if (segs[k][2] !== null) badEntries.add(segs[k][2]); if (segs[k][3] !== null) badEntries.add(segs[k][3]); });
+  return {events, segs, worst, badSegs, badEntries, over: badSegs.size > 0};
 }
 const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 // While the schedule sets your supplier's ready time, unplug times are limited
@@ -1730,13 +1744,13 @@ function readyRules() {
 }
 const badUnplug = (e, rules) => rules && e.enabled && e.action === 'unplug' && /^\d{2}:\d{2}$/.test(e.time) && !rules.times.includes(e.time);
 function drawEntries() {
-  const rules = readyRules();
+  const rules = readyRules(), overCap = weekPlan().badEntries;
   const rows = auto.entries.map((e, i) => {
     const lim = rules && e.action === 'unplug' ? ` step="1800"${rules.min ? ` min="${rules.min}" max="${rules.max}"` : ''}` : '';
     return `
     <div class="row sched" data-i="${i}" style="padding:10px 0;border-top:1px solid var(--divider);margin-top:0">
-      <input type="time" value="${esc(e.time)}" data-f="time" aria-label="Time" required${lim} class="${badUnplug(e, rules) ? 'bad' : ''}"
-        ${badUnplug(e, rules) ? `title="${esc(rules.provider)} only accepts ready times ${rules.text}"` : ''}>
+      <input type="time" value="${esc(e.time)}" data-f="time" aria-label="Time" required${lim} class="${badUnplug(e, rules) || overCap.has(i) ? 'bad' : ''}"
+        ${badUnplug(e, rules) ? `title="${esc(rules.provider)} only accepts ready times ${rules.text}"` : overCap.has(i) ? 'title="Plugs in for more than Octopus\'s 6 hours of smart charging a day"' : ''}>
       <select data-f="action" aria-label="Action">
         <option value="plug" ${e.action === 'plug' ? 'selected' : ''}>Plug in</option>
         <option value="unplug" ${e.action === 'unplug' ? 'selected' : ''}>Unplug</option>
@@ -1774,7 +1788,7 @@ $('a-entries').addEventListener('change', (ev) => {
   const e = auto.entries[Number(row.dataset.i)], f = ev.target.dataset.f;
   if (f === 'enabled') e.enabled = ev.target.checked; else if (f) e[f] = ev.target.value;
   setDirty(true);
-  if (readyRules() && (f === 'time' || f === 'action' || f === 'enabled')) drawEntries();
+  if (f === 'time' || f === 'action' || f === 'enabled') drawEntries();
 });
 $('a-add').onclick = () => {
   const last = auto.entries[auto.entries.length - 1];
@@ -1786,6 +1800,7 @@ $('a-save').onclick = async () => {
   if (auto.entries.some((e) => !/^\d{2}:\d{2}$/.test(e.time))) { toast('Every row needs a time'); return; }
   const rules = readyRules();
   if (rules && auto.entries.some((e) => badUnplug(e, rules))) { toast(`Unplug times must be ${rules.text} (${rules.provider} ready time)`); return; }
+  if (weekPlan().over) { toast('Over Octopus\'s 6 hours of smart charging a day: shorten the times marked in red'); return; }
   if (await post('automation/schedule', {entries: auto.entries})) { toast('Schedule saved'); setDirty(false); refreshAutomation(true); }
 };
 $('a-sched-on').addEventListener('change', async (e) => {

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.7.3
+
+- **Octopus's 6 hours a day is enforced.** With the Octopus Energy
+  integration found, a schedule that has the car plugged in for more than
+  6 hours in any 24 hours (across midnight too) can't be saved: the
+  stretches that go over show in red in Your week, the plug-in and unplug
+  times that make them are marked in red in the schedule, and Save says
+  what to shorten. Turning the ready time on is refused while the saved
+  schedule goes over. Switching the schedule on or off is always allowed.
+  Other suppliers aren't limited.
+
 ## 2.7.2
 
 - While the schedule sets your supplier's ready time, **unplug times are

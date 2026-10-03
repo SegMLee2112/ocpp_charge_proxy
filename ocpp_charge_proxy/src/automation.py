@@ -97,6 +97,58 @@ def validate_entry(raw: dict) -> dict:
     }
 
 
+WEEK_MIN = 7 * 1440
+DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+
+def plugged_segments(entries: list[dict]) -> list[tuple[int, int]]:
+    """When the schedule has the car plugged in over a week, as (start, end)
+    minutes from Monday 00:00 (the same as the web page's week view)."""
+    events = []
+    for e in entries:
+        if not e.get("enabled", True):
+            continue
+        h, m = _parse_hhmm(e["time"])
+        events += [(d * 1440 + h * 60 + m, e["action"] == "plug") for d in e["days"]]
+    events.sort()
+    segs: list[tuple[int, int]] = []
+    if events:
+        state, since = events[-1][1], 0  # carried over from the end of the week
+        for t, plug in events:
+            if plug != state:
+                if state:
+                    segs.append((since, t))
+                state, since = plug, t
+        if state:
+            segs.append((since, WEEK_MIN))
+    return segs
+
+
+def longest_day(entries: list[dict]) -> Optional[tuple[int, int]]:
+    """The most plugged-in minutes in any 24 hours, and when that starts."""
+    segs = plugged_segments(entries)
+    both = segs + [(a + WEEK_MIN, b + WEEK_MIN) for a, b in segs]
+    worst = None
+    for a, _ in segs:
+        total = sum(max(0, min(y, a + 1440) - max(x, a)) for x, y in both)
+        if worst is None or total > worst[0]:
+            worst = (total, a)
+    return worst
+
+
+def check_daily_cap(entries: list[dict], cap_min: int, provider: str) -> None:
+    """Octopus schedules at most 6 hours of smart charging a day: refuse a
+    schedule that plugs in for longer in any 24 hours."""
+    worst = longest_day(entries)
+    if worst and worst[0] > cap_min:
+        total, start = worst
+        raise ValueError(
+            f"{provider} schedules at most {cap_min // 60} hours of smart charging a day, but the schedule "
+            f"plugs in for {total // 60}h {total % 60:02d}m in the 24 hours from "
+            f"{DAYS[start // 1440 % 7]} {start % 1440 // 60:02d}:{start % 60:02d}: shorten it"
+        )
+
+
 def _local_now() -> datetime.datetime:
     return datetime.datetime.now().astimezone()
 
@@ -193,9 +245,12 @@ class Automation:
 
     def set_schedule(self, enabled: Optional[bool] = None, entries: Optional[list] = None,
                      ready_time: Optional[bool] = None, ready_times: Optional[list] = None,
-                     provider: str = "your supplier") -> None:
+                     provider: str = "your supplier", daily_cap_min: Optional[int] = None) -> None:
         """ready_times: the times your supplier accepts as a ready time (None:
-        unknown). While the schedule sets it, unplug times must be among them."""
+        unknown). While the schedule sets it, unplug times must be among them.
+        daily_cap_min (Octopus: 360): the schedule can't plug in for longer
+        than that in any 24 hours. Checked when times are saved or the ready
+        time is turned on, so the schedule can always be switched off."""
         new_entries = self.entries
         if entries is not None:
             if not isinstance(entries, list):
@@ -203,8 +258,11 @@ class Automation:
             if len(entries) > 50:
                 raise ValueError("At most 50 schedule entries")
             new_entries = [validate_entry(e) for e in entries]
-        if ready_times and (self.ready_time if ready_time is None else bool(ready_time)):
+        checking = entries is not None or bool(ready_time)
+        if checking and ready_times and (self.ready_time if ready_time is None else bool(ready_time)):
             check_unplug_times(new_entries, ready_times, provider)
+        if checking and daily_cap_min:
+            check_daily_cap(new_entries, daily_cap_min, provider)
         self.entries = new_entries
         if enabled is not None:
             self.schedule_enabled = bool(enabled)

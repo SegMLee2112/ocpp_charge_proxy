@@ -271,3 +271,27 @@ def test_automation_loop_publishes_scheduled():
     assert state.replug["status"] == "scheduled"
     state.state = "Charging"
     assert display_status(state) == "Charging"
+
+
+def test_octopus_six_hours_a_day():
+    from src.automation import longest_day, plugged_segments
+    every = list(range(7))
+    six = [{"time": "23:30", "action": "plug", "days": every}, {"time": "05:30", "action": "unplug", "days": every}]
+    seven = [{"time": "23:30", "action": "plug", "days": every}, {"time": "06:30", "action": "unplug", "days": every}]
+    assert plugged_segments([{**e, "enabled": True} for e in six])[0] == (0, 330)  # Monday 00:00-05:30, from Sunday
+    assert longest_day(six)[0] == 360
+    a = Automation(None)
+    a.set_schedule(entries=six, daily_cap_min=360)  # exactly 6 hours: fine
+    try:
+        a.set_schedule(entries=seven, daily_cap_min=360, provider="Octopus Energy")
+        raise AssertionError("should have refused")
+    except ValueError as err:
+        assert "6 hours" in str(err) and "7h 00m" in str(err)
+    assert a.entries[1]["time"] == "05:30"  # unchanged
+    # Two 4-hour stretches 12 hours apart are 8 hours in 24
+    split = [{"time": "00:00", "action": "plug", "days": every}, {"time": "04:00", "action": "unplug", "days": every},
+             {"time": "12:00", "action": "plug", "days": every}, {"time": "16:00", "action": "unplug", "days": every}]
+    assert longest_day(split)[0] == 480
+    a.set_schedule(entries=split)  # no cap (not Octopus): fine
+    a.set_schedule(enabled=False, daily_cap_min=360)  # switching off is always allowed
+    assert a.schedule_enabled is False

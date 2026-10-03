@@ -377,6 +377,8 @@ async def handle_schedule(request: web.Request) -> web.Response:
         request, lambda a, b: a.set_schedule(
             enabled=b.get("enabled"), entries=b.get("entries"), ready_time=b.get("ready_time"),
             ready_times=sc.get("ready_times"), provider=sc.get("provider") or "your supplier",
+            # Octopus schedules at most 6 hours of smart charging a day
+            daily_cap_min=360 if sc.get("provider") == "Octopus Energy" else None,
         ),
     )
 
