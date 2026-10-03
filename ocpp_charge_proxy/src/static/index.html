@@ -1720,7 +1720,9 @@ function weekPlan() {
   const all = segs.concat(segs.map(([a, b]) => [a + 10080, b + 10080]));
   let worst = null;
   const badSegs = new Set();
-  const capped = smart.data && smart.data.found && smart.data.provider === 'Octopus Energy';
+  // Only while the schedule sets Octopus's ready time
+  const capped = smart.data && smart.data.found && smart.data.provider === 'Octopus Energy'
+    && auto.data && auto.data.schedule.ready_time;
   for (const [a] of segs) {
     let total = 0;
     const hit = [];

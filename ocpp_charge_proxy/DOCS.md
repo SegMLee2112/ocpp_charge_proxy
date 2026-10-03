@@ -84,10 +84,10 @@ comes back.
   marks any that aren't, and won't save them). E.ON Next's integration
   has no ready time setting. While it's on, the Your week card shows the
   schedule in your supplier's colour (Octopus purple, EDF yellow, E.ON
-  red). With Octopus Energy found, the schedule can't plug in for more than
+  red), and with Octopus Energy the schedule can't plug in for more than
   6 hours in any 24 (Octopus's daily smart charging cap): the times and
   stretches that go over are marked in red and the schedule won't save
-  until they're shortened.
+  until they're shortened. With the ready time off, there's no limit.
 - **Auto re-plug** (**Settings** tab): Octopus sometimes doesn't start a session after you plug
   in. When Plugged In has been on for the set minutes (default 10) with no
   session and the add-on is connected, it unplugs, waits 30 seconds and

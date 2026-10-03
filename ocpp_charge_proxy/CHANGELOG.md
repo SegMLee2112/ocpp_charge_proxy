@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.7.4
+
+- Octopus's 6-hours-a-day limit only applies while **Set my supplier's
+  ready time** is on. With it off, the schedule can plug in for as long
+  as you like, with no red marks or warning.
+
 ## 2.7.3
 
 - **Octopus's 6 hours a day is enforced.** With the Octopus Energy

@@ -247,10 +247,10 @@ class Automation:
                      ready_time: Optional[bool] = None, ready_times: Optional[list] = None,
                      provider: str = "your supplier", daily_cap_min: Optional[int] = None) -> None:
         """ready_times: the times your supplier accepts as a ready time (None:
-        unknown). While the schedule sets it, unplug times must be among them.
-        daily_cap_min (Octopus: 360): the schedule can't plug in for longer
-        than that in any 24 hours. Checked when times are saved or the ready
-        time is turned on, so the schedule can always be switched off."""
+        unknown). While the schedule sets it, unplug times must be among them,
+        and with daily_cap_min (Octopus: 360) it can't plug in for longer than
+        that in any 24 hours. Checked when times are saved or the ready time
+        is turned on, so the schedule can always be switched off."""
         new_entries = self.entries
         if entries is not None:
             if not isinstance(entries, list):
@@ -259,10 +259,11 @@ class Automation:
                 raise ValueError("At most 50 schedule entries")
             new_entries = [validate_entry(e) for e in entries]
         checking = entries is not None or bool(ready_time)
-        if checking and ready_times and (self.ready_time if ready_time is None else bool(ready_time)):
-            check_unplug_times(new_entries, ready_times, provider)
-        if checking and daily_cap_min:
-            check_daily_cap(new_entries, daily_cap_min, provider)
+        if checking and (self.ready_time if ready_time is None else bool(ready_time)):
+            if ready_times:
+                check_unplug_times(new_entries, ready_times, provider)
+            if daily_cap_min:
+                check_daily_cap(new_entries, daily_cap_min, provider)
         self.entries = new_entries
         if enabled is not None:
             self.schedule_enabled = bool(enabled)

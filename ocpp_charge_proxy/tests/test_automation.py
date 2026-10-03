@@ -281,7 +281,8 @@ def test_octopus_six_hours_a_day():
     assert plugged_segments([{**e, "enabled": True} for e in six])[0] == (0, 330)  # Monday 00:00-05:30, from Sunday
     assert longest_day(six)[0] == 360
     a = Automation(None)
-    a.set_schedule(entries=six, daily_cap_min=360)  # exactly 6 hours: fine
+    a.set_schedule(entries=seven, daily_cap_min=360)  # ready time off: no limit
+    a.set_schedule(entries=six, ready_time=True, daily_cap_min=360)  # exactly 6 hours: fine
     try:
         a.set_schedule(entries=seven, daily_cap_min=360, provider="Octopus Energy")
         raise AssertionError("should have refused")
@@ -293,5 +294,12 @@ def test_octopus_six_hours_a_day():
              {"time": "12:00", "action": "plug", "days": every}, {"time": "16:00", "action": "unplug", "days": every}]
     assert longest_day(split)[0] == 480
     a.set_schedule(entries=split)  # no cap (not Octopus): fine
+    a.set_schedule(ready_time=False)
+    a.set_schedule(entries=seven, daily_cap_min=360)  # ready time off again: fine
+    try:
+        a.set_schedule(ready_time=True, daily_cap_min=360)  # can't turn it on while over
+        raise AssertionError("should have refused")
+    except ValueError:
+        assert a.ready_time is False
     a.set_schedule(enabled=False, daily_cap_min=360)  # switching off is always allowed
     assert a.schedule_enabled is False
