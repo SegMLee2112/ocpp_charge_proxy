@@ -122,7 +122,11 @@ comes back.
   again after each re-plug. If your supplier's smart charging plan is found
   (see the Overview tab), a planned slot counts too: it only re-plugs when
   nothing has been scheduled after the set minutes, not while it waits for
-  a slot later on.
+  a slot later on. A slot that's running now with no session is different:
+  the status shows **Waiting for supplier** (amber) instead of Scheduled,
+  and since Octopus may only start a session at the next half hour (e.g.
+  after the add-on restarted mid-slot), the wait counts from the next :00
+  or :30: with no session the set minutes after that, it re-plugs.
 - **Start delay and ramp-up** (**Settings** tab, Simulated car): after
   StartTransaction (or resuming after a charging-profile pause) the simulated
   car waits the start delay (default 3s) before drawing current, then ramps

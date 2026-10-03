@@ -293,7 +293,7 @@ def test_supplier_dispatch_sensor_found_and_followed():
     assert sensor in sub["entity_ids"]
     info = link.smart_charging()
     assert info["found"] and info["provider"] == "Octopus Energy" and len(info["planned"]) == 1
-    assert link.scheduled() is True
+    assert link.scheduled() is True and link.slot_now() is False
     health = link.smart_charging_health()
     assert health["found"] and health["entity_id"] == sensor and health["searched"]
 
@@ -301,5 +301,5 @@ def test_supplier_dispatch_sensor_found_and_followed():
 def test_no_supplier_sensor():
     fake = FakeHA(helper_exists=True)
     link, _, _ = _scenario(fake, [])
-    assert link.smart_charging() == {"found": False} and link.scheduled() is None
+    assert link.smart_charging() == {"found": False} and link.scheduled() is None and link.slot_now() is None
     assert link.smart_charging_health()["found"] is False

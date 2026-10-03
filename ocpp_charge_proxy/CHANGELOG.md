@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.10.1
+
+- New status **Waiting for supplier** (amber): plugged in, your supplier's
+  slot is running now, but no session has started. **Scheduled** now only
+  means a slot is planned for later
+- Auto re-plug no longer treats a running slot as an answer: with no
+  session the set minutes after the next half hour (Octopus may only start
+  on the hour or half hour), it re-plugs. Covers the add-on restarting
+  mid-slot, which ends the session (as a charger reboot does)
+
 ## 2.10.0
 
 - Force schedule on supplier: the supplier's plan is checked against the

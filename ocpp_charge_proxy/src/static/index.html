@@ -98,7 +98,7 @@
   }
   .chip.ok { color: var(--ok); } .chip.warn { color: var(--warn); } .chip.err { color: var(--err); } .chip.info { color: var(--info); }
   .s-Available { color: var(--info); } .s-Preparing, .s-SuspendedEV, .s-SuspendedEVSE { color: var(--warn); }
-  .s-Charging { color: var(--ok); } .s-Finishing, .s-Scheduled { color: var(--violet); } .s-Unavailable, .s-Faulted { color: var(--err); }
+  .s-Charging { color: var(--ok); } .s-Finishing, .s-Scheduled { color: var(--violet); } .s-Waitingforsupplier { color: var(--warn); } .s-Unavailable, .s-Faulted { color: var(--err); }
   .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
   .kv dt { color: var(--text2); } .kv dd { margin: 0; overflow-wrap: anywhere; }
   .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -477,7 +477,7 @@
         </h2>
         <div id="a-rp-status" style="margin-bottom:12px"></div>
         <div class="row">
-          <div class="grow">Re-plug after<div class="note" style="margin:0">Minutes plugged in with no session (or, if your supplier's plan is found, nothing scheduled)</div></div>
+          <div class="grow">Re-plug after<div class="note" style="margin:0">Minutes plugged in with no session (or, if your supplier's plan is found, nothing scheduled, or a slot running with no session)</div></div>
           <span class="ctl"><input type="number" id="a-rp-after" min="1" max="240" step="1" aria-label="Re-plug after minutes"> min</span>
         </div>
         <div class="row">
@@ -753,8 +753,10 @@ setInterval(() => {
 // ---------- Overview ----------
 function renderState(s) {
   state = s;
-  // "Scheduled": plugged in and your supplier has a slot planned (the OCPP state stays Preparing)
-  const st = s.state === 'Preparing' && s.scheduled ? 'Scheduled' : (s.state || 'Unknown');
+  // Plugged in, no session (the OCPP state stays Preparing): your supplier's slot is
+  // running now ("Waiting for supplier": it should be charging) or planned for later ("Scheduled")
+  const st = s.state === 'Preparing' && s.slot_now ? 'Waiting for supplier'
+    : s.state === 'Preparing' && s.scheduled ? 'Scheduled' : (s.state || 'Unknown');
   $('o-state').textContent = st; $('o-state').className = 'state ' + stateClass(st);
   drawStateSub();
   $('o-conn-dot').className = 'dot ' + (s.connected_to_server ? 'ok' : 'err');
@@ -1002,7 +1004,7 @@ function drawChart() {
   ctx.save(); ctx.beginPath(); ctx.rect(L, 0, pw, H); ctx.clip();
   // State bands behind the lines: charging / paused / waiting for a session
   const bandColor = (st) => /Charging/.test(st) ? cssVar('--ok') : /Suspended/.test(st) ? cssVar('--warn')
-    : /Scheduled/.test(st) ? cssVar('--violet') : /Preparing/.test(st) ? cssVar('--info') : null;
+    : /Scheduled/.test(st) ? cssVar('--violet') : /Preparing|Waiting/.test(st) ? cssVar('--info') : null;
   // One rectangle per run of the same state (many thin ones would overlap and darken)
   for (let i = 0; i < data.length;) {
     const c = bandColor(data[i].state);
@@ -1016,7 +1018,7 @@ function drawChart() {
     }
     if (c) {
       const x0 = x(data[i].t), w = Math.max(1, x(t1) - x0);
-      ctx.globalAlpha = /Preparing|Scheduled/.test(data[i].state) ? 0.06 : 0.10; ctx.fillStyle = c;
+      ctx.globalAlpha = /Preparing|Scheduled|Waiting/.test(data[i].state) ? 0.06 : 0.10; ctx.fillStyle = c;
       ctx.fillRect(x0, T, w, ph);
       ctx.globalAlpha = 0.6; ctx.fillRect(x0, T + ph - 3, w, 3);
       ctx.globalAlpha = 1;
@@ -1137,7 +1139,7 @@ function drawStateSub() {
   let text = '';
   if (s.state === 'Preparing' && d && d.found) {
     const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-    if (d.current) text = `${esc(d.provider)} slot now, until ${t(d.current.end)}`;
+    if (d.current) text = `${esc(d.provider)} slot now, until ${t(d.current.end)}, but no session yet`;
     else if (d.planned && d.planned.length) text = `Next slot ${slotText(d.planned[0])}`;
     else text = `Waiting for ${esc(d.provider)} to schedule a charge`;
   }

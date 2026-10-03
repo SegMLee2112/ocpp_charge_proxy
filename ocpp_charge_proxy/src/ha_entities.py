@@ -10,7 +10,8 @@
   (sensor.ocpp_charge_proxy_power / _energy / _current), with the device and
   state classes the Energy dashboard needs. They're "unavailable" while the
   add-on is stopped, and re-posted when it (or HA) restarts.
-- Status (the OCPP state: Charging, Preparing..., or Scheduled while plugged
+- Status (the OCPP state: Charging, Preparing..., or Waiting for supplier /
+  Scheduled while plugged
   in with a slot planned by your supplier) and Current limit (the
   current the charger uses, with your max and the provider's limit as
   attributes). HA records all of these, and the web page's charts and daily

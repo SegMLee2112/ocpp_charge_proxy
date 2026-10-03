@@ -235,6 +235,7 @@ async def run() -> None:
         )),
         asyncio.create_task(automation_loop(automation, shared_state, do_plug, do_unplug,
                                             scheduled=ha_link.scheduled,
+                                            slot_now=ha_link.slot_now,
                                             set_ready_time=ha_link.set_ready_time,
                                             supplier_plan=ha_link.supplier_plan)),
         asyncio.create_task(ha_link.run()),

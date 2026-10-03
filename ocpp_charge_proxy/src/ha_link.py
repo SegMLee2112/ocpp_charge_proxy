@@ -609,12 +609,20 @@ class HaLink:
         return {"found": True, "provider": info.get("provider"), "slots": slots, "supplier_ready": ready}
 
     def scheduled(self) -> Optional[bool]:
-        """True if your supplier has a charge slot running or planned; None if
+        """True if your supplier has a charge slot planned for later; None if
         there's no supplier sensor to tell."""
         info = self.smart_charging()
         if not info.get("found"):
             return None
-        return bool(info.get("current") or info.get("planned"))
+        return bool(info.get("planned"))
+
+    def slot_now(self) -> Optional[bool]:
+        """True if one of your supplier's charge slots is running now (it
+        should be charging); None if there's no supplier sensor to tell."""
+        info = self.smart_charging()
+        if not info.get("found"):
+            return None
+        return bool(info.get("current"))
 
     async def list_entities(self) -> list[dict]:
         """Sensors and binary sensors for the pickers."""

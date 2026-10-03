@@ -39,7 +39,8 @@ LONG_DAYS = 14
 MAX_KWH_PER_DAY = 200  # more than a home charger can deliver: a meter jump, not energy
 
 # Which state a 5-minute point shows when it saw several (most telling first)
-_STATE_RANK = ("Charging", "SuspendedEV", "SuspendedEVSE", "Finishing", "Scheduled", "Preparing")
+_STATE_RANK = ("Charging", "SuspendedEV", "SuspendedEVSE", "Finishing", "Waiting for supplier", "Scheduled",
+               "Preparing")
 _GONE = ("unavailable", "unknown", "none", "")
 
 

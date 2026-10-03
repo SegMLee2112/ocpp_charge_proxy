@@ -8,9 +8,13 @@
   session after `after_min` minutes, unplug, wait REPLUG_WAIT_S seconds and
   plug back in, up to `attempts` times. The count resets when a session
   starts or when the car is unplugged by anything else. If your supplier's
-  smart charging plan is available (src/smart_charging.py), a planned slot
-  counts as an answer: no re-plug while one is planned, only when nothing
-  has been scheduled `after_min` minutes after plugging in.
+  smart charging plan is available (src/smart_charging.py), a slot planned
+  for later counts as an answer: no re-plug while one is planned, only when
+  nothing has been scheduled `after_min` minutes after plugging in. A slot
+  running now doesn't: the supplier should be charging. But it may only
+  start a session at the next half hour (Octopus does, e.g. after the
+  add-on restarted mid-slot), so the wait is counted from then: with no
+  session `after_min` minutes after the next :00 or :30, it re-plugs.
 
 - One-off times: an entry with a `date` runs once, on that day, and is
   removed after it has run. Skips: any upcoming slot (a plug-in and its
@@ -52,6 +56,7 @@ from src.ready_time import check_unplug_times
 logger = logging.getLogger(__name__)
 
 REPLUG_WAIT_S = 30
+HALF_HOUR_S = 1800
 STARTUP_READY_S = 180  # keep trying to set the ready time this long after start-up
 GRACEFUL_UNPLUG_S = 60  # with Force schedule on supplier: wait this long for it to stop a session (default)
 MAX_UNPLUG_WAIT_S = 600
@@ -213,6 +218,7 @@ class Automation:
         self.replugging = False
         self.gave_up = False
         self.scheduled = False  # waiting, but your supplier has a slot planned
+        self.slot_now = False  # waiting, though your supplier's slot is running
         self.last_replug: Optional[float] = None
         self.last_run: Optional[dict] = None  # last schedule entry run
         self.unplug_at: Optional[float] = None  # a scheduled unplug waiting for the supplier, until
@@ -548,13 +554,15 @@ class Automation:
     # --- re-plug -------------------------------------------------------------
 
     def replug_due(self, plugged_in: bool, in_session: bool, connected: bool,
-                   scheduled: Optional[bool] = None) -> bool:
+                   scheduled: Optional[bool] = None, slot_now: Optional[bool] = None) -> bool:
         """Call regularly; True when it's time to re-plug.
 
         scheduled: your supplier has a charge slot planned (None: unknown, so
-        only a session counts)."""
+        only a session counts). slot_now: one is running now, so the wait
+        counts from the next half hour (when the supplier may start)."""
         now = self._clock()
         self.scheduled = bool(scheduled) and plugged_in and not in_session
+        self.slot_now = bool(slot_now) and plugged_in and not in_session
         if self.replugging:
             return False
         if in_session or not plugged_in or scheduled:
@@ -570,7 +578,7 @@ class Automation:
         if self.waiting_since is None:
             self.waiting_since = now
             return False
-        if now - self.waiting_since < self.replug["after_min"] * 60:
+        if now < self._replug_at():
             return False
         if self.attempts_used >= self.replug["attempts"]:
             if not self.gave_up:
@@ -582,6 +590,13 @@ class Automation:
                 )
             return False
         return True
+
+    def _replug_at(self) -> float:
+        """When the wait for a session runs out (waiting_since must be set)."""
+        start = self.waiting_since
+        if self.slot_now:  # the supplier may only start at the next half hour
+            start = -(-start // HALF_HOUR_S) * HALF_HOUR_S
+        return start + self.replug["after_min"] * 60
 
     async def run_replug(self, unplug: Callable[..., Awaitable[None]], plug: Callable[..., Awaitable[None]],
                          wait_s: float = REPLUG_WAIT_S) -> None:
@@ -618,7 +633,7 @@ class Automation:
             status = "idle"
         next_at = None
         if status == "waiting" and self.attempts_used < r["attempts"]:
-            next_at = self.waiting_since + r["after_min"] * 60
+            next_at = self._replug_at()
         return {
             **r,
             "status": status,
@@ -681,13 +696,15 @@ async def automation_loop(
     unplug: Callable[[], Awaitable[None]],
     tick_s: float = TICK_S,
     scheduled: Optional[Callable[[], Optional[bool]]] = None,
+    slot_now: Optional[Callable[[], Optional[bool]]] = None,
     set_ready_time: Optional[Callable[[datetime.datetime], Awaitable[dict]]] = None,
     supplier_plan: Optional[Callable[[], Optional[dict]]] = None,
 ) -> None:
     """Run the schedule and re-plug for the life of the add-on.
 
-    scheduled: whether your supplier has a charge slot planned (None if its
-    integration isn't there); also shown as the add-on's status.
+    scheduled: whether your supplier has a charge slot planned for later,
+    slot_now: whether one is running now (None if its integration isn't
+    there); both also shown as the add-on's status.
     supplier_plan: the supplier's slots and ready time, for the plan check."""
     started = automation._clock()
     ready_pending = False  # a start-up plug-in's ready time, until HA is there to take it
@@ -695,6 +712,7 @@ async def automation_loop(
     while True:
         try:
             shared_state.scheduled = scheduled() if scheduled is not None else None
+            shared_state.slot_now = slot_now() if slot_now is not None else None
             if first:
                 first = False
                 since = automation.in_plug_window()
@@ -747,7 +765,9 @@ async def automation_loop(
                 plugged_in=bool(shared_state.plugged_in) and shared_state.state == "Preparing",
                 in_session=shared_state.transaction_id is not None,
                 connected=bool(shared_state.connected_to_server),
-                scheduled=shared_state.scheduled,
+                # a slot running now with no session isn't an answer: re-plug
+                scheduled=shared_state.scheduled and not shared_state.slot_now,
+                slot_now=shared_state.slot_now,
             ):
                 automation.publish(shared_state)
                 await automation.run_replug(unplug, plug)

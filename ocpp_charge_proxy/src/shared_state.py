@@ -45,7 +45,8 @@ class SharedState:
     replug: Optional[dict] = None  # {enabled, after_min, attempts, status, ...}
     # Your supplier has a charge slot running or planned (None: no supplier
     # integration to tell, src/smart_charging.py)
-    scheduled: Optional[bool] = None
+    scheduled: Optional[bool] = None  # your supplier has a slot planned for later
+    slot_now: Optional[bool] = None  # ... or one running now
     # A scheduled unplug waiting (until this time) for the supplier to stop the session
     unplug_pending: Optional[str] = None
     # Force schedule on supplier: the supplier's plan checked against the schedule
@@ -57,7 +58,16 @@ class SharedState:
 
 def display_status(shared) -> str:
     """The add-on's status: the OCPP state ("Charging", not
-    "ChargePointStatus.charging"), or "Scheduled" while plugged in (Preparing)
-    with a charge slot planned by your supplier."""
+    "ChargePointStatus.charging"); while plugged in with no session
+    (Preparing), "Waiting for supplier" if your supplier's slot is running now
+    (it should be charging), or "Scheduled" if one is planned for later."""
     state = str(getattr(shared.state, "value", shared.state))
-    return "Scheduled" if state == "Preparing" and shared.scheduled else state
+    if state == "Preparing":
+        if getattr(shared, "slot_now", None):
+            return WAITING_FOR_SUPPLIER
+        if shared.scheduled:
+            return "Scheduled"
+    return state
+
+
+WAITING_FOR_SUPPLIER = "Waiting for supplier"
