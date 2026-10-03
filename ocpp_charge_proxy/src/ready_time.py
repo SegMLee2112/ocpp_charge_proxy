@@ -11,10 +11,11 @@ to their dispatching sensor:
 - time.<prefix>_intelligent_target_time    (time.set_value)
 - select.<prefix>_intelligent_target_time  (select.select_option, "HH:MM")
 
-and only accept 04:00 to 11:00 in 30-minute steps (the select's options).
-The add-on picks the latest of those at or before the unplug; if there's
-none before it (e.g. plugged in 4pm to 10pm), nothing is set and the page
-says why. E.ON Next's integration has no ready time setting.
+in 30-minute steps: Octopus at any time of day, EDF from 04:00 to 11:00 (a
+select's options, when there is one, say exactly which). The add-on picks
+the latest of those at or before the unplug; if there's none before it,
+nothing is set and the page says why. E.ON Next's integration has no ready
+time setting.
 
 Kept free of I/O; HaLink makes the calls.
 """
@@ -24,7 +25,8 @@ from __future__ import annotations
 import datetime
 from typing import Optional
 
-DEFAULT_TIMES = [f"{h:02}:{m:02}" for h in range(4, 12) for m in (0, 30) if (h, m) <= (11, 0)]
+ALL_DAY_TIMES = [f"{h:02}:{m:02}" for h in range(24) for m in (0, 30)]  # Octopus
+DEFAULT_TIMES = [t for t in ALL_DAY_TIMES if "04:00" <= t <= "11:00"]  # EDF and others
 
 
 def target_time_entity(states: list[dict], dispatch_entity: Optional[str]) -> Optional[dict]:
@@ -42,12 +44,15 @@ def target_time_entity(states: list[dict], dispatch_entity: Optional[str]) -> Op
 
 
 def allowed_times(entity: Optional[dict]) -> list[str]:
-    """"HH:MM" the entity accepts: a select's options, else 04:00-11:00."""
+    """"HH:MM" the entity accepts: a select's options, else any half hour for
+    Octopus and 04:00-11:00 for the others."""
     options = ((entity or {}).get("attributes") or {}).get("options")
     if isinstance(options, list):
         valid = [o for o in options if isinstance(o, str) and len(o) == 5 and o[2] == ":"]
         if valid:
             return valid
+    if str((entity or {}).get("entity_id", "")).split(".", 1)[-1].startswith("octopus_energy_"):
+        return list(ALL_DAY_TIMES)
     return list(DEFAULT_TIMES)
 
 

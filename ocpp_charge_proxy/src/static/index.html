@@ -399,7 +399,7 @@
       <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
         <div class="grow">
           <div>Set my supplier's ready time</div>
-          <div class="note" style="margin:0">When the schedule plugs in, set your supplier's smart charging ready-by time to the schedule's next unplug. Only at scheduled plug-ins. Octopus and EDF accept 04:00–11:00 in 30-minute steps, so the latest of those before the unplug is used.</div>
+          <div class="note" style="margin:0">When the schedule plugs in, set your supplier's smart charging ready-by time to the schedule's next unplug. Only at scheduled plug-ins. Ready times are in 30-minute steps (Octopus: any time of day; EDF: 04:00–11:00), so the latest one at or before the unplug is used.</div>
           <div id="a-ready-status" style="margin-top:6px"></div>
         </div>
         <label class="switch"><input type="checkbox" id="a-ready-on" aria-label="Set the ready time from the schedule"><span></span></label>
@@ -410,7 +410,7 @@
       <h2>Your week<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400" id="w-note"></span></h2>
       <div class="week" id="w-grid"></div>
       <div class="sub" id="w-warn" hidden style="margin-top:10px"></div>
-      <div class="legend"><span><b class="band" style="background:var(--primary);opacity:.8"></b>Plugged in by the schedule</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span></div>
+      <div class="legend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span></div>
     </div>
   </section>
 
@@ -1614,7 +1614,7 @@ async function refreshAutomation(force) {
   if (!auto.dirty || force) { auto.entries = JSON.parse(JSON.stringify(d.schedule.entries)); setDirty(false); drawEntries(); }
   $('a-sched-on').checked = d.schedule.enabled;
   $('a-ready-on').checked = !!d.schedule.ready_time;
-  if (!smart.data) refreshSmart(true).then(() => drawReadyStatus(auto.data));
+  if (!smart.data) refreshSmart(true).then(() => { drawReadyStatus(auto.data); drawWeek(); });
   drawReadyStatus(d);
   const n = d.schedule.next;
   $('a-next').innerHTML = !d.schedule.enabled ? 'The schedule is off.' :
@@ -1626,6 +1626,7 @@ async function refreshAutomation(force) {
     $('a-rp-on').checked = d.replug.enabled;
   }
   drawReplugStatus(d.replug);
+  drawWeek();
 }
 function drawReadyStatus(d) {
   if (!d) return;
@@ -1666,6 +1667,12 @@ function setDirty(v) {
 // the next "unplug" time, carrying over midnight and the end of the week.
 function drawWeek() {
   const on = auto.data ? auto.data.schedule.enabled : false;
+  // In your supplier's colour when the schedule sets its ready time
+  const sc = smart.data && smart.data.found ? smart.data : null;
+  const linked = sc && auto.data && auto.data.schedule.ready_time;
+  const segStyle = linked ? `background:${providerColor(sc.provider)};` : '';
+  $('w-swatch').style.background = linked ? providerColor(sc.provider) : 'var(--primary)';
+  $('w-label').textContent = linked ? `Plugged in by the schedule, ready time sent to ${sc.provider}` : 'Plugged in by the schedule';
   const events = [];
   for (const e of auto.entries) {
     if (!e.enabled || !/^\d{2}:\d{2}$/.test(e.time)) continue;
@@ -1687,7 +1694,7 @@ function drawWeek() {
     const lo = d * 1440, hi = lo + 1440;
     const bars = segs.filter(([a, b]) => b > lo && a < hi).map(([a, b]) => {
       const x0 = (Math.max(a, lo) - lo) / 14.4, x1 = (Math.min(b, hi) - lo) / 14.4;
-      return `<div class="seg ${on ? '' : 'off'}" style="left:${x0}%;width:${x1 - x0}%" title="${DAYS[d]} ${hhmm(Math.max(a, lo) - lo)}–${hhmm(Math.min(b, hi) - lo)}"></div>`;
+      return `<div class="seg ${on ? '' : 'off'}" style="${segStyle}left:${x0}%;width:${x1 - x0}%" title="${DAYS[d]} ${hhmm(Math.max(a, lo) - lo)}–${hhmm(Math.min(b, hi) - lo)}"></div>`;
     }).join('');
     html += `<div class="dl ${d === today ? 'today' : ''}">${DAYS[d]}</div><div class="track">${bars}${d === today ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
   }
@@ -1701,11 +1708,12 @@ function drawWeek() {
     const total = all.reduce((sum, [x, y]) => sum + Math.max(0, Math.min(y, a + 1440) - Math.max(x, a)), 0);
     if (!worst || total > worst.total) worst = {start: a, total};
   }
-  const warn = worst && worst.total > 360;
+  // Octopus only schedules up to 6 hours of smart charging a day
+  const warn = worst && worst.total > 360 && sc && sc.provider === 'Octopus Energy';
   $('w-warn').hidden = !warn;
   if (warn) {
     $('w-warn').innerHTML = `<span class="chip warn">Over 6 hours</span> Plugged in for ${dur(worst.total * 60)} in the 24 hours from ${DAYS[Math.floor(worst.start / 1440) % 7]} ${hhmm(worst.start % 1440)}. `
-      + 'Your supplier may not schedule more than about 6 hours of smart charging in a day, so the rest of the time may go unused.';
+      + 'Octopus schedules at most 6 hours of smart charging in a day, so the rest of the time may go unused.';
   }
 }
 const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;

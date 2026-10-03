@@ -2,7 +2,9 @@ import asyncio
 import datetime
 
 from src.automation import Automation, apply_ready_time
-from src.ready_time import DEFAULT_TIMES, allowed_times, pick_ready_time, service_call, target_time_entity
+from src.ready_time import (
+    ALL_DAY_TIMES, DEFAULT_TIMES, allowed_times, pick_ready_time, service_call, target_time_entity,
+)
 
 TZ = datetime.timezone(datetime.timedelta(hours=1))
 DISPATCH = "binary_sensor.octopus_energy_abc_intelligent_dispatching"
@@ -46,7 +48,18 @@ def test_target_time_entity_next_to_the_dispatching_sensor():
     assert target_time_entity([other], DISPATCH) is None
     assert target_time_entity([time_ent], "sensor.x_smart_charging_schedule") is None  # E.ON: no setting
     assert allowed_times(select_ent) == ["05:00", "05:30", "06:00"]
-    assert allowed_times(time_ent) == DEFAULT_TIMES
+    assert allowed_times(time_ent) == ALL_DAY_TIMES  # Octopus: any half hour
+    assert allowed_times({"entity_id": "time.edf_energy_x_intelligent_target_time"}) == DEFAULT_TIMES
+
+
+def test_octopus_any_time_of_day():
+    allowed = ALL_DAY_TIMES
+    assert len(allowed) == 48
+    assert pick_ready_time(_at(5, 10), _at(5, 12), allowed) == _at(5, 12)
+    assert pick_ready_time(_at(5, 16), _at(5, 22), allowed) == _at(5, 22)  # 4pm to 10pm now works
+    assert pick_ready_time(_at(5, 16), _at(5, 22, 10), allowed) == _at(5, 22)
+    assert pick_ready_time(_at(5, 21, 50), _at(5, 22, 10), allowed) == _at(5, 22)
+    assert pick_ready_time(_at(5, 22, 5), _at(5, 22, 20), allowed) is None  # no half hour in between
 
 
 def test_service_calls():

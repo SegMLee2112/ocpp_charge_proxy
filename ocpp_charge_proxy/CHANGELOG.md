@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.7.1
+
+- **Octopus ready times at any time of day:** Octopus now accepts ready
+  times round the clock (in 30-minute steps), so the schedule's unplug time
+  is used as it is: plugged in 4pm to 10pm sets 22:00, and 10:00 to 12:00
+  sets 12:00. EDF Energy stays 04:00 to 11:00. If the integration offers a
+  list of times (its select entity), that list still decides.
+- **Your week** shows the schedule in your supplier's colour while the
+  ready time is set from it: purple for Octopus Energy, yellow for EDF
+  Energy, red for E.ON Next.
+- The **6-hour warning** only shows with Octopus Energy (it's Octopus's
+  daily smart charging cap).
+
 ## 2.7.0
 
 - **Ready time from the schedule** (Automation tab, a switch, off by

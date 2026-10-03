@@ -78,12 +78,13 @@ comes back.
   when the schedule plugs in, the add-on sets your supplier's smart
   charging ready-by time to the schedule's next unplug, for example plug in
   02:00 and unplug 04:00 sets 04:00; plug in 06:00 and unplug 08:00 sets
-  08:00. Only at scheduled plug-ins. Octopus Energy and EDF Energy accept
-  04:00 to 11:00 in 30-minute steps, so the latest of those before the
-  unplug is used (a 10:00 to 12:00 plug-in sets 11:00), and nothing is set
-  if there's none before it (e.g. 4pm to 10pm). E.ON Next's integration
-  has no ready time setting. The Your week card warns if the schedule has
-  the car plugged in for more than 6 hours in any 24.
+  08:00. Only at scheduled plug-ins. Ready times are in 30-minute steps:
+  Octopus Energy accepts any time of day, EDF Energy 04:00 to 11:00, and
+  the latest one at or before the unplug is used. E.ON Next's integration
+  has no ready time setting. While it's on, the Your week card shows the
+  schedule in your supplier's colour (Octopus purple, EDF yellow, E.ON
+  red), and with Octopus it warns if the schedule has the car plugged in
+  for more than 6 hours in any 24 (Octopus's daily smart charging cap).
 - **Auto re-plug** (**Settings** tab): Octopus sometimes doesn't start a session after you plug
   in. When Plugged In has been on for the set minutes (default 10) with no
   session and the add-on is connected, it unplugs, waits 30 seconds and
