@@ -1458,3 +1458,108 @@ def test_plain_stop_sends_no_extra_status(mock_connection, mock_persistence):
     cp = make_cp(mock_connection, mock_persistence)
     seq = _statuses_after(cp, lambda: cp._do_stop_transaction(final_state=ChargePointStatus.available))
     assert seq == [ChargePointStatus.finishing, "Stop"]
+
+
+# --- 2.11.0: continuing a session across an add-on restart ---
+
+
+def _resume_cp(connection, persistence):
+    return ChargePoint(id="CP001", connection=connection, persistence=persistence,
+                       current_amps=32, resume_on_restart=True)
+
+
+def _suspended(mock_connection, tmp_path, profile=None):
+    """A session (transaction 4242) left open by a restart."""
+    from src.persistence import Persistence
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    persistence = Persistence(data_dir=str(tmp_path))
+    cp = _resume_cp(mock_connection, persistence)
+    cp.call, sent = _boot_recorder()
+    cp.set_plugged_in(True)
+    cp.state = ChargePointStatus.preparing
+    cp._pending_id_tag = OCTOPUS_TAG
+    cp._tx_profile = profile
+    _run(cp._do_start_transaction())
+    cp._tx_profile = profile
+    cp._power_override = 7.0
+    cp._last_meter_time -= 600
+    assert cp.suspend_for_restart() is True
+    assert not any(isinstance(r, _call.StopTransactionPayload) for r in sent)
+    return persistence, cp._energy_register_wh
+
+
+def test_restart_continues_the_session(mock_connection, tmp_path):
+    from src.persistence import Persistence
+    profile = {"chargingProfileId": 0, "stackLevel": 0, "chargingProfilePurpose": "TxProfile",
+               "chargingProfileKind": "Relative",
+               "chargingSchedule": {"chargingRateUnit": "A", "chargingSchedulePeriod": [{"startPeriod": 0, "limit": 32.0}]}}
+    persistence, wh = _suspended(mock_connection, tmp_path, profile)
+    assert persistence.load_active_transaction()["resume"] is True
+    cp2 = _resume_cp(None, Persistence(data_dir=str(tmp_path)))
+    assert cp2._transaction_id == 4242 and cp2.state == ChargePointStatus.charging and cp2._resumed
+    assert cp2._transaction_id_tag == OCTOPUS_TAG and cp2._profile_scheduler.has_profile
+    assert cp2.sessions.current is not None and cp2.sessions.current["transaction_id"] == 4242
+    assert persistence.load_active_transaction()["resume"] is False  # open, being continued
+    cp2.call, sent = _boot_recorder()
+    cp2.attach(mock_connection)
+    _run(cp2.send_boot_notification(model="M", vendor="V"))
+    assert not any(isinstance(r, _call.StopTransactionPayload) for r in sent)
+    statuses = [r.status for r in sent if isinstance(r, _call.StatusNotificationPayload) and r.connector_id == 1]
+    assert statuses == [ChargePointStatus.charging]
+    # Later stopped as usual, meterStop counted from the original start
+    _run(cp2._do_stop_transaction())
+    stop = next(r for r in sent if isinstance(r, _call.StopTransactionPayload))
+    assert stop.transaction_id == 4242 and stop.meter_stop >= wh
+
+
+def test_server_starts_a_new_session_instead(mock_connection, tmp_path):
+    from src.persistence import Persistence
+    persistence, _ = _suspended(mock_connection, tmp_path)
+    cp2 = _resume_cp(mock_connection, Persistence(data_dir=str(tmp_path)))
+    cp2.call, sent = _boot_recorder()
+
+    async def scenario():
+        res = await cp2.on_remote_start_transaction(id_tag=OCTOPUS_TAG)
+        await _settle(40)
+        return res
+
+    res = _run(scenario())
+    assert res.status == RemoteStartStopStatus.accepted
+    kinds = [type(r).__name__ for r in sent if not isinstance(r, _call.StatusNotificationPayload)]
+    assert kinds == ["StopTransactionPayload", "StartTransactionPayload"]
+    assert sent[[type(r).__name__ for r in sent].index("StopTransactionPayload")].reason == "Reboot"
+    assert cp2._transaction_id == 4242 and not cp2._resumed and cp2.state == ChargePointStatus.charging
+
+
+def test_not_continued_when_too_old_unplugged_or_off(mock_connection, tmp_path):
+    from src.persistence import Persistence
+    import src.client as client_mod
+    # Too long ago: stopped (Reboot) with the time it was left
+    persistence, _ = _suspended(mock_connection, tmp_path / "a")
+    saved = persistence.load_active_transaction()
+    old = client_mod.RESUME_MAX_S
+    client_mod.RESUME_MAX_S = -1
+    try:
+        cp2 = _resume_cp(None, Persistence(data_dir=str(tmp_path / "a")))
+    finally:
+        client_mod.RESUME_MAX_S = old
+    assert cp2._transaction_id is None and not cp2._resumed
+    stop = cp2._offline_queue[-1]["payload"]
+    assert stop["reason"] == "Reboot" and stop["timestamp"] == saved["timestamp"]
+    # Option off
+    _suspended(mock_connection, tmp_path / "b")
+    cp3 = make_cp(None, Persistence(data_dir=str(tmp_path / "b")))
+    assert cp3._transaction_id is None and cp3._offline_queue[-1]["payload"]["reason"] == "Reboot"
+    # Unplugged while stopped
+    p4, _ = _suspended(mock_connection, tmp_path / "c")
+    p4.save_plugged_in(False)
+    cp4 = _resume_cp(None, Persistence(data_dir=str(tmp_path / "c")))
+    assert cp4._transaction_id is None and cp4._offline_queue[-1]["payload"]["reason"] == "Reboot"
+
+
+def test_suspend_needs_option_session_and_plug(mock_connection, tmp_path):
+    from src.persistence import Persistence
+    cp = make_cp(mock_connection, Persistence(data_dir=str(tmp_path)))
+    assert cp.suspend_for_restart() is False  # option off, no session
+    cp.resume_on_restart = True
+    assert cp.suspend_for_restart() is False  # no session

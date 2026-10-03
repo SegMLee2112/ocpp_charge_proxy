@@ -78,6 +78,20 @@ def _payload_to_dict(payload) -> dict:
     return dict(vars(payload))
 
 
+RESUME_MAX_S = 600  # continue a session after a restart only if it was this recent
+
+
+def _age_s(iso) -> Optional[float]:
+    """Seconds since an ISO time (None if unreadable)."""
+    try:
+        t = datetime.datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=datetime.timezone.utc)
+    return (datetime.datetime.now(datetime.timezone.utc) - t).total_seconds()
+
+
 def _now_iso() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -110,8 +124,14 @@ class ChargePoint(BaseChargePoint):
         start_delay_s: float = 0.0,
         ramp_up_s: float = 0.0,
         current_amps_option: Optional[int] = None,
+        resume_on_restart: bool = False,
     ):
         super().__init__(id, connection)
+        # Continue a session across an add-on restart (see suspend_for_restart)
+        self.resume_on_restart = resume_on_restart
+        self._suspending = False  # shutting down with the session left open to continue
+        self._resumed = False  # the session was continued after a restart
+        self._tx_profile: Optional[dict] = None  # the session's TxProfile, kept for a restart
         self.connector_id = 1
         self.state = ChargePointStatus.available
         self._persistence = persistence
@@ -246,13 +266,14 @@ class ChargePoint(BaseChargePoint):
             self._shared_state.state = self.state
             logger.info("Car was plugged in when the add-on stopped: starting as Preparing")
 
-        # A transaction still saved as open means the last run never stopped
-        # it (power cut, crash, SIGKILL): close it the way a real charger does.
-        self._recover_interrupted_transaction()
-        self._close_orphan_session()
         self._profile_scheduler = ChargingProfileScheduler(
             rated_power_w=self._charger_sim.rated_power_kw * 1000
         )
+        # A transaction still saved as open means the last run never stopped
+        # it (power cut, crash, SIGKILL): close it the way a real charger does.
+        # Or the add-on restarted mid-session on purpose: continue it.
+        self._recover_interrupted_transaction()
+        self._close_orphan_session()
 
     def set_plugged_in(self, plugged_in: bool, source: Optional[str] = None) -> None:
         """Record the Plugged In switch, saved so it survives a restart.
@@ -524,10 +545,51 @@ class ChargePoint(BaseChargePoint):
             "transaction_id": self._transaction_id,
             "id_tag": self._transaction_id_tag,
             "energy_wh": self._energy_register_wh,
+            "start_energy_wh": self._transaction_start_energy_wh,
             "timestamp": _now_iso(),
             "stop_txn_sampled": self._stop_txn_sampled,
             "stop_txn_data": self._stop_txn_data,
+            "profile": self._tx_profile,
+            "resume": self._suspending,  # left open on purpose, to continue after a restart
         })
+
+    def suspend_for_restart(self) -> bool:
+        """At shutdown, mid-session: leave the transaction open (no
+        StopTransaction) so the next start continues it, as a charger does
+        across a dropped connection. False if there's nothing to continue."""
+        if not self.resume_on_restart or self._transaction_id is None or not self._plugged_in:
+            return False
+        self._checkpoint_energy()  # energy up to now, saved
+        self._suspending = True
+        self._save_active_transaction()
+        logger.info("Transaction %s left open to continue after the restart", self._transaction_id)
+        return True
+
+    def _resume_transaction(self, saved: dict, age_s: float) -> None:
+        """Continue a transaction left open by suspend_for_restart."""
+        self._transaction_id = saved["transaction_id"]
+        self._transaction_id_tag = saved.get("id_tag")
+        self._transaction_start_energy_wh = int(saved.get("start_energy_wh", self._energy_register_wh))
+        self._stop_txn_sampled = list(saved.get("stop_txn_sampled") or [])
+        self._stop_txn_data = list(saved.get("stop_txn_data") or [])
+        if isinstance(saved.get("profile"), dict):
+            self._tx_profile = saved["profile"]
+            try:
+                self._profile_scheduler.set_profile(self._tx_profile)
+            except Exception:
+                logger.warning("Couldn't restore the session's charging profile", exc_info=True)
+        if self.sessions.current is None:
+            self.sessions.start(self._transaction_id, self._transaction_id_tag,
+                                self._transaction_start_energy_wh, saved.get("timestamp") or _now_iso())
+        self._last_meter_time = time.monotonic()
+        self._charger_sim.start_charging()
+        self._resumed = True
+        self.state = ChargePointStatus.charging
+        self._shared_state.state = self.state
+        self._shared_state.transaction_id = self._transaction_id
+        self._save_active_transaction()  # open, no longer waiting to continue
+        logger.info("Continuing transaction %s after the restart (stopped %d s ago)",
+                    self._transaction_id, round(age_s))
 
     def _recover_interrupted_transaction(self) -> None:
         saved = self._persistence.load_active_transaction()
@@ -539,6 +601,17 @@ class ChargePoint(BaseChargePoint):
             and e["payload"].get("transaction_id") == tx_id
             for e in self._offline_queue
         )
+        reason = Reason.power_loss
+        if saved.get("resume") and not already_stopped:
+            age = _age_s(saved.get("timestamp"))
+            if self.resume_on_restart and self._plugged_in and age is not None and 0 <= age <= RESUME_MAX_S:
+                self._resume_transaction(saved, age)
+                return
+            reason = Reason.reboot  # stopped on purpose, but too long ago (or unplugged) to continue
+            logger.info("Not continuing transaction %s after the restart (%s): stopping it", tx_id,
+                        "the car was unplugged" if not self._plugged_in
+                        else "the option is off" if not self.resume_on_restart
+                        else f"stopped more than {RESUME_MAX_S // 60} min ago")
         if not already_stopped:
             # Last known meter reading and time = the moment power was lost
             meter_stop = int(saved.get("energy_wh", self._energy_register_wh))
@@ -558,17 +631,18 @@ class ChargePoint(BaseChargePoint):
                 id_tag=saved.get("id_tag"),
                 meter_stop=meter_stop,
                 timestamp=timestamp,
-                reason=Reason.power_loss,
+                reason=reason,
                 transaction_data=transaction_data or None,
             ))
             self._offline_queue[-1]["_held"] = True
             self._save_queue()
-            logger.warning(
-                "Transaction %s was still open when the add-on last stopped "
-                "(power cut or crash); holding StopTransaction (PowerLoss, %d Wh)",
-                tx_id, meter_stop,
-            )
-            self.sessions.stop(meter_stop, Reason.power_loss, timestamp, tx_id)
+            if reason == Reason.power_loss:
+                logger.warning(
+                    "Transaction %s was still open when the add-on last stopped "
+                    "(power cut or crash); holding StopTransaction (PowerLoss, %d Wh)",
+                    tx_id, meter_stop,
+                )
+            self.sessions.stop(meter_stop, reason, timestamp, tx_id)
         self._persistence.save_active_transaction(None)
 
     def _close_orphan_session(self) -> None:
@@ -1091,6 +1165,7 @@ class ChargePoint(BaseChargePoint):
             # -> Charging. No intermediate Available/SuspendedEV, and connector 0
             # status only belongs at boot.
             id_tag = self._pending_id_tag or "NoAuthorization"
+            self._resumed = False
 
             # Not charging yet: restart the energy interval so idle time
             # before the start isn't counted at charging power.
@@ -1200,6 +1275,8 @@ class ChargePoint(BaseChargePoint):
             self._transaction_id_tag = None
             self._pending_id_tag = None
             self._stop_txn_data = []
+            self._tx_profile = None
+            self._resumed = False
             if handled or (request is not None and any(
                 e.get("_request") is request for e in self._offline_queue
             )):
@@ -1224,6 +1301,13 @@ class ChargePoint(BaseChargePoint):
 
     @on(Action.RemoteStartTransaction)
     async def on_remote_start_transaction(self, id_tag: str, charging_profile: dict = None, **kwargs):
+        if self._resumed and self._transaction_id is not None:
+            # The server didn't take up the session continued after a restart
+            # and wants a new one: close the old one, then start.
+            logger.warning("The server started a new session instead of continuing transaction %s: "
+                           "stopping that one first", self._transaction_id)
+            asyncio.create_task(self._replace_resumed_transaction(id_tag, charging_profile))
+            return call_result.RemoteStartTransactionPayload(status=RemoteStartStopStatus.accepted)
         # Only when the car is plugged in (Preparing / suspended)
         if self.state not in (ChargePointStatus.preparing, ChargePointStatus.suspended_ev, ChargePointStatus.suspended_evse):
             logger.warning("RemoteStart rejected: state is %s (not plugged in)", self.state)
@@ -1233,6 +1317,7 @@ class ChargePoint(BaseChargePoint):
 
         if charging_profile:
             self._profile_scheduler.set_profile(charging_profile)
+        self._tx_profile = charging_profile or None
 
         self.set_plugged_in(True, "provider")
         self._pending_id_tag = id_tag
@@ -1240,6 +1325,14 @@ class ChargePoint(BaseChargePoint):
         return call_result.RemoteStartTransactionPayload(
             status=RemoteStartStopStatus.accepted
         )
+
+    async def _replace_resumed_transaction(self, id_tag: str, charging_profile: Optional[dict]) -> None:
+        await self._do_stop_transaction(reason=Reason.reboot)
+        if charging_profile:
+            self._profile_scheduler.set_profile(charging_profile)
+        self._tx_profile = charging_profile or None
+        self._pending_id_tag = id_tag
+        await self._do_start_transaction()
 
     @on(Action.RemoteStopTransaction)
     async def on_remote_stop_transaction(self, transaction_id: int, **kwargs):
@@ -1421,6 +1514,8 @@ class ChargePoint(BaseChargePoint):
     async def on_set_charging_profile(self, connector_id: int, cs_charging_profiles: dict, **kwargs):
         logger.info("SetChargingProfile received for connector %s", connector_id)
         self._profile_scheduler.set_profile(cs_charging_profiles)
+        if (cs_charging_profiles or {}).get("chargingProfilePurpose") == "TxProfile" and self._transaction_id is not None:
+            self._tx_profile = cs_charging_profiles
         return call_result.SetChargingProfilePayload(
             status="Accepted"
         )

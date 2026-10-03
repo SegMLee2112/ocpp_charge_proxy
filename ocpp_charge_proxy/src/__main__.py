@@ -38,6 +38,11 @@ async def _graceful_shutdown(cp: ChargePoint) -> None:
     """Tell the server we're going away, while the socket is still open."""
     from ocpp.v16.enums import ChargePointStatus as CPS, Reason
 
+    if cp.suspend_for_restart():
+        # Like a charger losing its connection: no StopTransaction and no
+        # Unavailable, so the server can carry on with the session after
+        # the restart (src/client.py)
+        return
     online = cp.is_online
     logger.info(
         "Shutting down: %s",
@@ -187,6 +192,7 @@ async def run() -> None:
         persistence=persistence,
         current_amps=starting_current_amps(config, persistence),
         current_amps_option=config.current_amps,
+        resume_on_restart=config.continue_session,
         shared_state=shared_state,
         start_delay_s=DEFAULT_START_DELAY_S,  # until set on the Settings tab
         ramp_up_s=DEFAULT_RAMP_UP_S,

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.11.0
+
+- An add-on restart (e.g. an update) no longer ends the charging session:
+  it's left open and carried on when the add-on is back within 10 minutes,
+  like a charger that briefly lost its connection. Octopus only starts a
+  new session at the next hour or half hour, so ending it lost up to 30
+  minutes of charging. If the supplier starts a new session instead, the
+  old one is closed first. New option `continue_session_on_restart` (on by
+  default) to go back to ending it (`Reboot`)
+
 ## 2.10.3
 
 - Smart charging card: the slot running now shows its start and end, the

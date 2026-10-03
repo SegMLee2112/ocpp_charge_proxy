@@ -33,6 +33,7 @@ updates its state so Home Assistant automations can respond.
 | `firmware_version` | `6.11.16` | Firmware version reported in BootNotification |
 | `current_amps` | `32` | Maximum charging current in amps (6/10/13/16/20/25/32). Starting value: once you change Max current on the add-on's web page that's remembered, until you change this option again |
 | `initial_energy_wh` | `0` | Seed the energy register (Wh). Set to your old charger's meter reading when migrating. Only applied if higher than the stored register (the meter never goes backwards); cleared after first boot. |
+| `continue_session_on_restart` | `true` | Carry a charging session on across an add-on restart (e.g. an update) instead of ending it; see [While offline](#while-offline) |
 | `log_level` | `info` | Logging level (debug/info/warning/error). OCPP messages are logged at `info`, except Heartbeats and periodic meter readings (in a session or not), which only show at `debug`. Clock-aligned readings stay at `info` |
 
 ### Controlling your charger
@@ -168,6 +169,18 @@ If the add-on is stopped without warning mid-charge (power cut, crash), the
 open transaction is closed on the next start. A StopTransaction with reason
 `PowerLoss` is sent, using the last meter reading saved before the
 interruption.
+
+When the add-on is restarted mid-charge (an update, a restart from Home
+Assistant), it leaves the session open by default
+(`continue_session_on_restart`): no StopTransaction or Unavailable, just
+the connection closing, as when a charger loses its connection. When it's
+back (within 10 minutes, with Plugged In still on) it reports Charging and
+carries on with the same transaction, energy and charging profile.
+Otherwise, or with the option off, the session is stopped with reason
+`Reboot`, and your supplier starts a new one (Octopus at the next hour or
+half hour). If the supplier sends a new RemoteStart instead of carrying on,
+the old session is stopped (`Reboot`) and the new one started straight
+away.
 
 ### StopTransaction readings
 

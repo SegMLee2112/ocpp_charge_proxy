@@ -17,6 +17,7 @@ class Config:
     initial_energy_wh: int
     log_level: str
     use_tls: bool = True
+    continue_session: bool = True  # carry a session on across an add-on restart
 
     @property
     def websocket_url(self) -> str:
@@ -42,6 +43,7 @@ def load_config() -> Config:
         initial_energy_wh=int(os.environ.get("IO_INITIAL_ENERGY_WH", "0")),
         log_level=os.environ.get("IO_LOG_LEVEL", "info"),
         use_tls=os.environ.get("IO_USE_TLS", "true").lower() != "false",
+        continue_session=os.environ.get("IO_CONTINUE_SESSION", "true").lower() != "false",
     )
 
 

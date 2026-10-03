@@ -44,3 +44,11 @@ configuration:
     name: Log Level
     description: >-
       The verbosity of add-on logging.
+  continue_session_on_restart:
+    name: Continue the session after a restart
+    description: >-
+      When the add-on restarts during a charging session (e.g. an update),
+      leave the session open and carry it on when it's back (within 10
+      minutes), as a charger does after losing its connection, instead of
+      ending it. If your supplier starts a new session instead, the old one
+      is closed first.
