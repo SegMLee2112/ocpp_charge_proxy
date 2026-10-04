@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.15.0 — Schedule colours and the last 3 days
+
+- **Feature:** the schedule's week view also shows the last 3 days, above
+  today, with a green line for when the car actually charged (from your
+  sessions) and your supplier's slots outlined. They're for looking back,
+  so they can't be edited
+- **Improvement:** slots are coloured by type: weekly (blue), one-off
+  (teal), auto plug-in (orange) and Charge now (pink), with a legend
+
 ## 2.14.2 — 6-hour limit for Charge now and auto plug-in
 
 - **Fix:** with Octopus and Force schedule on supplier on, a Charge now or

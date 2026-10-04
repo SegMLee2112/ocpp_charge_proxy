@@ -211,6 +211,11 @@
   .week .track .seg.off { opacity: .35; }
   .week .track { touch-action: pan-y; cursor: copy; }
   .week .track .seg.ghost { opacity: .45; pointer-events: none; }
+  .week .track.past { cursor: default; }
+  .week .track.past .seg { opacity: .45; cursor: default; }
+  .week .dl.past { opacity: .7; }
+  .week .ses { position: absolute; bottom: 0; height: 4px; background: var(--ok); border-radius: 2px; pointer-events: none; }
+  .week .sep { grid-column: 1 / -1; border-top: 1px dashed var(--divider); margin: 2px 0; }
   .week .track .seg.once { background-image: linear-gradient(90deg, transparent 0 calc(100% - 3px), rgba(255,255,255,.55) calc(100% - 3px)); }
   .week .tick { position: absolute; top: -3px; bottom: -3px; width: 12px; margin-left: -6px; cursor: pointer;
     background: linear-gradient(var(--text2), var(--text2)) center / 3px 100% no-repeat; }
@@ -427,11 +432,11 @@
         <label class="switch"><input type="checkbox" id="a-sched-on" aria-label="Schedule on"><span></span></label>
       </h2>
       <div class="sub" id="a-next" style="margin-bottom:6px"></div>
-      <div class="note" style="margin:0 0 12px">Click a slot to change, delete or skip it. Click or drag across a day to add one.</div>
+      <div class="note" style="margin:0 0 12px">The last 3 days, then the next 7. Click a slot to change, delete or skip it. Click or drag across a day to add one.</div>
       <div class="week" id="w-grid"></div>
       <div class="empty" id="w-empty" hidden>No times yet: click or drag across a day above to add a slot, e.g. 23:30 to 07:00.</div>
       <div class="sub" id="w-warn" hidden style="margin-top:10px"></div>
-      <div class="legend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span id="w-sup-legend" hidden><b class="band" id="w-sup-swatch" style="background:transparent;border:2px solid;box-sizing:border-box"></b><span id="w-sup-label"></span></span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px)"></b>Skipped</span><span><b class="band" style="background:linear-gradient(var(--text2),var(--text2)) center/3px 100% no-repeat"></b>Unplug only</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span></div>
+      <div class="legend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span id="w-types"></span><span><b class="band" style="background:var(--ok);height:4px;opacity:1"></b>Charged</span><span id="w-sup-legend" hidden><b class="band" id="w-sup-swatch" style="background:transparent;border:2px solid;box-sizing:border-box"></b><span id="w-sup-label"></span></span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px)"></b>Skipped</span><span><b class="band" style="background:linear-gradient(var(--text2),var(--text2)) center/3px 100% no-repeat"></b>Unplug only</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span></div>
       <div class="note" id="a-tz"></div>
     </div>
     <div class="card">
@@ -1750,6 +1755,13 @@ function whenText(iso) {
 async function refreshAutomation(force) {
   let d;
   try { d = await api('automation'); } catch (e) { return; }
+  if (!week.sessionsAt || Date.now() - week.sessionsAt > 60000) {
+    try {
+      const sd = await api('sessions');
+      week.sessions = [...(sd.current ? [sd.current] : []), ...(sd.history || []).filter((x) => x.type !== 'no_session')];
+      week.sessionsAt = Date.now();
+    } catch (e) { /* history line only */ }
+  }
   auto.data = d;
   if (!auto.dirty || force) { auto.entries = JSON.parse(JSON.stringify(d.schedule.entries)); setDirty(false); drawEntries(); }
   $('a-sched-on').checked = d.schedule.enabled;
@@ -1975,7 +1987,15 @@ function drawWeek() {
   const dayLabel = (d) => { const t = new Date(day0); t.setDate(day0.getDate() + d); return t.toLocaleDateString([], {weekday: 'short', day: 'numeric'}); };
   const ed = week.edit;
   let html = '';
-  for (let d = 0; d < 7; d++) {
+  // Slot colours by type (weekly ones stay blue)
+  const TYPE = {once: ['#00897b', 'One-off'], auto_plug: ['#f57c00', 'Auto plug-in'], charge_now: ['#d81b60', 'Charge now']};
+  const typeOf = (s) => s.source && TYPE[s.source] ? s.source : s.kind === 'once' ? 'once' : null;
+  const seen = new Set(model.slots.map(typeOf).filter(Boolean));
+  $('w-types').innerHTML = Object.entries(TYPE).filter(([k]) => seen.has(k))
+    .map(([, [c, label]]) => `<span><b class="band" style="background:${c};opacity:.8"></b>${label}</span>`).join('');
+  // What actually charged (sessions), for the last 3 days and today
+  const ses = (week.sessions || []).map((x) => [(new Date(x.start) - day0) / 60000, ((x.stop ? new Date(x.stop) : new Date()) - day0) / 60000]);
+  for (let d = -3; d < 7; d++) {
     const lo = d * DAY_MIN, hi = lo + DAY_MIN;
     const span = (a, b) => ({x0: (Math.max(a, lo) - lo) / 14.4, x1: (Math.min(b, hi) - lo) / 14.4});
     const bars = occ.map((o, k) => [o, k]).filter(([o]) => o.b > lo && o.a < hi).map(([o, k]) => {
@@ -1986,8 +2006,9 @@ function drawWeek() {
       const who = s.source === 'charge_now' ? ' (Charge now)' : s.source === 'auto_plug' ? ' (auto plug-in)' : s.kind === 'once' ? ' (once)' : '';
       const title = `${dayLabel(d)} ${hhmm(Math.max(o.a, lo) - lo)}–${hhmm(Math.min(o.b, hi) - lo)}${who}`
         + (o.skipped ? ' (skipped)' : !s.enabled ? ' (off)' : red ? ' (over Octopus\'s 6 hours a day)' : '');
-      return `<div class="seg ${o.skipped ? 'skip' : ''} ${!on || !s.enabled ? 'off' : ''} ${linked ? 'linked' : ''} ${picked ? 'picked' : ''} ${s.kind === 'once' ? 'once' : ''}"
-        data-occ="${k}" data-row="${d}" style="${red ? 'background:var(--err);' : ''}left:${x0}%;width:${x1 - x0}%" title="${title}"></div>`;
+      const ty = typeOf(s);
+      return `<div class="seg ${o.skipped ? 'skip' : ''} ${!on || !s.enabled ? 'off' : ''} ${linked ? 'linked' : ''} ${picked ? 'picked' : ''}"
+        data-occ="${k}" data-row="${d}" style="${red ? 'background:var(--err);' : ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}"></div>`;
     }).join('');
     const ticks = model.orphans.map((o, j) => [o, j]).filter(([o]) => o.date ? dayIndex(o.date) === d : o.days.includes(wdOf(isoAt(d))))
       .map(([o, j]) => `<div class="tick ${!on || !o.u.enabled ? 'off' : ''}" data-orphan="${j}" data-row="${d}" style="left:${tmin(o.u.time) / 14.4}%"
@@ -1997,7 +2018,12 @@ function drawWeek() {
         const {x0, x1} = span(a, b);
         return `<div class="sup" style="border-color:${supColor};left:${x0}%;width:${x1 - x0}%" title="Planned by ${esc(sc.provider)}: ${hhmm(Math.max(a, lo) - lo)}–${hhmm(Math.min(b, hi) - lo)}"></div>`;
       }).join('');
-    html += `<div class="dl ${d === 0 ? 'today' : ''}">${d === 0 ? 'Today' : dayLabel(d)}</div><div class="track" data-row="${d}">${bars}${ticks}${sup}${d === 0 ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
+    const charged = d > 0 ? '' : ses.filter(([a, b]) => b > lo && a < hi).map(([a, b]) => {
+      const {x0, x1} = span(a, b);
+      return `<div class="ses" style="left:${x0}%;width:${Math.max(0.3, x1 - x0)}%"></div>`;
+    }).join('');
+    if (d === 0) html += '<div class="sep"></div>';
+    html += `<div class="dl ${d === 0 ? 'today' : d < 0 ? 'past' : ''}">${d === 0 ? 'Today' : dayLabel(d)}</div><div class="track ${d < 0 ? 'past' : ''}" data-row="${d}">${bars}${ticks}${sup}${charged}${d === 0 ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
     if (ed && ed.row === d) html += '<div class="slot-pop" id="w-pop"></div>';
   }
   html += '<div></div><div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';
@@ -2160,6 +2186,7 @@ $('w-grid').addEventListener('click', async (ev) => {
     ed.form.days = ed.form.days.includes(d) ? ed.form.days.filter((x) => x !== d) : [...ed.form.days, d];
     drawEditor(); return;
   }
+  if (t.closest('.track.past')) return;  // the last 3 days: history only
   const seg = t.closest('.seg[data-occ]');
   if (seg) {
     const k = Number(seg.dataset.occ), row = Number(seg.dataset.row);
@@ -2179,7 +2206,7 @@ $('w-grid').addEventListener('change', (ev) => {
 const wdrag = {on: false};
 $('w-grid').addEventListener('pointerdown', (ev) => {
   const track = ev.target.closest('.track');
-  if (!track || ev.target.closest('.seg, .tick') || ev.button !== 0) return;
+  if (!track || track.classList.contains('past') || ev.target.closest('.seg, .tick') || ev.button !== 0) return;
   const rect = track.getBoundingClientRect();
   Object.assign(wdrag, {on: true, track, rect, x0: ev.clientX, x1: ev.clientX, row: Number(track.dataset.row)});
   track.setPointerCapture(ev.pointerId);

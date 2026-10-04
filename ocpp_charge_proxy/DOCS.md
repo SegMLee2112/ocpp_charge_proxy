@@ -94,8 +94,11 @@ even with the schedule off.
 
 ### Schedule, auto re-plug and start-up
 
-- **Schedule** (**Schedule** tab): the next 7 days are shown as slots,
-  each running from a plug-in to its unplug. Click or drag across a day to
+- **Schedule** (**Schedule** tab): the last 3 days and the next 7 are
+  shown as slots, each running from a plug-in to its unplug, coloured by
+  type: weekly (blue), one-off (teal), auto plug-in (orange) and Charge now
+  (pink). The last 3 days are for looking back: a green line shows when the
+  car actually charged, and your supplier's slots are outlined. Click or drag across a day to
   add a slot; click a slot to change its times, the days it repeats on
   (**Every week**) or its date (**Once**), turn it off, delete it, or skip
   it once (its plug-in and unplug both don't run; it shows hatched, and
