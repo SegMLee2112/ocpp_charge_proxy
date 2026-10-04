@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.17.1 — Smaller slot editor
+
+- **Improvement:** the slot editor in the week view is much shorter: times,
+  repeat, days, On and the buttons share one or two lines, and the ready
+  times note is now a tooltip on Unplug
+- **Change:** **+ Add a slot** opens the editor at the top of the week view;
+  clicking a day still opens it under that day
+
 ## 2.17.0 — Sessions on the schedule
 
 - **Feature:** on the schedule's week view, hover over the green "Charged"

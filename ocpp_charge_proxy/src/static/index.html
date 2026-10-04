@@ -224,8 +224,14 @@
   .week .tick { position: absolute; top: -3px; bottom: -3px; width: 12px; margin-left: -6px; cursor: pointer;
     background: linear-gradient(var(--text2), var(--text2)) center / 3px 100% no-repeat; }
   .week .tick.off { opacity: .35; }
-  .slot-pop .ed { display: flex; flex-direction: column; gap: 10px; width: 100%; }
-  .slot-pop .ed .row { margin: 0; gap: 10px; }
+  .slot-pop { padding: 8px 10px; }
+  .slot-pop .ed { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; width: 100%; }
+  .slot-pop .ed .acts { display: flex; gap: 6px; margin-left: auto; }
+  .slot-pop .ed .seg button { padding: 3px 8px; }
+  .slot-pop .ed .switch { margin-right: 4px; }
+  .slot-pop #w-err { flex-basis: 100%; margin: 0; }
+  .slot-pop #w-err:empty { display: none; }
+  .week .slot-pop.top { margin-bottom: 4px; }
   .slot-pop select { font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--divider); background: var(--card); color: var(--text); }
   .week .track .seg.linked { box-shadow: inset 0 0 0 2px var(--text2); }
   .week .sup { position: absolute; top: 0; bottom: 0; box-sizing: border-box; border: 2px solid; border-radius: 4px;
@@ -2081,9 +2087,10 @@ function drawWeek() {
       const {x0, x1} = span(z.a, z.b);
       return `<div class="ses" data-ses="${z.n}" style="left:${x0}%;width:${Math.max(0.3, x1 - x0)}%" title="${esc(sesText(z.x))} · click to open it"></div>`;
     }).join('');
+    if (d === -3 && ed && ed.top) html += '<div class="slot-pop top" id="w-pop"></div>';
     if (d === 0) html += '<div class="sep"></div>';
     html += `<div class="dl ${d === 0 ? 'today' : d < 0 ? 'past' : ''}">${d === 0 ? 'Today' : dayLabel(d)}</div><div class="track ${d < 0 ? 'past' : ''}" data-row="${d}">${bars}${ticks}${sup}${charged}${d === 0 ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
-    if (ed && ed.row === d) html += '<div class="slot-pop" id="w-pop"></div>';
+    if (ed && !ed.top && ed.row === d) html += '<div class="slot-pop" id="w-pop"></div>';
   }
   html += '<div></div><div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';
   $('w-grid').innerHTML = html;
@@ -2130,10 +2137,11 @@ function drawEditor() {
   const nextDay = f.start && f.end && tmin(f.end) <= tmin(f.start);
   const title = ed.mode === 'new' ? 'New slot' : ed.mode === 'orphan' ? 'Unplug only' : s.source === 'charge_now' ? 'Charge now slot'
     : s.source === 'auto_plug' ? 'Auto plug-in slot' : 'Slot';
+  const tip = rules ? `title="${esc(rules.provider)} ready times: unplug times are ${esc(rules.text)}"` : '';
   const times = ed.mode === 'orphan'
-    ? `<label>Unplug at <select data-f="end">${timeOptions(f.end, rules && rules.times)}</select></label>`
+    ? `<label ${tip}>Unplug at <select data-f="end">${timeOptions(f.end, rules && rules.times)}</select></label>`
     : `<label>Plug in <select data-f="start">${timeOptions(f.start)}</select></label>
-       <label>Unplug <select data-f="end">${timeOptions(f.end, rules && rules.times, 'No unplug')}</select></label>
+       <label ${tip}>Unplug <select data-f="end">${timeOptions(f.end, rules && rules.times, 'No unplug')}</select></label>
        ${nextDay ? '<span class="muted">next day</span>' : ''}`;
   const repeat = `<div class="seg" role="group" aria-label="Repeat">
       <button data-rep="weekly" aria-pressed="${f.repeat === 'weekly'}">Every week</button><button data-rep="once" aria-pressed="${f.repeat === 'once'}">Once</button></div>
@@ -2142,15 +2150,13 @@ function drawEditor() {
       : `<input type="date" data-f="date" value="${esc(f.date)}" aria-label="Date">`}`;
   const canSkip = s && o && o.udate !== undefined && new Date(`${o.date}T${s.start}`) > new Date();
   pop.innerHTML = `<div class="ed">
-    <div class="row"><b>${title}</b>${times}</div>
-    <div class="row">${repeat}<span class="grow"></span>
-      <label class="switch" title="On"><input type="checkbox" data-f="enabled" ${f.enabled ? 'checked' : ''} aria-label="On"><span></span></label></div>
-    ${rules ? `<div class="note" style="margin:0">${esc(rules.provider)} ready times: unplug times are ${rules.text}.</div>` : ''}
-    <div class="sub" id="w-err" style="color:var(--err)"></div>
-    <div class="row"><button class="btn small primary" id="w-save">Save</button>
+    <b>${title}${ed.top ? (ed.row ? ' · tomorrow' : ' · today') : ''}</b>${times}${repeat}
+    <label class="switch" title="On"><input type="checkbox" data-f="enabled" ${f.enabled ? 'checked' : ''} aria-label="On"><span></span></label>
+    <span class="acts"><button class="btn small primary" id="w-save">Save</button>
       ${ed.mode !== 'new' ? '<button class="btn small" id="w-del">Delete</button>' : ''}
       ${canSkip ? `<button class="btn small" id="w-skip">${o.skipped ? 'Undo skip' : 'Skip this one'}</button>` : ''}
-      <span class="grow"></span><button class="btn small" id="w-close">Cancel</button></div></div>`;
+      <button class="btn small" id="w-close">Cancel</button></span>
+    <div class="sub" id="w-err" style="color:var(--err)"></div></div>`;
 }
 const clone = (x) => JSON.parse(JSON.stringify(x));
 // Take a slot out of the entries; returns the ids freed, to reuse (keeps skips)
@@ -2280,6 +2286,8 @@ $('w-add').addEventListener('click', () => {
   const now = new Date(), m = Math.ceil((now.getHours() * 60 + now.getMinutes() + 1) / 30) * 30;
   const row = m >= DAY_MIN ? 1 : 0, a = m % DAY_MIN;
   openEditor('new', row, {start: hhmm(a), end: hhmm((a + 120) % DAY_MIN)});
+  week.edit.top = true;  // opens above the week, not under today's row
+  drawWeek();
   $('w-pop') && $('w-pop').scrollIntoView({block: 'nearest', behavior: 'smooth'});
 });
 // Click (1 hour) or drag across a day to add a slot there
