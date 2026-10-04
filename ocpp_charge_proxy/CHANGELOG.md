@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.23.0 — Messages under Debug
+
+- **Change:** Diagnostics › Messages moved into Diagnostics › Debug › Logs,
+  in place of the log lines (the log lines are still in the diagnostics
+  bundle). Diagnostics is now Health and Debug
+
 ## 2.22.0 — Settings on the web page
 
 - **Change:** the **Charger Current**, **Log Level** and **Continue the

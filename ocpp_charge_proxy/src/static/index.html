@@ -302,7 +302,7 @@
 
 <main>
   <div class="subnav" id="diag-nav" hidden role="group" aria-label="Diagnostics">
-    <button data-sub="health">Health</button><button data-sub="messages">Messages</button><button data-sub="debug">Debug</button>
+    <button data-sub="health">Health</button><button data-sub="debug">Debug</button>
   </div>
   <!-- ============ Overview ============ -->
   <section id="tab-overview" class="stack">
@@ -396,20 +396,6 @@
   </section>
 
   <!-- ============ Messages ============ -->
-  <section id="tab-messages" class="stack" hidden>
-    <div class="card">
-      <div class="msg-tools">
-        <input type="search" id="m-filter" placeholder="Filter by action or text" aria-label="Filter messages" style="flex:1;min-width:160px">
-        <label><input type="checkbox" id="m-hide-hb" checked> Hide Heartbeat</label>
-        <label><input type="checkbox" id="m-hide-mv"> Hide MeterValues</label>
-        <label><input type="checkbox" id="m-pause"> Pause</label>
-        <button class="btn small" id="m-copy">Copy</button>
-      </div>
-      <div class="msgs" id="m-list"></div>
-      <div class="note"><span id="m-count">0</span> shown · newest at the top · the last 300 frames are kept, across restarts. ↑ sent, ↓ received.</div>
-    </div>
-  </section>
-
 
   <!-- ============ Schedule (tab id "automation") ============ -->
   <section id="tab-automation" class="stack" hidden>
@@ -612,12 +598,20 @@
       <div class="note" style="margin:0">Off by default. On: the schedule, auto plug-in and Charge now can plug in for more than 6 hours a day with Octopus Energy while Force schedule on supplier is on. <details class="more"><summary>More</summary><div>Octopus schedules at most 6 hours of smart charging in a day, so it may not charge for the rest. Turning the guards back on needs the schedule to be within 6 hours a day again.</div></details></div>
     </div>
     <div class="card">
-      <h2>Logs<span class="spacer"></span><button class="btn small" id="d-log-refresh">Refresh</button></h2>
+      <h2>Logs</h2>
       <div class="row" style="margin-top:0">
         <div class="grow">Log level<div class="note" style="margin:0" id="d-level-note">Saved: kept after a restart. <details class="more"><summary>More</summary><div>OCPP messages are logged at Info, except Heartbeats and periodic meter readings, which only show at Debug. Clock-aligned readings stay at Info during a session.</div></details></div></div>
         <div class="seg" id="d-level" role="group" aria-label="Log level"><button data-level="debug">Debug</button><button data-level="info">Info</button><button data-level="warning">Warning</button></div>
       </div>
-      <pre class="logs" id="d-logs">Loading…</pre>
+      <div class="msg-tools" style="margin-top:12px">
+        <input type="search" id="m-filter" placeholder="Filter by action or text" aria-label="Filter messages" style="flex:1;min-width:160px">
+        <label><input type="checkbox" id="m-hide-hb" checked> Hide Heartbeat</label>
+        <label><input type="checkbox" id="m-hide-mv"> Hide MeterValues</label>
+        <label><input type="checkbox" id="m-pause"> Pause</label>
+        <button class="btn small" id="m-copy">Copy</button>
+      </div>
+      <div class="msgs" id="m-list"></div>
+      <div class="note"><span id="m-count">0</span> shown · newest at the top · the last 300 frames are kept, across restarts. ↑ sent, ↓ received.</div>
     </div>
     <div class="card">
       <h2>Diagnostics bundle</h2>
@@ -633,7 +627,7 @@
         <button class="btn small" id="d-clear-sessions">Clear</button>
       </div>
       <div class="row">
-        <div class="grow">Message log<div class="note" style="margin:0">Diagnostics › Messages</div></div>
+        <div class="grow">Message log<div class="note" style="margin:0">Diagnostics › Debug › Logs</div></div>
         <button class="btn small" id="d-clear-messages">Clear</button>
       </div>
     </div>
@@ -793,11 +787,12 @@ async function post(path, body) {
 }
 
 // ---------- tabs ----------
-const DIAG = ['health', 'messages', 'debug'];  // the Diagnostics tab's sections (Supplier is at the bottom of Health)
+const DIAG = ['health', 'debug'];  // the Diagnostics tab's sections (Supplier is at the bottom of Health)
 function showTab(name) {
   if (name === 'simulation') name = 'settings';
   if (name === 'schedule') name = 'automation';  // the Schedule tab
   if (name === 'diagnostics' || name === 'provider') name = 'health';
+  if (name === 'messages') name = 'debug';  // the messages are under Debug › Logs
   if (!document.getElementById('tab-' + name)) name = 'overview';
   activeTab = name;
   const diag = DIAG.includes(name);
@@ -1498,7 +1493,7 @@ function sessionDetail(s) {
       ['Waited', dur(s.duration_s)],
       ['Plugged in by', esc(s.plugged_by || '—')],
       ['Unplugged by', esc(s.unplugged_by || '—')],
-    ])}</dl><div class="sub">${sup('Your supplier')} didn't start a session while it was plugged in. If this keeps happening, check Diagnostics › Messages around this time.</div></div>`;
+    ])}</dl><div class="sub">${sup('Your supplier')} didn't start a session while it was plugged in. If this keeps happening, check the messages in Diagnostics › Debug › Logs around this time.</div></div>`;
   }
   return `<div class="detail-grid"><dl class="kv">${kv([
     ['Started', s.start ? new Date(s.start).toLocaleString([], {hourCycle: 'h23'}) : '—'],
@@ -2466,11 +2461,8 @@ function octopusCapped() {
 // ---------- Debug (Diagnostics › Debug) ----------
 async function refreshDebug() {
   let i;
-  try { i = await api('debug/info?lines=300'); } catch (e) { $('d-logs').textContent = 'Couldn\'t read the logs: ' + e.message; return; }
+  try { i = await api('debug/info?lines=0'); } catch (e) { return; }
   $('d-level').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.level === i.log_level));
-  const pre = $('d-logs'), atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8;
-  pre.textContent = (i.logs || []).join('\n') || 'No log lines yet.';
-  if (atEnd) pre.scrollTop = pre.scrollHeight;
   if (!auto.data) { try { auto.data = await api('automation'); } catch (e) { /* the switch waits */ } }
   if (auto.data) $('d-guards').checked = !!auto.data.schedule.override_guards;
 }
@@ -2521,7 +2513,6 @@ $('d-level').addEventListener('click', async (e) => {
   const level = e.target.dataset.level; if (!level) return;
   if (await post('debug/log_level', {level})) { toast(`Log level: ${level}`); refreshDebug(); }
 });
-$('d-log-refresh').addEventListener('click', () => refreshDebug());
 $('d-guards').addEventListener('change', async (e) => {
   const on = e.target.checked;
   try {
@@ -2577,15 +2568,14 @@ $('c-charge').addEventListener('click', async (e) => {
 function refreshTab(full) {
   if (activeTab === 'overview') { refreshSessionCard(); refreshHistory(full && !chart.samples.length); refreshSmart(full); }
   else if (activeTab === 'sessions') refreshSessions();
-  else if (activeTab === 'messages') refreshMessages();
-  else if (activeTab === 'debug') { refreshSmart(false); refreshDebug(); }  // the supplier's name; logs
+  else if (activeTab === 'debug') { refreshSmart(false); refreshDebug(); refreshMessages(); }  // the supplier's name; logs
   else if (activeTab === 'automation') { refreshAutomation(false); refreshSimulation(false); }
   else if (activeTab === 'settings') { refreshAutomation(false); refreshSimulation(false); refreshSmart(false); if (full) refreshAppSettings(); }
   else if (activeTab === 'health') { refreshHealth(); refreshSimulation(false); refreshProvider(); }
 }
 setInterval(() => {
   if (document.hidden) return;
-  if (activeTab === 'messages') refreshMessages();
+  if (activeTab === 'debug') refreshMessages();
   if (activeTab === 'settings' || activeTab === 'automation') refreshSimulation(false);
 }, 2000);
 setInterval(() => { if (!document.hidden) refreshTab(false); }, 10000);

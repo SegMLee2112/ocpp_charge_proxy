@@ -142,12 +142,12 @@ sensors live through Home Assistant's API.
     drop's reason, heartbeat and clock offset, the Home Assistant link and
     the add-on's entities, held messages, and at the bottom what your
     supplier has set: charging limits, charging profiles as a timeline, the
-    local authorisation list and every configuration key) and **Messages**
-    (the last 300 OCPP messages both ways, with a filter, full JSON on click
-    and Copy), and **Debug** (test values, send a message, drop the
-    connection or restart, override the 6-hour scheduling guard, logs and
-    log level, a diagnostics bundle to download, and clearing the session
-    history or message log).
+    local authorisation list and every configuration key) and **Debug**
+    (test values, send a message, drop the connection or restart, override
+    the 6-hour scheduling guard, the log level and the last 300 OCPP
+    messages both ways with a filter, full JSON on click and Copy, a
+    diagnostics bundle to download, and clearing the session history or
+    message log).
 - **Quieter logs.** OCPP messages are logged at `info`, except Heartbeats
   (every 10s with Octopus) and periodic meter readings (every 60s), which only
   show at `debug`. Clock-aligned readings (every 15 min) stay at `info`.

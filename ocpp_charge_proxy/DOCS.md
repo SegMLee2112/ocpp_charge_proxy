@@ -305,13 +305,10 @@ follows your Home Assistant theme.
   continuing a session after a restart; the
   simulated car's start delay and ramp-up; and your power, SoC and car
   plugged in sensors, with their live values.
-- **Diagnostics**, in three parts:
+- **Diagnostics**, in two parts:
   - **Health:** version, uptime, reconnects and the last drop's reason,
     heartbeat and clock offset, the Home Assistant link and the add-on's
     Home Assistant entities, and any held messages; then **Supplier** (below).
-  - **Messages:** the last 300 OCPP messages both ways, kept across
-    restarts (with a marker where the add-on restarted), with a filter,
-    full JSON on click and a Copy button for sharing.
   - **Debug:** tools for testing and bug reports:
     - Test values: a power override (reported instead of the simulation)
       and a test SoC.
@@ -325,8 +322,10 @@ follows your Home Assistant theme.
     - **Scheduling guards** (off by default): override them to let the
       schedule, auto plug-in and Charge now plug in for more than Octopus's
       6 hours a day while Force schedule on supplier is on.
-    - **Logs:** the last few hundred log lines, and the log level (Debug,
-      Info, Warning), kept across restarts.
+    - **Logs:** the log level (Debug, Info, Warning), kept across
+      restarts, and the last 300 OCPP messages both ways, kept across
+      restarts (with a marker where the add-on restarted), with a filter,
+      full JSON on click and a Copy button for sharing.
     - **Diagnostics bundle:** one JSON file with the state, schedule,
       sessions, supplier's plan and settings, health, recent messages, log
       lines and options (password and most of the charge point ID hidden).
