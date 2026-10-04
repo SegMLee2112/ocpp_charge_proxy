@@ -479,6 +479,7 @@
           <div class="grow">Charge for<div class="note" style="margin:0">Hours from plugging in (30-minute steps)</div></div>
           <span class="ctl"><input type="number" id="sim-auto-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours"> hours</span>
         </div>
+        <div class="note" id="sim-auto-cap" hidden style="margin:0">Up to 6 hours: Octopus's daily smart charging limit, while Force schedule on supplier is on. Longer is shortened to 6.</div>
         <div id="sim-auto-last" class="sub" style="margin-top:8px"></div>
         <dl class="kv" id="sim-monitor" style="margin-top:14px"></dl>
       </div>
@@ -516,6 +517,7 @@
           <div class="grow"><div>Charge now</div><div class="note" style="margin:0">Plug in now for this long. <details class="more"><summary>More</summary><div>The schedule is adjusted the same way as for auto plug-in: the charge is added as a one-off slot (which you can change on the Schedule tab) that unplugs at the first ready time your supplier accepts after these hours, and the ready time is set to it. If it meets a scheduled slot they become one; with Octopus and Force schedule on supplier on, if it takes the day over 6 hours, the next scheduled slot starts that much later.</div></details></div></div>
         </div>
         <div class="row" style="margin-top:6px"><div class="seg" id="c-charge" role="group" aria-label="Charge now for"></div></div>
+        <div class="note" id="c-charge-cap" hidden style="margin:4px 0 0">Up to 6 hours: Octopus's daily smart charging limit, while Force schedule on supplier is on.</div>
         <div class="sub" id="c-charge-note"></div>
         <div class="row">
           <div class="grow"><div>Power override</div><div class="note" style="margin:0" id="c-power-note">Report this power instead of the simulation</div></div>
@@ -1181,6 +1183,7 @@ async function refreshSmart(force) {
   try { smart.data = await api('smart_charging'); } catch (e) { return; }
   drawSmart(); drawStateSub(); drawChart();
   if (auto.data) drawWeek();
+  applyOctopusCap();
 }
 // Each supplier's slots in its own colour on the chart
 function providerColor(name) {
@@ -1567,6 +1570,7 @@ async function saveSettings() {
   if (rampDirty && (!(delay >= 0 && delay <= 60) || !(ramp >= 0 && ramp <= 60))) { toast('Start delay and ramp-up: 0–60 seconds'); return; }
   if (rpDirty && (!(after >= 1 && after <= 240) || !(tries >= 0 && tries <= 20))) { toast('Re-plug: 1–240 minutes and 0–20 tries'); return; }
   if (sim.dirty && !(n >= 1 && n <= 99)) { toast('Plug in below must be 1–99%'); return; }
+  if (sim.dirty && sim.edit.auto_plug_ready && octopusCapped() && parseFloat(sim.edit.auto_plug_hours) > 6) { toast('Charge for: up to 6 hours with Octopus while Force schedule on supplier is on'); return; }
   let ok = true;
   if (rampDirty) { if (await post('ramp', {start_delay_s: delay, ramp_up_s: ramp})) rampDirty = false; else ok = false; }
   if (rpDirty) { if (await post('automation/replug', {enabled: $('a-rp-on').checked, after_min: after, attempts: tries})) rpDirty = false; else ok = false; }
@@ -1763,6 +1767,7 @@ async function refreshAutomation(force) {
     $('a-rp-on').checked = d.replug.enabled;
   }
   drawReplugStatus(d.replug);
+  applyOctopusCap();
   drawAutoPlugLast(d);
   drawWeek();
 }
@@ -2253,6 +2258,17 @@ async function refreshHealth() {
     : '<div class="empty">None. Transaction messages are held here if the connection drops, and sent when it\'s back.</div>';
 }
 
+// Octopus schedules at most 6 hours of smart charging a day: while the
+// schedule sets its ready time, charges can't be longer
+function octopusCapped() {
+  return !!(smart.data && smart.data.found && smart.data.provider === 'Octopus Energy' && auto.data && auto.data.schedule.ready_time);
+}
+function applyOctopusCap() {
+  const capped = octopusCapped();
+  document.querySelectorAll('#c-charge button').forEach((b) => { b.hidden = capped && Number(b.dataset.hours) > 6; });
+  $('sim-auto-hours').max = capped ? 6 : 12;
+  $('c-charge-cap').hidden = !capped; $('sim-auto-cap').hidden = !capped;
+}
 // ---------- Charge now (Settings > Controls): plug in for a set time ----------
 // Added to the schedule as a one-off, so it can be changed on the Schedule tab
 const CHARGE_HOURS = [1, 2, 3, 4, 6, 8];
@@ -2279,7 +2295,7 @@ function refreshTab(full) {
   else if (activeTab === 'messages') refreshMessages();
   else if (activeTab === 'provider') refreshProvider();
   else if (activeTab === 'automation') { refreshAutomation(false); refreshSimulation(false); }
-  else if (activeTab === 'settings') { refreshAutomation(false); refreshSimulation(false); }
+  else if (activeTab === 'settings') { refreshAutomation(false); refreshSimulation(false); refreshSmart(false); }
   else if (activeTab === 'health') { refreshHealth(); refreshSimulation(false); }
 }
 setInterval(() => {

@@ -79,9 +79,10 @@ for the hours you choose (**Charge for**, 0.5 to 12):
   accepts at least that long away (rounded up to the half hour; with EDF,
   the next time between 04:00 and 11:00). It unplugs then, after the
   supplier stops the session or the unplug wait (60 s by default).
-- Octopus Energy, with Force schedule on supplier on: if that puts more
-  than 6 hours in 24, the next scheduled slot starts that many hours later
-  (or is skipped, if nothing is left). With it off there's no 6-hour limit,
+- Octopus Energy, with Force schedule on supplier on: the charge is at
+  most 6 hours (longer is shortened, and the 8 h Charge now button is
+  hidden), and if it puts more than 6 hours in 24, the next scheduled slot
+  starts that many hours later (or is skipped, if nothing is left). With it off there's no 6-hour limit,
   for auto plug-in or the schedule.
 - If it meets or overlaps the next scheduled slot, they become one slot,
   ending at the schedule's unplug.

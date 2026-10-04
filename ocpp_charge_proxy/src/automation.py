@@ -501,15 +501,37 @@ class Automation:
                     best = dt
         return best
 
+    def last_ready_by(self, limit: datetime.datetime, ready_times: Optional[list] = None):
+        """The last ready time your supplier accepts at or before `limit` (that day or the one before)."""
+        best = None
+        for d in (0, -1):
+            day = limit.date() + datetime.timedelta(days=d)
+            for t in ready_times or ALL_DAY_TIMES:
+                h, m = _parse_hhmm(t)
+                dt = self._localize(datetime.datetime(day.year, day.month, day.day, h, m))
+                if dt <= limit and (best is None or dt > best):
+                    best = dt
+        return best
+
     def plan_auto_plug(self, minutes: int, ready_times: Optional[list] = None,
                        cap_min: Optional[int] = None, provider: str = "your supplier",
                        source: str = AUTO_SOURCE) -> dict:
         """An auto plug-in just plugged in: add a charge of `minutes` to the
         schedule as a one-off (see the module docstring). Returns what was done."""
         now = self._now().replace(second=0, microsecond=0)
+        shortened = None
+        if cap_min and minutes > cap_min:
+            # Octopus schedules at most 6 hours a day: the charge can't be longer
+            shortened = f"shortened to {cap_min // 60} hours, {provider}'s daily limit"
+            minutes = cap_min
         end = self.first_ready_at(now + datetime.timedelta(minutes=minutes), ready_times)
         if end is None:
             raise ValueError("No ready time your supplier accepts in the next 2 days")
+        if cap_min and end > now + datetime.timedelta(minutes=cap_min):
+            # rounding up to a ready time would go over: the last one within the limit
+            earlier = self.last_ready_by(now + datetime.timedelta(minutes=cap_min), ready_times)
+            if earlier is not None and earlier > now:
+                end = earlier
 
         def one_off(t, action):
             return validate_entry({"time": t.strftime("%H:%M"), "date": t.date().isoformat(),
@@ -519,7 +541,7 @@ class Automation:
         skips = list(self.skips)
         plug, unplug = one_off(now, "plug"), one_off(end, "unplug")
         added = [plug]
-        notes = []
+        notes = [shortened] if shortened else []
         start_day = now.date() - datetime.timedelta(days=1)
         nxt = next((s for s in self._stretches(start_day, 9, active, skips) if s["end"] > now), None)
         moved = None

@@ -725,3 +725,14 @@ def test_charge_now_is_planned_like_auto_plug_in():
     clock.advance(minutes=121)
     assert [e["action"] for e in a.due()] == ["unplug"]
     assert a.one_off_runs()[0]["source"] == "charge_now"
+
+
+def test_charge_capped_at_six_hours_for_octopus():
+    a, clock = _sched_18_22(_at(8, 10), enabled=False)
+    out = a.plan_auto_plug(480, cap_min=360, provider="Octopus Energy")  # 8 h asked
+    assert out["ready_for"].startswith("2026-10-03T14:00")  # 08:10 + 6 h = 14:10: not rounded up past 6 h
+    assert "shortened to 6 hours" in out["notes"][0]
+    b, clock_b = _sched_18_22(_at(8, 10), enabled=False)
+    assert b.plan_auto_plug(480)["ready_for"].startswith("2026-10-03T16:30")  # no cap: 8 h, rounded up
+    c, clock_c = _sched_18_22(_at(8), enabled=False)
+    assert c.plan_auto_plug(360, cap_min=360)["ready_for"].startswith("2026-10-03T14:00")  # exactly 6 h

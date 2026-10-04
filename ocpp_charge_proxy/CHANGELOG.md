@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.14.2 — 6-hour limit for Charge now and auto plug-in
+
+- **Fix:** with Octopus and Force schedule on supplier on, a Charge now or
+  auto plug-in charge is now at most 6 hours (Octopus's daily limit). A
+  longer one is shortened to 6 hours, with a note saying so, and isn't
+  rounded up past it. The 8 h Charge now button is hidden and auto
+  plug-in's Charge for goes up to 6 while the limit applies
+
 ## 2.14.1 — Charge now in Controls
 
 - **Change:** **Charge now** moved from the Overview to Settings › Controls,
