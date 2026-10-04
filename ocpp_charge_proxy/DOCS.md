@@ -288,9 +288,9 @@ follows your Home Assistant theme.
 - **Sessions:** energy and time spent charging per day for the last 14
   days (click a day to show only its sessions), and the last 20 charging
   sessions (energy, duration, peak power, what ended them; transaction ID
-  and ID tag in the details; **Supplier slot** when the whole session was
-  in your supplier's dispatch slots, **Partly supplier slot** when only
-  some was), kept across restarts,
+  and ID tag in the details; tagged with your supplier's name, e.g.
+  **Octopus Energy slot**, when the whole session was in its dispatch
+  slots, or **Partly Octopus Energy slot** when only some was), kept across restarts,
   and the last 20 plug-ins that never got a session: when, for how long, who
   plugged in, and whether auto re-plug gave up on it or it was unplugged
   first.

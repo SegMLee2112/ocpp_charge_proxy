@@ -1330,8 +1330,8 @@ async function refreshSessions() {
     if (!s.supplier_s || s.supplier_s < 60 || !s.duration_s) return '';
     const who = esc(s.supplier || 'your supplier');
     return s.duration_s - s.supplier_s <= 300
-      ? ` <span class="chip ok" title="The whole session was in ${who}'s dispatch slots">Supplier slot</span>`
-      : ` <span class="chip warn" title="${dur(s.supplier_s)} of ${dur(s.duration_s)} was in ${who}'s dispatch slots">Partly supplier slot</span>`;
+      ? ` <span class="chip ok" title="The whole session was in ${who}'s dispatch slots">${who} slot</span>`
+      : ` <span class="chip warn" title="${dur(s.supplier_s)} of ${dur(s.duration_s)} was in ${who}'s dispatch slots">Partly ${who} slot</span>`;
   };
   const onDay = (iso) => !sessDay || (iso && new Date(iso).toLocaleDateString('en-CA') === sessDay);
   const all = (sessionsData.history || []).filter((x) => onDay(x.start));

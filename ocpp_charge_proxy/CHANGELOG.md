@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.18.1 — Supplier name on sessions
+
+- **Improvement:** Sessions tab: the supplier slot tags name your supplier,
+  e.g. **Octopus Energy slot** or **Partly Octopus Energy slot**
+
 ## 2.18.0 — Supplier slots on sessions
 
 - **Feature:** Sessions tab: each session is tagged **Supplier slot** when
