@@ -276,7 +276,7 @@ follows your Home Assistant theme.
   sensors (keep them recorded): 10-second detail for 24 hours, then
   5-minute points while HA keeps them (10 days by default, `purge_keep_days`)
   and hourly beyond that.
-- **Charge now** (**Settings** tab, Controls): click how long to plug in
+- **Charge now** (**Settings** tab, its own card): click how long to plug in
   for (1 to 8 hours). It plugs in straight away and adjusts the schedule
   the same way auto plug-in does (see [Auto plug-in](#auto-plug-in)): a
   one-off slot you can change on the Schedule tab, the ready time set to

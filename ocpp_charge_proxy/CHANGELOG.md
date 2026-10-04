@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.16.4 — Charge now card
+
+- **Improvement:** Charge now has its own card, first on the Settings tab
+
 ## 2.16.3 — Provider on the Health page
 
 - **Change:** Diagnostics › Provider moved to the bottom of Diagnostics ›
