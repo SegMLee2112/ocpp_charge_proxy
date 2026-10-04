@@ -785,7 +785,7 @@ class Automation:
                          wait_s: float = REPLUG_WAIT_S) -> None:
         self.attempts_used += 1
         logger.warning(
-            "No session from the provider %d min after plugging in: re-plugging (try %d of %d)",
+            "No session from the supplier %d min after plugging in: re-plugging (try %d of %d)",
             self.replug["after_min"], self.attempts_used, self.replug["attempts"],
         )
         self.replugging = True

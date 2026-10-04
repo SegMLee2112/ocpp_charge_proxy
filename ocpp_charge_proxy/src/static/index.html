@@ -336,7 +336,7 @@
       </div>
       <div class="card">
         <h2>Smart charging<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400" id="sc-provider"></span></h2>
-        <div id="sc-body"><div class="empty">Looking for your supplier's integration…</div></div>
+        <div id="sc-body"><div class="empty">Looking for <span class="supn" data-f="your supplier">your supplier</span>'s integration…</div></div>
         <div id="sc-check"></div>
         <div id="sc-src"></div>
       </div>
@@ -416,7 +416,7 @@
         <span class="muted" style="font-size:13px;font-weight:400">On</span>
         <label class="switch"><input type="checkbox" id="a-sched-on" aria-label="Schedule on"><span></span></label>
       </h2>
-      <div class="note" style="margin:0 0 10px">Plugs in and unplugs at set times, so your provider can charge then. <details class="more"><summary>More</summary><div>Each slot runs from a plug-in to its unplug, every week on the days you pick, or once on a date. Times are in your Home Assistant time zone. A time missed while the add-on is stopped isn't run later; if it starts inside a slot, it plugs in straight away. Unplugging during a session ends it. Skip a slot to stop it running once.</div></details></div>
+      <div class="note" style="margin:0 0 10px">Plugs in and unplugs at set times, so <span class="supn" data-f="your supplier">your supplier</span> can charge then. <details class="more"><summary>More</summary><div>Each slot runs from a plug-in to its unplug, every week on the days you pick, or once on a date. Times are in your Home Assistant time zone. A time missed while the add-on is stopped isn't run later; if it starts inside a slot, it plugs in straight away. Unplugging during a session ends it. Skip a slot to stop it running once.</div></details></div>
       <div class="sub" id="a-next" style="margin-bottom:6px"></div>
       <div class="row" style="margin:0 0 12px">
         <div class="note grow" style="margin:0">The last 3 days, then the next 7. Click a slot to change, delete or skip it, or click or drag across a day to add one.</div>
@@ -429,24 +429,24 @@
       <div class="note" id="a-tz"></div>
     </div>
     <div class="card">
-      <h2>Your supplier</h2>
+      <h2><span class="supn" data-f="Your supplier">Your supplier</span></h2>
       <div class="row">
         <div class="grow">
-          <div>Force schedule on supplier</div>
-          <div class="note" style="margin:0">Sets your supplier's ready time to the schedule's next unplug. <details class="more"><summary>More</summary><div>Only at scheduled plug-ins. Ready times are in 30-minute steps (Octopus: any time of day; EDF: 04:00–11:00), so while this is on, unplug times are limited to those.</div></details></div>
+          <div>Force schedule on <span class="supn" data-f="supplier">supplier</span></div>
+          <div class="note" style="margin:0">Sets <span class="supn" data-f="your supplier">your supplier</span>'s ready time to the schedule's next unplug. <details class="more"><summary>More</summary><div>Only at scheduled plug-ins. Ready times are in 30-minute steps (Octopus: any time of day; EDF: 04:00–11:00), so while this is on, unplug times are limited to those.</div></details></div>
           <div id="a-ready-status" style="margin-top:6px"></div>
           <div id="a-ready-err" style="margin-top:6px;color:var(--err)" hidden></div>
         </div>
         <label class="switch"><input type="checkbox" id="a-ready-on" aria-label="Force schedule on supplier"><span></span></label>
       </div>
       <div class="row" id="a-wait-row" style="margin-top:10px" hidden>
-        <div class="grow">Wait for the supplier at unplug
-          <div class="note" style="margin:0">Lets your supplier end the session itself. <details class="more"><summary>More</summary><div>At a scheduled unplug during a session, the add-on waits up to this long for your supplier to stop the session before unplugging. 0 unplugs straight away.</div></details></div></div>
+        <div class="grow">Wait for <span class="supn" data-f="the supplier">the supplier</span> at unplug
+          <div class="note" style="margin:0">Lets <span class="supn" data-f="your supplier">your supplier</span> end the session itself. <details class="more"><summary>More</summary><div>At a scheduled unplug during a session, the add-on waits up to this long for <span class="supn" data-f="your supplier">your supplier</span> to stop the session before unplugging. 0 unplugs straight away.</div></details></div></div>
         <span class="ctl"><input type="number" id="a-wait" min="0" max="600" step="10" aria-label="Seconds to wait for the supplier at unplug"> s</span>
       </div>
       <div class="row" id="a-plan-row" style="margin-top:10px" hidden>
-        <div class="grow">Supplier's plan
-          <div class="note" style="margin:0">Checked while the schedule has the car plugged in. <details class="more"><summary>More</summary><div>Your supplier's planned slots up to the ready time are checked against the schedule. A slot past the unplug, or a ready time changed in the supplier's app, is flagged.</div></details></div>
+        <div class="grow"><span class="supn" data-f="Supplier">Supplier</span>'s plan
+          <div class="note" style="margin:0">Checked while the schedule has the car plugged in. <details class="more"><summary>More</summary><div><span class="supn" data-f="Your supplier">Your supplier</span>'s planned slots up to the ready time are checked against the schedule. A slot past the unplug, or a ready time changed in <span class="supn" data-f="the supplier">the supplier</span>'s app, is flagged.</div></details></div>
           <div id="a-plan" style="margin-top:6px"></div></div>
       </div>
     </div>
@@ -455,15 +455,15 @@
         <h2>Auto plug-in<span class="spacer"></span>
           <label class="switch"><input type="checkbox" id="sim-auto" aria-label="Auto plug-in"><span></span></label>
         </h2>
-        <div class="note" style="margin:0 0 10px">Plugs in when the car's charge drops below a level. <details class="more"><summary>More</summary><div>Switches Plugged In on once, so your provider can schedule a charge. It won't plug back in if you unplug by hand while the SoC is still low.</div></details></div>
+        <div class="note" style="margin:0 0 10px">Plugs in when the car's charge drops below a level. <details class="more"><summary>More</summary><div>Switches Plugged In on once, so <span class="supn" data-f="your supplier">your supplier</span> can schedule a charge. It won't plug back in if you unplug by hand while the SoC is still low.</div></details></div>
         <div class="row"><div class="grow">Plug in below<div class="note" style="margin:0">SoC level</div></div>
           <span class="ctl"><input type="number" id="sim-auto-soc" min="1" max="99" step="1" aria-label="Plug in below SoC"> %</span></div>
         <div class="row"><div class="grow">SoC sensor to watch<div class="note" style="margin:0">Normally your reporting SoC sensor. <details class="more"><summary>More</summary><div>Or pick another one to watch only for this (it is never reported), e.g. for a car that may be away.</div></details></div></div></div>
         <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_plug_entity" data-domain="sensor" data-class="battery" data-units="%" data-none="Reporting SoC sensor"></span></div>
         <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
           <div class="grow">Automatically adjust schedule to fit auto plug-in
-            <div class="note" style="margin:0">Adds the charge to the schedule and sets your supplier's ready time. <details class="more"><summary>More</summary><div>As a one-off that unplugs when it's done; the ready time is set to that unplug. If it meets a scheduled slot they become one.
-              <br><b>Octopus Energy:</b> unplugs after the hours below (rounded up to the half hour); with Force schedule on supplier on,
+            <div class="note" style="margin:0">Adds the charge to the schedule and sets <span class="supn" data-f="your supplier">your supplier</span>'s ready time. <details class="more"><summary>More</summary><div>As a one-off that unplugs when it's done; the ready time is set to that unplug. If it meets a scheduled slot they become one.
+              <br><b>Octopus Energy:</b> unplugs after the hours below (rounded up to the half hour); with Force schedule on <span class="supn" data-f="supplier">supplier</span> on,
               if that takes the day over 6 hours, the next scheduled slot starts that much later.
               <br><b>EDF Energy:</b> ready times can only be 04:00–11:00, so it unplugs at the first of those after the hours below
               (e.g. plugging in at 18:00 for 3 hours unplugs at 04:00 the next morning).
@@ -474,7 +474,7 @@
           <div class="grow">Charge for<div class="note" style="margin:0">Hours from plugging in (30-minute steps)</div></div>
           <span class="ctl"><input type="number" id="sim-auto-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours"> hours</span>
         </div>
-        <div class="note" id="sim-auto-cap" hidden style="margin:0">Up to 6 hours: Octopus's daily smart charging limit, while Force schedule on supplier is on. Longer is shortened to 6.</div>
+        <div class="note" id="sim-auto-cap" hidden style="margin:0">Up to 6 hours: Octopus's daily smart charging limit, while Force schedule on <span class="supn" data-f="supplier">supplier</span> is on. Longer is shortened to 6.</div>
         <div id="sim-auto-last" class="sub" style="margin-top:8px"></div>
         <dl class="kv" id="sim-monitor" style="margin-top:14px"></dl>
       </div>
@@ -482,10 +482,10 @@
         <h2>Auto re-plug<span class="spacer"></span>
           <label class="switch"><input type="checkbox" id="a-rp-on" aria-label="Auto re-plug on"><span></span></label>
         </h2>
-        <div class="note" style="margin:0 0 10px">Unplugs and plugs back in if your provider doesn't start a session. <details class="more"><summary>More</summary><div>Octopus sometimes doesn't start a session after you plug in. If there's still no session after the minutes below, the add-on unplugs for 30 seconds and plugs back in, up to the number of tries below, then gives up until the car is next unplugged. A slot your supplier has planned for later counts as an answer, so it waits for that; during a slot that's running, it waits until 10 minutes after the next hour or half hour.</div></details></div>
+        <div class="note" style="margin:0 0 10px">Unplugs and plugs back in if <span class="supn" data-f="your supplier">your supplier</span> doesn't start a session. <details class="more"><summary>More</summary><div>Octopus sometimes doesn't start a session after you plug in. If there's still no session after the minutes below, the add-on unplugs for 30 seconds and plugs back in, up to the number of tries below, then gives up until the car is next unplugged. A slot <span class="supn" data-f="your supplier">your supplier</span> has planned for later counts as an answer, so it waits for that; during a slot that's running, it waits until 10 minutes after the next hour or half hour.</div></details></div>
         <div id="a-rp-status" style="margin-bottom:12px"></div>
         <div class="row">
-          <div class="grow">Re-plug after<div class="note" style="margin:0">Minutes plugged in with no session. <details class="more"><summary>More</summary><div>If your supplier's plan is found: nothing scheduled, or a slot running with no session. Then the add-on unplugs for 30 seconds and plugs back in.</div></details></div></div>
+          <div class="grow">Re-plug after<div class="note" style="margin:0">Minutes plugged in with no session. <details class="more"><summary>More</summary><div>If <span class="supn" data-f="your supplier">your supplier</span>'s plan is found: nothing scheduled, or a slot running with no session. Then the add-on unplugs for 30 seconds and plugs back in.</div></details></div></div>
           <span class="ctl"><input type="number" id="a-rp-after" min="1" max="240" step="1" aria-label="Re-plug after minutes"> min</span>
         </div>
         <div class="row">
@@ -501,9 +501,9 @@
     <div class="grid">
       <div class="card">
         <h2>Charge now</h2>
-        <div class="note" style="margin:0 0 10px">Plug in now for this long. <details class="more"><summary>More</summary><div>The schedule is adjusted the same way as for auto plug-in: the charge is added as a one-off slot (which you can change on the Schedule tab) that unplugs at the first ready time your supplier accepts after these hours, and the ready time is set to it. If it meets a scheduled slot they become one; with Octopus and Force schedule on supplier on, if it takes the day over 6 hours, the next scheduled slot starts that much later.</div></details></div>
+        <div class="note" style="margin:0 0 10px">Plug in now for this long. <details class="more"><summary>More</summary><div>The schedule is adjusted the same way as for auto plug-in: the charge is added as a one-off slot (which you can change on the Schedule tab) that unplugs at the first ready time <span class="supn" data-f="your supplier">your supplier</span> accepts after these hours, and the ready time is set to it. If it meets a scheduled slot they become one; with Octopus and Force schedule on <span class="supn" data-f="supplier">supplier</span> on, if it takes the day over 6 hours, the next scheduled slot starts that much later.</div></details></div>
         <div class="row" style="margin-top:0"><div class="seg" id="c-charge" role="group" aria-label="Charge now for"></div></div>
-        <div class="note" id="c-charge-cap" hidden style="margin:4px 0 0">Up to 6 hours: Octopus's daily smart charging limit, while Force schedule on supplier is on.</div>
+        <div class="note" id="c-charge-cap" hidden style="margin:4px 0 0">Up to 6 hours: Octopus's daily smart charging limit, while Force schedule on <span class="supn" data-f="supplier">supplier</span> is on.</div>
         <div class="sub" id="c-charge-note"></div>
       </div>
       <div class="card">
@@ -513,7 +513,7 @@
           <label class="switch"><input type="checkbox" id="c-plug" aria-label="Plugged In"><span></span></label>
         </div>
         <div class="row">
-          <div class="grow"><div>Max current</div><div class="note" style="margin:0">Your provider can lower it, not raise it</div></div>
+          <div class="grow"><div>Max current</div><div class="note" style="margin:0"><span class="supn" data-f="Your supplier">Your supplier</span> can lower it, not raise it</div></div>
         </div>
         <div class="row" style="margin-top:6px"><div class="seg" id="c-amps" role="group" aria-label="Max current"></div></div>
         <div class="row">
@@ -523,7 +523,7 @@
           <button class="btn small" id="c-power-clear">Clear</button></span>
         </div>
         <div class="row">
-          <div class="grow"><div>SoC</div><div class="note" style="margin:0" id="c-soc-note">Test value reported to your provider</div></div>
+          <div class="grow"><div>SoC</div><div class="note" style="margin:0" id="c-soc-note">Test value reported to <span class="supn" data-f="your supplier">your supplier</span></div></div>
           <span class="ctl"><input type="number" id="c-soc" min="0" max="100" step="1" placeholder="%" aria-label="SoC in percent">
           <button class="btn small" id="c-soc-set">Set</button>
           <button class="btn small" id="c-soc-clear">Clear</button></span>
@@ -549,7 +549,7 @@
       </div>
       <div class="card">
         <h2>Reporting SoC</h2>
-        <div class="row"><div class="grow">SoC sensor<div class="note" style="margin:0">Your car's charge, reported to your provider. <details class="more"><summary>More</summary><div>Sent while plugged in. At 100% the car reports full, and power tapers above 90%.</div></details></div></div></div>
+        <div class="row"><div class="grow">SoC sensor<div class="note" style="margin:0">Your car's charge, reported to <span class="supn" data-f="your supplier">your supplier</span>. <details class="more"><summary>More</summary><div>Sent while plugged in. At 100% the car reports full, and power tapers above 90%.</div></details></div></div></div>
         <div class="row" style="margin-top:6px"><span class="picker" data-key="soc_entity" data-domain="sensor" data-class="battery" data-units="%"></span></div>
         <dl class="kv" id="sim-soc" style="margin-top:14px"></dl>
       </div>
@@ -587,7 +587,7 @@
       <h2>Held messages</h2>
       <div id="h-held"></div>
     </div>
-    <div class="section-title">Provider</div>
+    <div class="section-title">Supplier</div>
     <div class="grid">
       <div class="card">
         <h2>Charging limits</h2>
@@ -604,7 +604,7 @@
     </div>
     <div class="card">
       <h2>Configuration<span class="spacer"></span>
-        <label class="live" style="cursor:pointer"><input type="checkbox" id="p-only-server"> Set by provider only</label>
+        <label class="live" style="cursor:pointer"><input type="checkbox" id="p-only-server"> Set by supplier only</label>
       </h2>
       <div class="table-wrap">
         <table><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody id="p-config"></tbody></table>
@@ -753,15 +753,15 @@ async function pollStatus() {
 }
 function currentIssues() {
   const out = [];  // [level, text]
-  if (state && !state.connected_to_server) out.push(['err', 'Not connected to your provider\'s OCPP server']);
-  if (state && state.held_messages) out.push(['warn', `${state.held_messages} message${state.held_messages === 1 ? '' : 's'} waiting to be sent to your provider`]);
+  if (state && !state.connected_to_server) out.push(['err', `Not connected to ${sup('your supplier')}'s OCPP server`]);
+  if (state && state.held_messages) out.push(['warn', `${state.held_messages} message${state.held_messages === 1 ? '' : 's'} waiting to be sent to ${sup('your supplier')}`]);
   const ha = statusInfo.health && statusInfo.health.home_assistant;
   if (ha && ha.available && !ha.connected) out.push(['warn', 'Home Assistant link down: your sensors and entities aren\'t updating' + (ha.error ? ` (${ha.error})` : '')]);
   const ent = statusInfo.sensors && statusInfo.sensors.ha_entities;
   if (ent && ent.integration_conflict && ent.integration_conflict.length) out.push(['warn', 'The old OCPP Charge Proxy integration is still installed: remove it so the add-on can update its sensors']);
   if (ent && ent.error) out.push(['warn', ent.error]);
   const rp = state && state.replug;
-  if (rp && rp.status === 'gave_up') out.push(['warn', 'Auto re-plug gave up: no session from your provider']);
+  if (rp && rp.status === 'gave_up') out.push(['warn', `Auto re-plug gave up: no session from ${sup('your supplier')}`]);
   return out;
 }
 function updateStatus() {
@@ -828,7 +828,8 @@ function renderState(s) {
   // running now ("Waiting for supplier": it should be charging) or planned for later ("Scheduled")
   const st = s.state === 'Preparing' && s.slot_now ? 'Waiting for supplier'
     : s.state === 'Preparing' && s.scheduled ? 'Scheduled' : (s.state || 'Unknown');
-  $('o-state').textContent = st; $('o-state').className = 'state ' + stateClass(st);
+  $('o-state').textContent = st === 'Waiting for supplier' && supName() ? `Waiting for ${supName()}` : st;
+  $('o-state').className = 'state ' + stateClass(st);
   drawStateSub();
   $('o-conn-dot').className = 'dot ' + (s.connected_to_server ? 'ok' : 'err');
   $('o-conn').textContent = s.connected_to_server ? 'Connected' : 'Disconnected';
@@ -839,10 +840,10 @@ function renderState(s) {
   if (s.held_messages) chips.push(`<span class="chip warn">${s.held_messages} held</span>`);
   if (s.schedule_enabled && s.schedule_next) chips.push(`<span class="chip">${s.schedule_next.action === 'plug' ? 'Plug in' : 'Unplug'} ${whenText(s.schedule_next.time)}</span>`);
   const rp = s.replug || {};
-  if (s.unplug_pending) chips.push(`<span class="chip warn" title="Giving your supplier time to stop the session first">Unplugging by ${new Date(s.unplug_pending).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'})}</span>`);
+  if (s.unplug_pending) chips.push(`<span class="chip warn" title="Giving ${sup('your supplier')} time to stop the session first">Unplugging by ${new Date(s.unplug_pending).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'})}</span>`);
   const pc = s.plan_check;
   drawSmartCheck(pc);
-  if (pc && pc.status === 'error') chips.push(`<span class="chip err" title="${esc(pc.problems.join('\n'))}">Supplier plan doesn't match the schedule</span>`);
+  if (pc && pc.status === 'error') chips.push(`<span class="chip err" title="${esc(pc.problems.join('\n'))}">${sup('Supplier')} plan doesn't match the schedule</span>`);
   if (activeTab === 'automation') drawPlanCheck(pc);
   if (rp.status === 'waiting' && rp.next_replug_at) chips.push(`<span class="chip warn">Re-plug ${hm(rp.next_replug_at)} if no session</span>`);
   if (rp.status === 'replugging') chips.push('<span class="chip warn">Re-plugging…</span>');
@@ -856,13 +857,13 @@ function renderState(s) {
     s.power_offered_kw ? `offered ${num(s.power_offered_kw, 1)} kW` : null].filter(Boolean).join(' · ');
   const eff = s.current_amps_effective ?? s.current_amps_setting, max = s.current_amps_setting;
   $('o-amps').textContent = num(s.current_a, 1) + ' A';
-  $('o-amps-sub').textContent = `Limit ${eff} A` + (eff < max ? ` (max ${max} A, provider)` : '') +
-    (s.current_amps_provider_limit != null ? ` · provider ${num(s.current_amps_provider_limit, 0)} A` : '');
+  $('o-amps-sub').textContent = `Limit ${eff} A` + (eff < max ? ` (max ${max} A, supplier)` : '') +
+    (s.current_amps_provider_limit != null ? ` · supplier ${num(s.current_amps_provider_limit, 0)} A` : '');
   if (s.soc_percent === null || s.soc_percent === undefined) {
     $('o-soc').textContent = '—'; $('o-soc-sub').textContent = 'Not set';
   } else {
     $('o-soc').textContent = Math.round(s.soc_percent) + '%';
-    $('o-soc-sub').textContent = s.soc_percent >= 100 ? 'Full' : (s.plugged_in ? 'Reported to your provider' : 'Reported when plugged in');
+    $('o-soc-sub').textContent = s.soc_percent >= 100 ? 'Full' : (s.plugged_in ? `Reported to ${sup('your supplier')}` : 'Reported when plugged in');
   }
   $('o-energy').textContent = num(s.energy_kwh, 1) + ' kWh';
 
@@ -942,7 +943,7 @@ function drawSessionCard() {
   const c = sessionsData && sessionsData.current;
   if (!c) {
     const last = sessionsData && (sessionsData.history || []).find((x) => x.type !== 'no_session');
-    $('o-session').innerHTML = '<div class="empty">No session' + (state && state.plugged_in ? ' — waiting for your provider to start one' : '') + '</div>' +
+    $('o-session').innerHTML = '<div class="empty">No session' + (state && state.plugged_in ? ` — waiting for ${sup('your supplier')} to start one` : '') + '</div>' +
       (last ? `<div class="sub">Last: ${dateTime(last.start)} · ${num(last.energy_kwh, 2)} kWh · ${dur(last.duration_s)} · ${esc(last.reason || '')}</div>` : '');
     return;
   }
@@ -968,7 +969,11 @@ const LONG_RANGE = 86400, LONG_STEP = 300;
 // view: [t0, t1] while zoomed in (drag or scroll on the chart), else null
 const chart = {samples: [], long: [], longLoaded: false, series: 'power', range: 3600, lastT: 0, longT: 0, longAt: 0, error: null, view: null};
 const MIN_SPAN = 120, MAX_SPAN = 14 * 86400;
-const smart = {data: null, at: 0};  // your supplier's charge slots (smart charging card)
+const smart = {data: null, at: 0};
+// Your supplier's name once its integration is found; text shows it in place of "your supplier"
+const supName = () => (smart.data && smart.data.found && smart.data.provider) || null;
+const sup = (fallback) => esc(supName() || fallback);
+function applySupName() { document.querySelectorAll('.supn').forEach((e) => { e.textContent = supName() || e.dataset.f; }); }  // your supplier's charge slots (smart charging card)
 async function refreshHistory(full) {
   try {
     const since = full ? 0 : chart.lastT;
@@ -1006,7 +1011,7 @@ function seriesDefs() {
   if (chart.series === 'current') return {unit: 'A', lines: [
     {name: 'Current', color: p, fill: true, get: (s) => s.current_a},
     {name: 'Max (HA)', color: w, dash: true, step: true, get: (s) => s.max_amps},
-    {name: 'Provider limit', color: e, dash: true, step: true, get: (s) => s.provider_limit_amps},
+    {name: 'Supplier limit', color: e, dash: true, step: true, get: (s) => s.provider_limit_amps},
   ]};
   if (chart.series === 'soc') return {unit: '%', min: 0, max: 100, lines: [
     {name: 'SoC', color: ok, fill: true, get: (s) => s.soc},
@@ -1201,6 +1206,7 @@ async function refreshSmart(force) {
   if (!force && smart.data && Date.now() - smart.at < 60000) return;
   smart.at = Date.now();
   try { smart.data = await api('smart_charging'); } catch (e) { return; }
+  applySupName();
   drawSmart(); drawStateSub(); drawChart();
   if (auto.data) drawWeek();
   applyOctopusCap();
@@ -1351,7 +1357,7 @@ async function refreshSessions() {
     const open = sessionsOpen.has(s.start);
     if (s.type === 'no_session') {
       const why = s.reason === 'replugged'
-        ? 'No session from your provider: re-plugged'
+        ? `No session from ${sup('your supplier')}: re-plugged`
         : `Unplugged before a session started${s.unplugged_by ? ' (' + esc(s.unplugged_by) + ')' : ''}`;
       rows.push(`<tr class="no-session srow" data-key="${esc(s.start)}"><td>${dateTime(s.start)} <span class="chip">no session</span>${tag(s.start)}</td><td class="num">${dur(s.duration_s)}</td><td class="num muted">—</td><td class="num muted">—</td><td>${why}${by(s.plugged_by)}</td></tr>`);
     } else {
@@ -1361,7 +1367,7 @@ async function refreshSessions() {
   });
   $('s-filter').innerHTML = sessDay
     ? `<span class="chip info" style="margin-right:8px">${new Date(sessDay + 'T12:00:00').toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})} <a href="#" id="s-filter-clear" style="margin-left:4px">Show all</a></span>` : '';
-  $('s-rows').innerHTML = rows.join('') || `<tr><td colspan="5" class="empty">${sessDay ? 'No sessions kept for this day.' : 'No sessions yet. They appear here once your provider starts one.'}</td></tr>`;
+  $('s-rows').innerHTML = rows.join('') || `<tr><td colspan="5" class="empty">${sessDay ? 'No sessions kept for this day.' : `No sessions yet. They appear here once ${sup('your supplier')} starts one.`}</td></tr>`;
   if (sessionsFocus) {
     const row = [...document.querySelectorAll('#s-rows tr.srow')].find((r) => r.dataset.key === sessionsFocus);
     sessionsFocus = null;
@@ -1423,7 +1429,7 @@ function sessionDetail(s) {
       ['Waited', dur(s.duration_s)],
       ['Plugged in by', esc(s.plugged_by || '—')],
       ['Unplugged by', esc(s.unplugged_by || '—')],
-    ])}</dl><div class="sub">Your provider didn't start a session while it was plugged in. If this keeps happening, check Diagnostics › Messages around this time.</div></div>`;
+    ])}</dl><div class="sub">${sup('Your supplier')} didn't start a session while it was plugged in. If this keeps happening, check Diagnostics › Messages around this time.</div></div>`;
   }
   return `<div class="detail-grid"><dl class="kv">${kv([
     ['Started', s.start ? new Date(s.start).toLocaleString([], {hourCycle: 'h23'}) : '—'],
@@ -1487,7 +1493,7 @@ $('d-mode').addEventListener('click', (e) => {
   drawDayBars(dayData);
 });
 function reasonText(r) {
-  return ({Remote: 'Provider (remote stop)', EVDisconnected: 'Unplugged', Reboot: 'Add-on restart', PowerLoss: 'Power cut / crash',
+  return ({Remote: `${supName() || 'Supplier'} (remote stop)`, EVDisconnected: 'Unplugged', Reboot: 'Add-on restart', PowerLoss: 'Power cut / crash',
     Local: 'Local', HardReset: 'Hard reset', SoftReset: 'Soft reset', UnlockCommand: 'Unlock command', DeAuthorized: 'Deauthorised'})[r] || r || '—';
 }
 
@@ -1549,7 +1555,7 @@ async function refreshProvider() {
   try { providerData = await api('provider'); } catch (e) { return; }
   const p = providerData;
   $('p-limits').innerHTML = kv([
-    ['Provider limit', p.provider_limit_amps == null ? '<span class="muted">None set</span>' : `${num(p.provider_limit_amps, 0)} A <span class="badge">chargingALimitConn1</span>`],
+    ['Supplier limit', p.provider_limit_amps == null ? '<span class="muted">None set</span>' : `${num(p.provider_limit_amps, 0)} A <span class="badge">chargingALimitConn1</span>`],
     ['Your max (HA)', `${p.max_amps} A`],
     ['Charging at', `<b>${p.effective_amps} A</b> (~${num(p.effective_amps * VOLTS / 1000, 1)} kW)`],
     ['Profile limit now', p.profile_limit_kw == null ? '<span class="muted">No active profile</span>' : (p.profile_limit_kw === 0 ? 'Pause (0 kW)' : num(p.profile_limit_kw, 1) + ' kW')],
@@ -1559,7 +1565,7 @@ async function refreshProvider() {
     ? tags.map((t) => `<div class="row" style="gap:8px;margin-top:4px"><code>${esc(t.id_tag || t.idTag)}</code><span class="chip ${((t.id_tag_info || t.idTagInfo || {}).status || '') === 'Accepted' ? 'ok' : ''}">${esc((t.id_tag_info || t.idTagInfo || {}).status || 'listed')}</span></div>`).join('')
     : '<div class="empty">Empty</div>');
   $('p-profiles').innerHTML = (p.charging_profiles || []).length ? p.charging_profiles.map(profileHtml).join('<hr style="border:0;border-top:1px solid var(--divider);margin:16px 0">')
-    : '<div class="empty">No charging profile. Your provider usually sends one with each RemoteStart (Octopus: TxProfile 32 A), and it\'s cleared when the session ends.</div>';
+    : `<div class="empty">No charging profile. ${sup('Your supplier')} usually sends one with each RemoteStart (Octopus: TxProfile 32 A), and it's cleared when the session ends.</div>`;
   drawConfig();
 }
 function profileHtml(pr) {
@@ -1586,7 +1592,7 @@ function drawConfig() {
   if (!providerData) return;
   const only = $('p-only-server').checked;
   $('p-config').innerHTML = providerData.configuration.filter((c) => !only || c.set_by_server).map((c) =>
-    `<tr><td>${esc(c.key)}${c.set_by_server ? '<span class="badge server">set by provider</span>' : ''}${c.readonly ? '<span class="badge">read-only</span>' : ''}</td><td style="overflow-wrap:anywhere">${esc(c.value) || '<span class="muted">empty</span>'}</td></tr>`).join('');
+    `<tr><td>${esc(c.key)}${c.set_by_server ? '<span class="badge server">set by supplier</span>' : ''}${c.readonly ? '<span class="badge">read-only</span>' : ''}</td><td style="overflow-wrap:anywhere">${esc(c.value) || '<span class="muted">empty</span>'}</td></tr>`).join('');
 }
 $('p-only-server').addEventListener('change', drawConfig);
 
@@ -1611,7 +1617,7 @@ async function saveSettings() {
   if (rampDirty && (!(delay >= 0 && delay <= 60) || !(ramp >= 0 && ramp <= 60))) { toast('Start delay and ramp-up: 0–60 seconds'); return; }
   if (rpDirty && (!(after >= 1 && after <= 240) || !(tries >= 0 && tries <= 20))) { toast('Re-plug: 1–240 minutes and 0–20 tries'); return; }
   if (sim.dirty && !(n >= 1 && n <= 99)) { toast('Plug in below must be 1–99%'); return; }
-  if (sim.dirty && sim.edit.auto_plug_ready && octopusCapped() && parseFloat(sim.edit.auto_plug_hours) > 6) { toast('Charge for: up to 6 hours with Octopus while Force schedule on supplier is on'); return; }
+  if (sim.dirty && sim.edit.auto_plug_ready && octopusCapped() && parseFloat(sim.edit.auto_plug_hours) > 6) { toast(`Charge for: up to 6 hours with Octopus while Force schedule on ${sup('supplier')} is on`); return; }
   let ok = true;
   if (rampDirty) { if (await post('ramp', {start_delay_s: delay, ramp_up_s: ramp})) rampDirty = false; else ok = false; }
   if (rpDirty) { if (await post('automation/replug', {enabled: $('a-rp-on').checked, after_min: after, attempts: tries})) rpDirty = false; else ok = false; }
@@ -1842,7 +1848,7 @@ function drawPlanCheck(pc) {
   if (!pc) { el.innerHTML = '<span class="muted">Checked while the schedule has the car plugged in.</span>'; return; }
   const span = `${t(pc.start)}–${t(pc.end)}`;
   const head = {
-    waiting: `<span class="chip">Checking at ${t(pc.check_at)}</span> <span class="muted">Giving your supplier a few minutes to plan (plugged in ${span})</span>`,
+    waiting: `<span class="chip">Checking at ${t(pc.check_at)}</span> <span class="muted">Giving ${sup('your supplier')} a few minutes to plan (plugged in ${span})</span>`,
     none: `<span class="chip">No slots yet</span> <span class="muted">Nothing planned before ${t(pc.until)} (plugged in ${span})</span>`,
     ok: `<span class="chip ok">Matches</span> <span class="muted">${esc(pc.provider || 'Your supplier')}'s slots are shown with a coloured border on the schedule below</span>`,
     error: `<span class="chip err">Doesn't match</span> <span class="muted">Plugged in ${span}, checked up to ${t(pc.until)}</span>`,
@@ -1853,7 +1859,7 @@ function drawPlanCheck(pc) {
 $('a-wait').addEventListener('change', async (e) => {
   const v = parseInt(e.target.value, 10);
   if (!(v >= 0 && v <= 600)) { toast('Wait must be 0 to 600 seconds'); refreshAutomation(false); return; }
-  if (await post('automation/schedule', {unplug_wait_s: v})) toast(v ? `Waits up to ${v} s for your supplier at unplug` : 'Unplugs straight away');
+  if (await post('automation/schedule', {unplug_wait_s: v})) toast(v ? `Waits up to ${v} s for ${sup('your supplier')} at unplug` : 'Unplugs straight away');
   refreshAutomation(false);
 });
 $('a-ready-on').addEventListener('change', async (e) => {
@@ -1887,7 +1893,7 @@ function drawForceErr() {
   const el = $('a-ready-err'), fe = week.forceErr;
   if (!fe || (auto.data && auto.data.schedule.ready_time)) { week.forceErr = null; el.hidden = true; return; }
   const now = forceProblems();
-  if (fe.problems && !now.length) { week.forceErr = null; el.hidden = true; toast('Fixed: you can turn on Force schedule on supplier now'); return; }
+  if (fe.problems && !now.length) { week.forceErr = null; el.hidden = true; toast(`Fixed: you can turn on Force schedule on ${sup('supplier')} now`); return; }
   el.hidden = false;
   el.innerHTML = `<b>Can't turn this on yet.</b> ` + (now.length ? now.join(' ') : esc(fe.msg));
 }
@@ -1899,7 +1905,7 @@ function drawReplugStatus(r) {
     idle: '<span class="chip ok">Ready</span> <span class="muted">Watching for the next plug-in</span>',
     waiting: `<span class="chip warn">Waiting for a session</span> <span class="muted">since ${hm(r.waiting_since)}${r.next_replug_at ? ' · re-plug at ' + hm(r.next_replug_at) : ''} · ${tries}</span>`,
     replugging: '<span class="chip warn">Re-plugging now</span>',
-    scheduled: '<span class="chip ok">Scheduled</span> <span class="muted">Your supplier has a charge slot planned, so no re-plug is needed</span>',
+    scheduled: `<span class="chip ok">Scheduled</span> <span class="muted">${sup('Your supplier')} has a charge slot planned, so no re-plug is needed</span>`,
     gave_up: `<span class="chip err">Gave up</span> <span class="muted">No session after ${r.attempts_used} re-plug${r.attempts_used === 1 ? '' : 's'}. Resets when the car is unplugged or a session starts.</span>`,
   }[r.status] || '';
   $('a-rp-status').innerHTML = html + (r.last_replug ? `<div class="sub">Last re-plug ${dateTime(r.last_replug)}</div>` : '');
@@ -2377,7 +2383,7 @@ async function refreshHealth() {
   ]);
   const held = h.held_messages || [];
   $('h-held').innerHTML = held.length
-    ? '<div class="sub" style="margin-bottom:8px">Waiting to be sent to your provider, oldest first.</div>' + held.map((m) => `<div class="row" style="gap:8px;margin-top:4px"><b>${esc(m.action)}</b><span class="muted">${esc(m.summary)}</span></div>`).join('')
+    ? `<div class="sub" style="margin-bottom:8px">Waiting to be sent to ${sup('your supplier')}, oldest first.</div>` + held.map((m) => `<div class="row" style="gap:8px;margin-top:4px"><b>${esc(m.action)}</b><span class="muted">${esc(m.summary)}</span></div>`).join('')
     : '<div class="empty">None. Transaction messages are held here if the connection drops, and sent when it\'s back.</div>';
 }
 

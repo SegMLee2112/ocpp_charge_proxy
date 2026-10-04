@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.19.0 — Your supplier by name
+
+- **Improvement:** once your supplier's integration is found, the page uses
+  its name instead of "your supplier": e.g. **Force schedule on Octopus
+  Energy**, the Schedule tab's supplier card, **Waiting for Octopus Energy**
+  on the Overview, the plan check, auto plug-in, auto re-plug, Charge now and
+  their messages. The Status entity in Home Assistant still says "Waiting
+  for supplier", so automations using it keep working
+- **Change:** "supplier" is used throughout the page, logs and docs instead
+  of a mix of "supplier" and "provider" (e.g. Diagnostics › Health ›
+  **Supplier**, **Supplier limit**)
+
 ## 2.18.1 — Supplier name on sessions
 
 - **Improvement:** Sessions tab: the supplier slot tags name your supplier,

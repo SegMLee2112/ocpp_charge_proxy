@@ -79,7 +79,8 @@ def check_plan(slots: list, start: datetime.datetime, end: datetime.datetime,
     want, have = _hhmm(ready_set), _hhmm(supplier_ready)
     if want and have and want != have:
         problems.insert(0, f"{provider}'s ready time is {have}, not the {want} the schedule set "
-                           "(changed in the supplier's app?)")
+                           + ("(changed in the supplier's app?)" if provider == "Your supplier"
+                              else f"(changed in the {provider} app?)"))
     status = "error" if problems else "ok" if checked else "none"
     return {"status": status, "start": _iso(start), "end": _iso(end), "until": _iso(until),
             "slots": checked, "problems": problems}

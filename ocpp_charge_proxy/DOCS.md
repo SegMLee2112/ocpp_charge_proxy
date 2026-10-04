@@ -8,10 +8,10 @@ updates its state so Home Assistant automations can respond.
 
 ## Prerequisites
 
-- An OCPP 1.6J compatible provider account (or any CSMS that accepts OCPP 1.6
+- An OCPP 1.6J compatible supplier account (or any CSMS that accepts OCPP 1.6
   chargepoint connections)
 - OCPP connection credentials (server hostname, chargepoint ID, password)
-  from your provider
+  from your supplier
 
 ## Configuration
 
@@ -19,7 +19,7 @@ updates its state so Home Assistant automations can respond.
 
 | Option | Description |
 |--------|-------------|
-| `server_hostname` | Your provider's OCPP server hostname |
+| `server_hostname` | Your supplier's OCPP server hostname |
 | `chargepoint_id` | Your chargepoint ID for authentication |
 | `password` | Your OCPP password |
 
@@ -39,7 +39,7 @@ updates its state so Home Assistant automations can respond.
 ### Controlling your charger
 
 Use the **Power** sensor (`sensor.ocpp_charge_proxy_power`) to trigger automations when
-your provider starts or stops charging: with the simulated power, it's above
+your supplier starts or stops charging: with the simulated power, it's above
 0 while the charger is charging. For example, turn on a smart plug when it
 rises above 0 and off when it drops back to 0.
 
@@ -47,7 +47,7 @@ rises above 0 and off when it drops back to 0.
 
 You can optionally pick a Home Assistant power sensor (W or kW) on the
 add-on's **Settings** tab. The proxy will report this real power value to your
-provider instead of simulating power delivery. The value is capped at what the
+supplier instead of simulating power delivery. The value is capped at what the
 virtual chargepoint could physically deliver at its current setting.
 
 If not configured, the proxy uses a realistic power simulation.
@@ -57,7 +57,7 @@ If not configured, the proxy uses a realistic power simulation.
 You can also pick a **SoC sensor** on the Settings tab, for example from
 your car's own integration, reporting 0–100%. When set:
 
-- The car's state of charge is sent to your provider whenever it asks for
+- The car's state of charge is sent to your supplier whenever it asks for
   `SoC` in its meter values (Octopus does), while a car is plugged in.
 - **Car full:** when the sensor reads 100% during a session, the charger
   reports `SuspendedEV` and stops drawing power, as a real car does when its
@@ -176,15 +176,15 @@ Settings are saved in `/data/automation.json`.
 
 ## How it works
 
-1. The add-on connects to your provider's OCPP server via WebSocket
+1. The add-on connects to your supplier's OCPP server via WebSocket
 2. It registers as a chargepoint (BootNotification)
 3. It sends periodic heartbeats and meter values
 4. When you "plug in" (the Plugged In helper or the web page), it reports
    `Preparing`
-5. Your provider creates a charge schedule and sends `RemoteStartTransaction`
+5. Your supplier creates a charge schedule and sends `RemoteStartTransaction`
 6. The proxy sends `StartTransaction`, reports `Charging`, and sends meter
    values while the simulated car ramps up to full power
-7. When the provider ends the session, it sends `RemoteStopTransaction`
+7. When the supplier ends the session, it sends `RemoteStopTransaction`
 8. The proxy reports `Finishing`, sends `StopTransaction`, then returns to
    `Preparing`
 
@@ -223,7 +223,7 @@ away.
 
 StopTransaction can include `transactionData` with the session's readings.
 Two configuration keys choose what's included. Both are empty by default, as
-on a Wallbox Pulsar Plus, so nothing is added unless your provider sets them
+on a Wallbox Pulsar Plus, so nothing is added unless your supplier sets them
 with ChangeConfiguration:
 
 | Key | Default | Readings |
@@ -245,7 +245,7 @@ The add-on creates its own entities (no integration needed):
 | `sensor.ocpp_charge_proxy_energy` | Sensor | Cumulative energy (kWh, works with the Energy dashboard) |
 | `sensor.ocpp_charge_proxy_current` | Sensor | Current draw (A) |
 | `sensor.ocpp_charge_proxy_status` | Sensor | OCPP state (Available, Preparing, Charging...) |
-| `sensor.ocpp_charge_proxy_current_limit` | Sensor | Current the charger uses (A), with your max and the provider's limit as attributes |
+| `sensor.ocpp_charge_proxy_current_limit` | Sensor | Current the charger uses (A), with your max and the supplier's limit as attributes |
 
 - The sensors are posted by the add-on, so they can't be renamed in the UI and
   aren't grouped under a device. They show as unavailable while the add-on is
@@ -270,7 +270,7 @@ follows your Home Assistant theme.
   **smart charging** (the charge slots your supplier plans, found
   automatically from the Octopus Energy, EDF Energy or E.ON Next integration, also
   shown along the top of the chart);
-  and a chart of power, current (with your max and the provider limit) or
+  and a chart of power, current (with your max and the supplier limit) or
   SoC over the last 30 minutes to 24 hours, or 14 days. Drag across the
   chart or scroll over it to zoom (double-click or **Reset zoom** to go
   back). The charts and the
@@ -303,11 +303,11 @@ follows your Home Assistant theme.
 - **Diagnostics**, in two parts:
   - **Health:** version, uptime, reconnects and the last drop's reason,
     heartbeat and clock offset, the Home Assistant link and the add-on's
-    Home Assistant entities, and any held messages; then **Provider** (below).
+    Home Assistant entities, and any held messages; then **Supplier** (below).
   - **Messages:** the last 300 OCPP messages both ways, kept across
     restarts (with a marker where the add-on restarted), with a filter,
     full JSON on click and a Copy button for sharing.
-  - **Provider** (at the bottom of Health): what your provider has set: charging limits, charging
+  - **Supplier** (at the bottom of Health): what your supplier has set: charging limits, charging
     profiles drawn as a timeline, the local authorisation list and every
     configuration key.
 
@@ -316,14 +316,14 @@ links.
 
 ## Getting your OCPP credentials
 
-Your provider will supply three values needed to connect:
+Your supplier will give you three values needed to connect:
 
 - **Server hostname** — the OCPP WebSocket endpoint
 - **Chargepoint ID** — your unique chargepoint identifier
 - **Password** — authentication password
 
 You may also need to set `charger_model` and `charger_vendor` to match a
-charger model your provider supports. The defaults work for providers that
+charger model your supplier supports. The defaults work for suppliers that
 accept Wallbox chargepoints.
 
-Check your provider's app or documentation for how to obtain these credentials.
+Check your supplier's app or documentation for how to obtain these credentials.

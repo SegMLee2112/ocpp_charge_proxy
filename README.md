@@ -6,21 +6,21 @@
 ![Supports amd64 Architecture][amd64-shield]
 
 Acts as a virtual OCPP 1.6 chargepoint that connects to smart tariff
-providers on your behalf. Use it to get cheap-rate charging schedules
+suppliers on your behalf. Use it to get cheap-rate charging schedules
 without a compatible charger, or to keep control of your charging
-alongside provider-managed scheduling.
+alongside supplier-managed scheduling.
 
 ## Why?
 
-When a charger is enrolled with a smart tariff provider via OCPP, the provider
+When a charger is enrolled with a smart tariff supplier via OCPP, the supplier
 takes exclusive control of charging sessions. That means solar diversion no
 longer works — your home can be exporting surplus solar while the car sits idle,
-waiting for the provider to schedule a cheap-rate slot.
+waiting for the supplier to schedule a cheap-rate slot.
 
-This proxy solves the problem by presenting a virtual charger to your provider.
-The provider sends its charging schedules to the proxy instead of your real
+This proxy solves the problem by presenting a virtual charger to your supplier.
+The supplier sends its charging schedules to the proxy instead of your real
 charger, and the proxy exposes the schedule as Home Assistant entities.
-You then build automations that combine the provider schedule with solar
+You then build automations that combine the supplier schedule with solar
 diversion, surplus export, or any other logic you choose — keeping the best
 of both worlds.
 
@@ -31,7 +31,7 @@ virtual chargepoint. When the server sends charge scheduling commands, the
 proxy updates its state in Home Assistant so you can trigger automations to
 control any charger, smart plug, or home battery.
 
-Should work with any OCPP 1.6J provider that accepts chargepoint connections.
+Should work with any OCPP 1.6J supplier that accepts chargepoint connections.
 It's developed and tested against Octopus Energy, presenting itself as a
 Wallbox Pulsar Plus.
 
@@ -55,18 +55,18 @@ In, Power, Energy and Current). No integration or HACS needed.
   across restarts (so the Energy dashboard never sees a spike or a reset).
 - **Car full.** With a SoC sensor set, at 100% the charger reports
   `SuspendedEV` and stops drawing power, like a real car with a full battery.
-  The session stays open: ending it is up to your provider. If the SoC drops
+  The session stays open: ending it is up to your supplier. If the SoC drops
   below 100%, charging resumes.
 - **You set the maximum current.** The **Max current** on the add-on's web
   page is the charger's maximum, like a real Wallbox's max-current
-  setting. Your provider can lower the current below it, but not raise it
+  setting. Your supplier can lower the current below it, but not raise it
   above it. The setting is remembered across restarts.
-- **Charging profiles.** Your provider's charging profiles pause
+- **Charging profiles.** Your supplier's charging profiles pause
   (`SuspendedEVSE`) and resume charging as scheduled.
 
 ### Reliable
 
-- **Keeps charging while offline.** If the connection to your provider drops
+- **Keeps charging while offline.** If the connection to your supplier drops
   mid-charge, charging carries on and the session stays open.
   StartTransaction, StopTransaction and the session's meter readings are held
   in order and sent as soon as it reconnects. Held messages survive an add-on
@@ -81,7 +81,7 @@ In, Power, Energy and Current). No integration or HACS needed.
 - **Fast recovery.** After an add-on restart, Home Assistant reconnects
   within a few seconds and re-sends the power and SoC sensor values.
   Plugged In is remembered, so a car left plugged in comes back as
-  `Preparing`, ready for your provider to start a new session.
+  `Preparing`, ready for your supplier to start a new session.
 
 ### Works with your car in Home Assistant
 
@@ -89,16 +89,16 @@ Set these up on the add-on's **Settings** tab. The add-on follows your
 sensors live through Home Assistant's API.
 
 - **Power sensor (optional).** Report real power (e.g. from a smart plug or
-  your actual charger) to your provider instead of the simulation.
+  your actual charger) to your supplier instead of the simulation.
 - **SoC sensor for reporting (optional).** Report your car's state of charge
-  to your provider, and enable car full and the charging taper.
+  to your supplier, and enable car full and the charging taper.
 - **Car plugged in sensor (optional).** Pick a binary sensor, such as your
   car's "charging cable connected", and **Plugged In** switches on
   automatically when it turns on. It never unplugs; that stays up to you.
 - **Auto plug-in (optional).** Switch Plugged In on when the SoC drops
-  below a threshold you choose (default 30%), so your provider can schedule a
+  below a threshold you choose (default 30%), so your supplier can schedule a
   charge. It can watch a different SoC sensor from the one reported to your
-  provider (e.g. for a car that may be away from home), and only triggers
+  supplier (e.g. for a car that may be away from home), and only triggers
   once per drop, so unplugging by hand doesn't get undone.
 - **Home Assistant entities, no integration needed.** The add-on creates a
   **Plugged In** helper (`input_boolean.ocpp_charge_proxy_plugged_in`): turn
@@ -109,7 +109,7 @@ sensors live through Home Assistant's API.
 - **Plug-in schedule.** Switch Plugged In on or off at set times and days,
   as many times a day as you like, from the add-on's web page (Automation
   tab).
-- **Auto re-plug.** If your provider hasn't started a session 10 minutes
+- **Auto re-plug.** If your supplier hasn't started a session 10 minutes
   after plugging in, the add-on unplugs for 30 seconds and plugs back in, up
   to 3 times. On/off, minutes and tries are on the Schedule tab.
 
@@ -122,7 +122,7 @@ sensors live through Home Assistant's API.
   - **Overview:** state, power, current, SoC and energy; the current
     session; your supplier's planned smart charging slots (found
     automatically from the Octopus Energy, EDF Energy or E.ON Next integration); and a chart (shaded by state, with session start/end marked)
-    of power, current (with your max and the provider limit) or SoC over
+    of power, current (with your max and the supplier limit) or SoC over
     the last 30 minutes to 24 hours, or 14 days, read from Home Assistant's
     history of the add-on's sensors. Drag or scroll on it to zoom.
   - **Sessions:** energy per day for the last 14 days (click a day to show
@@ -140,7 +140,7 @@ sensors live through Home Assistant's API.
   - **Diagnostics:** **Health** (version, uptime, reconnects and the last
     drop's reason, heartbeat and clock offset, the Home Assistant link and
     the add-on's entities, held messages, and at the bottom what your
-    provider has set: charging limits, charging profiles as a timeline, the
+    supplier has set: charging limits, charging profiles as a timeline, the
     local authorisation list and every configuration key) and **Messages**
     (the last 300 OCPP messages both ways, with a filter, full JSON on click
     and Copy).
@@ -192,11 +192,11 @@ All optional. Choose "None" to stop using a sensor.
 
 | Option | What it does |
 |--------|--------------|
-| **Power sensor** | A sensor reporting power in W or kW. Its value is reported to your provider instead of the simulated power (capped at what the charger could deliver at its current setting). |
-| **SoC sensor** | A sensor reporting the car's charge in %. Sent to your provider in meter values while a car is plugged in, and enables car full and the charging taper. |
+| **Power sensor** | A sensor reporting power in W or kW. Its value is reported to your supplier instead of the simulated power (capped at what the charger could deliver at its current setting). |
+| **SoC sensor** | A sensor reporting the car's charge in %. Sent to your supplier in meter values while a car is plugged in, and enables car full and the charging taper. |
 | **Car plugged in sensor** | A binary sensor (e.g. your car's "charging cable connected"). When it changes from off to on, Plugged In is switched on. It never switches Plugged In off, so unplug with the switch or an automation as usual. Unavailable/unknown readings in between are ignored, and it doesn't plug in on the first reading after a restart. |
 | **Auto plug-in** | Switches Plugged In on once when the watched SoC drops below the threshold (1–99%, default 30%). Re-arms once the SoC is back at or above it. Doesn't trigger on the first reading after a restart, or if already plugged in. |
-| **SoC sensor to watch** | Watch this sensor for auto plug-in instead of the reporting SoC sensor. It's never reported to your provider. |
+| **SoC sensor to watch** | Watch this sensor for auto plug-in instead of the reporting SoC sensor. It's never reported to your supplier. |
 
 ### Entities provided
 
@@ -209,7 +209,7 @@ The add-on creates these in Home Assistant:
 | `sensor.ocpp_charge_proxy_energy` | Sensor | Cumulative energy (kWh, Energy dashboard compatible) |
 | `sensor.ocpp_charge_proxy_current` | Sensor | Current draw (A) |
 | `sensor.ocpp_charge_proxy_status` | Sensor | OCPP state (Available, Preparing, Charging...) |
-| `sensor.ocpp_charge_proxy_current_limit` | Sensor | Current the charger uses (A), with your max and the provider's limit as attributes |
+| `sensor.ocpp_charge_proxy_current_limit` | Sensor | Current the charger uses (A), with your max and the supplier's limit as attributes |
 
 The sensors are updated by the add-on rather than an integration, so they
 can't be renamed in the UI and aren't grouped under a device, and they show as
@@ -225,15 +225,15 @@ heartbeat, commands and sensor details are on the add-on's web page.
 2. Turn on **Plugged In** (the helper, or on the add-on's web page) to
    simulate connecting a car (or let the car
    connected sensor or auto plug-in do it)
-3. Set a departure time and charge amount in your provider's app
-4. Your provider will schedule charging and send start/stop commands
+3. Set a departure time and charge amount in your supplier's app
+4. Your supplier will schedule charging and send start/stop commands
 5. Create automations based on the **Power** sensor to control your actual
-   charger: with the simulated power, it's above 0 while your provider has
+   charger: with the simulated power, it's above 0 while your supplier has
    the charger charging. For example:
 
 ```yaml
 automation:
-  - alias: "Charge when the provider schedules it"
+  - alias: "Charge when the supplier schedules it"
     triggers:
       - trigger: numeric_state
         entity_id: sensor.ocpp_charge_proxy_power
@@ -252,15 +252,15 @@ automation:
 ### What a charging session looks like
 
 1. **Plugged In** turns on: the proxy reports `Preparing`
-2. Your provider sends `RemoteStartTransaction` (often with a charging
+2. Your supplier sends `RemoteStartTransaction` (often with a charging
    profile): the proxy sends `StartTransaction`, then reports `Charging`
 3. The simulated car waits a few seconds, then ramps up to full power. Meter
-   readings go to your provider every `MeterValueSampleInterval` (60s with
+   readings go to your supplier every `MeterValueSampleInterval` (60s with
    Octopus), plus clock-aligned readings if it asks for them
 4. If the profile pauses charging, the proxy reports `SuspendedEVSE` until it
    resumes. If the car reaches 100% (with a SoC sensor), it reports
    `SuspendedEV`
-5. The session ends when your provider sends `RemoteStopTransaction` or you
+5. The session ends when your supplier sends `RemoteStopTransaction` or you
    unplug: the proxy reports `Finishing`, sends `StopTransaction` (with the
    reason, e.g. `Remote` or `EVDisconnected`), then returns to `Preparing`
    (or `Available` if unplugged)

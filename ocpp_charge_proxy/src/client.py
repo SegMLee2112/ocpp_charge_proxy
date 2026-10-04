@@ -722,7 +722,7 @@ class ChargePoint(BaseChargePoint):
         self._apply_current()
         if self._charger_sim.current_amps < amps:
             logger.info(
-                "Max current set to %dA; provider limit keeps it at %dA",
+                "Max current set to %dA; supplier limit keeps it at %dA",
                 amps, self._charger_sim.current_amps,
             )
         else:
@@ -1466,7 +1466,7 @@ class ChargePoint(BaseChargePoint):
                 if limit > self._max_current_amps:
                     # Only a current limit: it doesn't start or stop anything
                     logger.info(
-                        "Provider limit %gA is above your max %dA: %s at %dA",
+                        "Supplier limit %gA is above your max %dA: %s at %dA",
                         limit, self._max_current_amps,
                         "charging" if self._transaction_id is not None else "next charge will run",
                         self._charger_sim.current_amps,

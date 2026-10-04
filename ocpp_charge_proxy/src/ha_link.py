@@ -25,7 +25,7 @@ from typing import Awaitable, Callable, Optional
 
 from src.autoplug import DEFAULT_AUTO_PLUG_SOC, AutoPlug, CarConnected
 from src.ready_time import allowed_times, pick_ready_time, service_call, target_time_entity
-from src.smart_charging import find_dispatch_sensors, smart_charging
+from src.smart_charging import find_dispatch_sensors, provider_name, smart_charging
 from src.ha_entities import (
     ALL_SENSORS, HELPER_ICON, HELPER_ID, HELPER_NAME, PluggedInSync, SensorPublisher,
     helper_entity_id, integration_entities,
@@ -589,12 +589,12 @@ class HaLink:
             return {**out, "error": f"Couldn't read Home Assistant's states: {err}"}
         entity = target_time_entity(states, dispatch)
         if entity is None:
-            return {**out, "error": "Your supplier's integration has no ready time (target time) setting"}
+            return {**out, "error": f"{provider_name(dispatch)}'s integration has no ready time (target time) setting"}
         out["entity_id"] = entity["entity_id"]
         allowed = allowed_times(entity)
         ready = pick_ready_time(_dt.datetime.now(unplug.tzinfo), unplug, allowed)
         if ready is None:
-            return {**out, "error": f"Your supplier only accepts ready times from {allowed[0]} to {allowed[-1]}, "
+            return {**out, "error": f"{provider_name(dispatch)} only accepts ready times from {allowed[0]} to {allowed[-1]}, "
                                     f"and there's none before the unplug at {unplug.strftime('%H:%M')}"}
         try:
             await self._call(service_call(entity, ready))
