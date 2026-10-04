@@ -296,14 +296,14 @@ follows your Home Assistant theme.
 - **Settings:** controls for Plugged In, max current, a power override and a
   test SoC; the simulated car's start delay and ramp-up; and your power, SoC
   and car plugged in sensors, with their live values.
-- **Diagnostics**, in three parts:
+- **Diagnostics**, in two parts:
   - **Health:** version, uptime, reconnects and the last drop's reason,
     heartbeat and clock offset, the Home Assistant link and the add-on's
-    Home Assistant entities, and any held messages.
+    Home Assistant entities, and any held messages; then **Provider** (below).
   - **Messages:** the last 300 OCPP messages both ways, kept across
     restarts (with a marker where the add-on restarted), with a filter,
     full JSON on click and a Copy button for sharing.
-  - **Provider:** what your provider has set: charging limits, charging
+  - **Provider** (at the bottom of Health): what your provider has set: charging limits, charging
     profiles drawn as a timeline, the local authorisation list and every
     configuration key.
 

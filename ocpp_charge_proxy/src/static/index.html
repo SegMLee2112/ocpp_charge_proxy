@@ -289,7 +289,7 @@
 
 <main>
   <div class="subnav" id="diag-nav" hidden role="group" aria-label="Diagnostics">
-    <button data-sub="health">Health</button><button data-sub="messages">Messages</button><button data-sub="provider">Provider</button>
+    <button data-sub="health">Health</button><button data-sub="messages">Messages</button>
   </div>
   <!-- ============ Overview ============ -->
   <section id="tab-overview" class="stack">
@@ -397,31 +397,6 @@
     </div>
   </section>
 
-  <!-- ============ Provider ============ -->
-  <section id="tab-provider" class="stack" hidden>
-    <div class="grid">
-      <div class="card">
-        <h2>Charging limits</h2>
-        <dl class="kv" id="p-limits"></dl>
-      </div>
-      <div class="card">
-        <h2>Local authorisation list</h2>
-        <div id="p-local"></div>
-      </div>
-    </div>
-    <div class="card">
-      <h2>Charging profiles</h2>
-      <div id="p-profiles"></div>
-    </div>
-    <div class="card">
-      <h2>Configuration<span class="spacer"></span>
-        <label class="live" style="cursor:pointer"><input type="checkbox" id="p-only-server"> Set by provider only</label>
-      </h2>
-      <div class="table-wrap">
-        <table><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody id="p-config"></tbody></table>
-      </div>
-    </div>
-  </section>
 
   <!-- ============ Schedule (tab id "automation") ============ -->
   <section id="tab-automation" class="stack" hidden>
@@ -601,6 +576,29 @@
       <h2>Held messages</h2>
       <div id="h-held"></div>
     </div>
+    <div class="section-title">Provider</div>
+    <div class="grid">
+      <div class="card">
+        <h2>Charging limits</h2>
+        <dl class="kv" id="p-limits"></dl>
+      </div>
+      <div class="card">
+        <h2>Local authorisation list</h2>
+        <div id="p-local"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Charging profiles</h2>
+      <div id="p-profiles"></div>
+    </div>
+    <div class="card">
+      <h2>Configuration<span class="spacer"></span>
+        <label class="live" style="cursor:pointer"><input type="checkbox" id="p-only-server"> Set by provider only</label>
+      </h2>
+      <div class="table-wrap">
+        <table><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody id="p-config"></tbody></table>
+      </div>
+    </div>
   </section>
 </main>
 <div class="toast" id="toast"></div>
@@ -715,11 +713,11 @@ async function post(path, body) {
 }
 
 // ---------- tabs ----------
-const DIAG = ['health', 'messages', 'provider'];  // the Diagnostics tab's sections
+const DIAG = ['health', 'messages'];  // the Diagnostics tab's sections (Provider is at the bottom of Health)
 function showTab(name) {
   if (name === 'simulation') name = 'settings';
   if (name === 'schedule') name = 'automation';  // the Schedule tab
-  if (name === 'diagnostics') name = 'health';
+  if (name === 'diagnostics' || name === 'provider') name = 'health';
   if (!document.getElementById('tab-' + name)) name = 'overview';
   activeTab = name;
   const diag = DIAG.includes(name);
@@ -2376,10 +2374,9 @@ function refreshTab(full) {
   if (activeTab === 'overview') { refreshSessionCard(); refreshHistory(full && !chart.samples.length); refreshSmart(full); }
   else if (activeTab === 'sessions') refreshSessions();
   else if (activeTab === 'messages') refreshMessages();
-  else if (activeTab === 'provider') refreshProvider();
   else if (activeTab === 'automation') { refreshAutomation(false); refreshSimulation(false); }
   else if (activeTab === 'settings') { refreshAutomation(false); refreshSimulation(false); refreshSmart(false); }
-  else if (activeTab === 'health') { refreshHealth(); refreshSimulation(false); }
+  else if (activeTab === 'health') { refreshHealth(); refreshSimulation(false); refreshProvider(); }
 }
 setInterval(() => {
   if (document.hidden) return;

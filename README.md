@@ -139,10 +139,11 @@ sensors live through Home Assistant's API.
     SoC and car plugged in sensors, with live values.
   - **Diagnostics:** **Health** (version, uptime, reconnects and the last
     drop's reason, heartbeat and clock offset, the Home Assistant link and
-    the add-on's entities, held messages), **Messages** (the last 300 OCPP
-    messages both ways, with a filter, full JSON on click and Copy) and
-    **Provider** (charging limits, charging profiles as a timeline, the
-    local authorisation list and every configuration key).
+    the add-on's entities, held messages, and at the bottom what your
+    provider has set: charging limits, charging profiles as a timeline, the
+    local authorisation list and every configuration key) and **Messages**
+    (the last 300 OCPP messages both ways, with a filter, full JSON on click
+    and Copy).
 - **Quieter logs.** OCPP messages are logged at `info`, except Heartbeats
   (every 10s with Octopus) and periodic meter readings (every 60s), which only
   show at `debug`. Clock-aligned readings (every 15 min) stay at `info`.

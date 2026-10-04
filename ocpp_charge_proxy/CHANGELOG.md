@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.16.3 — Provider on the Health page
+
+- **Change:** Diagnostics › Provider moved to the bottom of Diagnostics ›
+  Health, so Diagnostics has two parts: Health and Messages
+
 ## 2.16.2 — Schedule description
 
 - **Improvement:** the Schedule card has a short description (with
