@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.16.1 — Auto re-plug description
+
+- **Improvement:** Auto re-plug has a short description (with **More**),
+  like the other cards
+
 ## 2.16.0 — Add a slot, and clearer 6-hour checks
 
 - **Feature:** **+ Add a slot** button on the Schedule tab, next to the
