@@ -413,10 +413,15 @@ async def handle_skip(request: web.Request) -> web.Response:
     """{"times": [{"entry_id", "date": "YYYY-MM-DD"}, ...], "skip": bool}: skip
     upcoming times once (a slot: its plug-in and unplug), or undo. A single
     {"entry_id", "date"} works too."""
+    link = request.app["ha_link"]
+    sc = link.smart_charging() if link is not None else {}
     return await _automation_change(
         request, lambda a, b: a.set_skips(
             b.get("times") if "times" in b else [{"entry_id": b.get("entry_id"), "date": b.get("date")}],
             bool(b.get("skip", True)),
+            # Octopus schedules at most 6 hours of smart charging a day
+            daily_cap_min=360 if sc.get("provider") == "Octopus Energy" else None,
+            provider=sc.get("provider") or "your supplier",
         ),
     )
 

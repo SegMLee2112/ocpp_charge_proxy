@@ -97,7 +97,7 @@ even with the schedule off.
 - **Schedule** (**Schedule** tab): the last 3 days and the next 7 are
   shown as slots, each running from a plug-in to its unplug, coloured by
   type: weekly (blue), one-off (teal), auto plug-in (orange) and Charge now
-  (pink). The last 3 days are for looking back: a green line shows when the
+  (pink). **+ Add a slot** starts a new one from the next half hour. The last 3 days are for looking back: a green line shows when the
   car actually charged, and your supplier's slots are outlined. Click or drag across a day to
   add a slot; click a slot to change its times, the days it repeats on
   (**Every week**) or its date (**Once**), turn it off, delete it, or skip
@@ -128,7 +128,11 @@ even with the schedule off.
   has no ready time setting. While it's on, the Next 7 days card outlines
   the schedule's slots in grey, and with Octopus Energy the schedule can't plug in for more than
   6 hours in any 24 (Octopus's daily smart charging cap): slots that go
-  over are marked in red, and a change that goes over isn't saved. With the ready time off, there's no limit.
+  over are marked in red, and a change that goes over isn't saved (nor is
+  putting a skipped slot back if that would go over). If Force schedule on
+  supplier can't be turned on because of this (or an unplug time your
+  supplier doesn't accept), the reason stays in red under the switch, with
+  the slots to change marked in red, until it's fixed. With the ready time off, there's no limit.
   At a scheduled unplug during a charging session, it waits for your
   supplier to stop the session itself (so it ends cleanly), then unplugs;
   if the supplier hasn't stopped it in time, it unplugs anyway. The wait

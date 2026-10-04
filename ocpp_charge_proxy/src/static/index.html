@@ -432,7 +432,10 @@
         <label class="switch"><input type="checkbox" id="a-sched-on" aria-label="Schedule on"><span></span></label>
       </h2>
       <div class="sub" id="a-next" style="margin-bottom:6px"></div>
-      <div class="note" style="margin:0 0 12px">The last 3 days, then the next 7. Click a slot to change, delete or skip it. Click or drag across a day to add one.</div>
+      <div class="row" style="margin:0 0 12px">
+        <div class="note grow" style="margin:0">The last 3 days, then the next 7. Click a slot to change, delete or skip it, or click or drag across a day to add one.</div>
+        <button class="btn small primary" id="w-add">+ Add a slot</button>
+      </div>
       <div class="week" id="w-grid"></div>
       <div class="empty" id="w-empty" hidden>No times yet: click or drag across a day above to add a slot, e.g. 23:30 to 07:00.</div>
       <div class="sub" id="w-warn" hidden style="margin-top:10px"></div>
@@ -446,6 +449,7 @@
           <div>Force schedule on supplier</div>
           <div class="note" style="margin:0">Sets your supplier's ready time to the schedule's next unplug. <details class="more"><summary>More</summary><div>Only at scheduled plug-ins. Ready times are in 30-minute steps (Octopus: any time of day; EDF: 04:00–11:00), so while this is on, unplug times are limited to those.</div></details></div>
           <div id="a-ready-status" style="margin-top:6px"></div>
+          <div id="a-ready-err" style="margin-top:6px;color:var(--err)" hidden></div>
         </div>
         <label class="switch"><input type="checkbox" id="a-ready-on" aria-label="Force schedule on supplier"><span></span></label>
       </div>
@@ -1780,6 +1784,7 @@ async function refreshAutomation(force) {
   }
   drawReplugStatus(d.replug);
   applyOctopusCap();
+  drawForceErr();
   drawAutoPlugLast(d);
   drawWeek();
 }
@@ -1820,9 +1825,40 @@ $('a-wait').addEventListener('change', async (e) => {
   refreshAutomation(false);
 });
 $('a-ready-on').addEventListener('change', async (e) => {
-  if (await post('automation/schedule', {ready_time: e.target.checked})) { toast(e.target.checked ? 'Ready time: set from the schedule' : 'Ready time: left alone'); await refreshAutomation(false); drawEntries(); }
-  else e.target.checked = !e.target.checked;
+  const on = e.target.checked;
+  try {
+    await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ready_time: on})});
+    week.forceErr = null;
+    toast(on ? 'Ready time: set from the schedule' : 'Ready time: left alone');
+    await refreshAutomation(false);
+  } catch (err) {
+    e.target.checked = !on;
+    if (on) week.forceErr = {msg: err.message, problems: forceProblems().length};  // shown until fixed
+    else toast('Failed: ' + err.message);
+  }
+  drawForceErr(); drawWeek();
 });
+// Why Force schedule on supplier can't be turned on (6 hours, unplug times),
+// worked out from the schedule as it is now, so it goes once they're fixed
+function forceProblems() {
+  const out = [], d = smart.data;
+  if (!d || !d.found) return out;
+  if (weekPlan(auto.entries, null, true).over) out.push(`The schedule plugs in for more than ${esc(d.provider)}'s 6 hours of smart charging in a day: shorten or delete the slots marked in red below.`);
+  if (d.ready_times) {
+    const past = (e) => e.date && new Date(`${e.date}T${e.time}`) < new Date();
+    const bad = [...new Set((auto.entries || []).filter((e) => e.enabled && e.action === 'unplug' && !past(e) && !d.ready_times.includes(e.time)).map((e) => e.time))];
+    if (bad.length) out.push(`${esc(d.provider)} only accepts ready times ${d.ready_times.length === 48 ? 'on the hour or half hour' : `from ${d.ready_times[0]} to ${d.ready_times[d.ready_times.length - 1]}, on the hour or half hour`}: change the unplug time${bad.length > 1 ? 's' : ''} ${bad.join(', ')}.`);
+  }
+  return out;
+}
+function drawForceErr() {
+  const el = $('a-ready-err'), fe = week.forceErr;
+  if (!fe || (auto.data && auto.data.schedule.ready_time)) { week.forceErr = null; el.hidden = true; return; }
+  const now = forceProblems();
+  if (fe.problems && !now.length) { week.forceErr = null; el.hidden = true; toast('Fixed: you can turn on Force schedule on supplier now'); return; }
+  el.hidden = false;
+  el.innerHTML = `<b>Can't turn this on yet.</b> ` + (now.length ? now.join(' ') : esc(fe.msg));
+}
 function drawReplugStatus(r) {
   if (!r) return;
   const tries = `${r.attempts_used} of ${r.attempts} tries used`;
@@ -1852,7 +1888,7 @@ const dayIndex = (iso) => Math.round((new Date(iso + 'T00:00:00') - today0()) / 
 // to the ready times it accepts (30-minute steps; EDF 04:00-11:00)
 function readyRules() {
   const d = smart.data;
-  if (!d || !d.found || !d.ready_times || !auto.data || !auto.data.schedule.ready_time) return null;
+  if (!d || !d.found || !d.ready_times || !auto.data || !(auto.data.schedule.ready_time || week.forceErr)) return null;
   const all = d.ready_times.length === 48, first = d.ready_times[0], last = d.ready_times[d.ready_times.length - 1];
   return {times: d.ready_times, provider: d.provider, min: all ? null : first, max: all ? null : last,
     text: all ? 'on the hour or half hour' : `from ${first} to ${last}, on the hour or half hour`};
@@ -1861,9 +1897,9 @@ function readyRules() {
 // The schedule as the add-on plays it (plugged in from a plug-in time to the
 // next unplug), minutes from today 00:00, and with Octopus (while the schedule
 // sets its ready time) where it goes over 6 hours of smart charging in 24
-function weekPlan(entries = auto.entries) {
+function weekPlan(entries = auto.entries, skipList = null, forceCap = false) {
   const today = today0();
-  const skips = new Set(((auto.data && auto.data.schedule.skips) || []).map((k) => k.entry_id + '|' + k.date));
+  const skips = new Set((skipList || (auto.data && auto.data.schedule.skips) || []).map((k) => k.entry_id + '|' + k.date));
   const events = [];
   for (let d = -7; d <= 8; d++) {
     const iso = isoAt(d), wd = wdOf(iso);
@@ -1886,7 +1922,7 @@ function weekPlan(entries = auto.entries) {
   let worst = null;
   const bad = [];
   const capped = smart.data && smart.data.found && smart.data.provider === 'Octopus Energy'
-    && auto.data && auto.data.schedule.ready_time;
+    && ((auto.data && auto.data.schedule.ready_time) || forceCap);
   segs.forEach(([a]) => {
     if (a < nowMin - DAY_MIN || a > 7 * DAY_MIN) return;
     let total = 0;
@@ -1978,7 +2014,7 @@ function drawWeek() {
   const supColor = sc ? providerColor(sc.provider) : null;
   $('w-sup-legend').hidden = !sc;
   if (sc) { $('w-sup-swatch').style.borderColor = supColor; $('w-sup-label').textContent = `Planned by ${sc.provider}`; }
-  const plan = weekPlan();
+  const plan = weekPlan(undefined, null, !!week.forceErr);  // while turning Force on failed, show what's over
   const model = deriveSlots(auto.entries || []);
   const occ = occurrences(model);
   week.model = model; week.occ = occ; week.day0 = today0();
@@ -2157,7 +2193,9 @@ async function saveEditor(del) {
     else if (U) { U.days = U.days.filter((d) => !o.days.includes(d)); if (!U.days.length) { entries.splice(entries.indexOf(U), 1); ids.unplug = U.id; } }
   }
   if (!del) entries.push(...newEntries(f, ids, source, ed.mode));
-  if (!del && weekPlan(entries).over) return fail('That takes a day over Octopus\'s 6 hours of smart charging: make it shorter');
+  // A change can't take a day further over Octopus's 6 hours (shortening one that's over is fine)
+  const forced = !!week.forceErr, before = weekPlan(auto.entries, null, forced), after = weekPlan(entries, null, forced);
+  if (!del && after.over && (!before.over || after.worst.total > before.worst.total)) return fail('That takes a day over Octopus\'s 6 hours of smart charging: make it shorter');
   const btn = $(del ? 'w-del' : 'w-save'); if (btn) btn.disabled = true;
   if (await post('automation/schedule', {entries})) {
     toast(del ? 'Deleted' : 'Schedule saved');
@@ -2174,6 +2212,15 @@ $('w-grid').addEventListener('click', async (ev) => {
     const o = week.occ[ed.k], s = week.model.slots[o.i];
     const times = [{entry_id: s.plug.id, date: o.date}];
     if (s.unplug && o.udate) times.push({entry_id: s.unplug.id, date: o.udate});
+    if (o.skipped) {
+      // Putting it back mustn't take a day over Octopus's 6 hours
+      const keys = new Set(times.map((x) => x.entry_id + '|' + x.date));
+      const left = ((auto.data && auto.data.schedule.skips) || []).filter((x) => !keys.has(x.entry_id + '|' + x.date));
+      if (weekPlan(auto.entries, left).over && !weekPlan().over) {
+        const e = $('w-err'); if (e) e.textContent = 'Putting it back would take a day over Octopus\'s 6 hours of smart charging: shorten or delete another slot first';
+        return;
+      }
+    }
     t.disabled = true;
     if (await post('automation/skip', {times, skip: !o.skipped})) {
       toast(o.skipped ? 'Slot back on' : 'Skipped this once'); week.edit = null; await refreshAutomation(false);
@@ -2201,6 +2248,13 @@ $('w-grid').addEventListener('change', (ev) => {
   if (!ed || !f) return;
   ed.form[f] = f === 'enabled' ? ev.target.checked : ev.target.value;
   drawEditor();
+});
+// "+ Add a slot": a new slot from the next half hour, for 2 hours, on today's row
+$('w-add').addEventListener('click', () => {
+  const now = new Date(), m = Math.ceil((now.getHours() * 60 + now.getMinutes() + 1) / 30) * 30;
+  const row = m >= DAY_MIN ? 1 : 0, a = m % DAY_MIN;
+  openEditor('new', row, {start: hhmm(a), end: hhmm((a + 120) % DAY_MIN)});
+  $('w-pop') && $('w-pop').scrollIntoView({block: 'nearest', behavior: 'smooth'});
 });
 // Click (1 hour) or drag across a day to add a slot there
 const wdrag = {on: false};

@@ -419,12 +419,15 @@ class Automation:
         tl = self.timeline(now.date() - datetime.timedelta(days=7), 16, entries, skips)
         return plugged_windows([(t, e["action"] == "plug") for t, e, skipped in tl if not skipped])
 
-    def check_daily_cap(self, entries: list, cap_min: int, provider: str) -> None:
+    def _longest_day(self, entries: list, skips: Optional[list] = None):
+        now = self._now()
+        return longest_day(self.windows(entries, now, skips), now - datetime.timedelta(days=1),
+                           now + datetime.timedelta(days=7))
+
+    def check_daily_cap(self, entries: list, cap_min: int, provider: str, skips: Optional[list] = None) -> None:
         """Octopus schedules at most 6 hours of smart charging a day: refuse a
         schedule that plugs in for longer in any 24 hours over the coming week."""
-        now = self._now()
-        worst = longest_day(self.windows(entries, now), now - datetime.timedelta(days=1),
-                            now + datetime.timedelta(days=7))
+        worst = self._longest_day(entries, skips)
         if worst and worst[0] > cap_min:
             total, start = worst
             raise ValueError(
@@ -599,9 +602,12 @@ class Automation:
         """Skip (or un-skip) one upcoming time: entry `entry_id` on `date`."""
         self.set_skips([{"entry_id": entry_id, "date": date}], skip)
 
-    def set_skips(self, times: list, skip: bool = True) -> None:
+    def set_skips(self, times: list, skip: bool = True, daily_cap_min: Optional[int] = None,
+                  provider: str = "your supplier") -> None:
         """Skip (or un-skip) several times at once, e.g. a slot's plug-in and
-        unplug: [{"entry_id", "date"}, ...]. All or nothing."""
+        unplug: [{"entry_id", "date"}, ...]. All or nothing. With daily_cap_min
+        (Octopus, while the schedule sets its ready time), a change that takes a
+        day over it is refused, as when saving the schedule."""
         if not isinstance(times, list) or not times:
             raise ValueError("Say which times to skip")
         keys = []
@@ -614,6 +620,13 @@ class Automation:
             if not any(True for _ in self._occurrences(entry, day, 1)):
                 raise ValueError(f"That time doesn't run on {date}")
             keys.append(({"entry_id": entry_id, "date": day.isoformat()}, entry))
+        if daily_cap_min and self.ready_time:
+            new = list(self.skips)
+            for key, _ in keys:
+                new = [k for k in new if k != key] + ([key] if skip else [])
+            before, after = self._longest_day(self.entries), self._longest_day(self.entries, new)
+            if after and after[0] > daily_cap_min and (not before or after[0] > before[0]):
+                self.check_daily_cap(self.entries, daily_cap_min, provider, new)  # raises, with the details
         for key, entry in keys:
             self.skips = [k for k in self.skips if k != key] + ([key] if skip else [])
             logger.info("Schedule: %s the %s at %s on %s", "skipping" if skip else "no longer skipping",

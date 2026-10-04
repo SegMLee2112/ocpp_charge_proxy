@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.16.0 — Add a slot, and clearer 6-hour checks
+
+- **Feature:** **+ Add a slot** button on the Schedule tab, next to the
+  week view (you can still click or drag across a day)
+- **Fix:** putting a skipped slot back could take a day over Octopus's 6
+  hours while Force schedule on supplier is on. It's now refused, on the
+  page and by the add-on (as is skipping just an unplug, which would leave
+  the car plugged in until the next one)
+- **Improvement:** when Force schedule on supplier can't be turned on, the
+  reason stays in red under the switch (not just a passing message), the
+  slots to change are marked in red, and it clears once they're fixed.
+  Shortening a slot that's over is allowed while you fix it
+
 ## 2.15.1 — Charge now first in Controls
 
 - **Improvement:** Charge now is at the top of Settings › Controls

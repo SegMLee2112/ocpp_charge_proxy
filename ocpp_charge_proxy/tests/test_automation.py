@@ -736,3 +736,41 @@ def test_charge_capped_at_six_hours_for_octopus():
     assert b.plan_auto_plug(480)["ready_for"].startswith("2026-10-03T16:30")  # no cap: 8 h, rounded up
     c, clock_c = _sched_18_22(_at(8), enabled=False)
     assert c.plan_auto_plug(360, cap_min=360)["ready_for"].startswith("2026-10-03T14:00")  # exactly 6 h
+
+
+
+def test_unskip_cant_go_over_six_hours():
+    def sunday_slot():
+        a, clock = _automation(start=_at(12))  # Saturday 3 Oct
+        a.set_schedule(enabled=True, ready_time=True, daily_cap_min=360, entries=[
+            {"time": "18:00", "action": "plug", "days": [6]}, {"time": "22:00", "action": "unplug", "days": [6]}])
+        plug = next(e for e in a.entries if e["action"] == "plug")
+        unplug = next(e for e in a.entries if e["action"] == "unplug")
+        return a, plug, unplug
+
+    a, plug, unplug = sunday_slot()
+    slot = [{"entry_id": plug["id"], "date": "2026-10-04"}, {"entry_id": unplug["id"], "date": "2026-10-04"}]
+    a.set_skips(slot, True, daily_cap_min=360)  # skip Sunday's 18-22
+    # While it's skipped, a 13:00-16:00 one-off on Sunday fits (3 h)
+    a.set_schedule(entries=a.entries + [{"time": "13:00", "action": "plug", "date": "2026-10-04"},
+                                         {"time": "16:00", "action": "unplug", "date": "2026-10-04"}], daily_cap_min=360)
+    try:
+        a.set_skips(slot, False, daily_cap_min=360, provider="Octopus Energy")  # back on: 7 h
+        raise AssertionError("should have refused")
+    except ValueError as err:
+        assert "6 hours" in str(err)
+    assert {"entry_id": plug["id"], "date": "2026-10-04"} in a.skips  # nothing changed
+    # With Force schedule on supplier off, there's no limit
+    a.set_schedule(ready_time=False)
+    a.set_skips(slot, False, daily_cap_min=360)
+    assert a.skips == []
+
+    # Skipping only the unplug would leave it plugged in until next Sunday: refused
+    b, plug, unplug = sunday_slot()
+    try:
+        b.set_skips([{"entry_id": unplug["id"], "date": "2026-10-04"}], True, daily_cap_min=360)
+        raise AssertionError("should have refused")
+    except ValueError:
+        pass
+    b.set_skips([{"entry_id": plug["id"], "date": "2026-10-04"}, {"entry_id": unplug["id"], "date": "2026-10-04"}],
+                True, daily_cap_min=360)  # the whole slot: fine
