@@ -712,3 +712,16 @@ def test_six_hour_limit_only_with_force_schedule_on():
     b, clock_b = _sched_18_22(_at(12))
     b.plan_auto_plug(300, cap_min=None)  # 12-17 + 18-22 = 9 h
     assert _today_windows(b, clock_b) == [("12:00", "17:00"), ("18:00", "22:00")]
+
+
+def test_charge_now_is_planned_like_auto_plug_in():
+    from src.automation import CHARGE_NOW_SOURCE
+    a, clock = _sched_18_22(_at(12), enabled=False)
+    out = a.plan_auto_plug(120, source=CHARGE_NOW_SOURCE)
+    assert out["source"] == "charge_now"
+    assert {e["source"] for e in a.entries if e.get("date")} == {"charge_now"}
+    assert [x.strftime("%H:%M") for x, _ in a.windows()] == ["12:00"]  # runs with the schedule off
+    a.due()
+    clock.advance(minutes=121)
+    assert [e["action"] for e in a.due()] == ["unplug"]
+    assert a.one_off_runs()[0]["source"] == "charge_now"

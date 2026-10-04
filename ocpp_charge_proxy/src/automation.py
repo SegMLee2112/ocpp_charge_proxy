@@ -75,6 +75,8 @@ TICK_S = 15
 CATCH_UP_S = 300  # a scheduled time is still run if noticed within this
 ACTIONS = ("plug", "unplug")
 AUTO_SOURCE = "auto_plug"  # entries added by an auto plug-in charge
+CHARGE_NOW_SOURCE = "charge_now"  # ... or by the Charge now button
+AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE)
 ONE_OFF_KEEP = datetime.timedelta(days=14)  # one-off times (and skips) are kept this long after they ran
 
 
@@ -147,8 +149,8 @@ def validate_entry(raw: dict) -> dict:
             "action": action,
             "enabled": bool(raw.get("enabled", True)),
         }
-        if raw.get("source") == AUTO_SOURCE:
-            out["source"] = AUTO_SOURCE
+        if raw.get("source") in AUTO_SOURCES:
+            out["source"] = raw["source"]
         return out
     days = raw.get("days", list(range(7)))
     if not isinstance(days, list) or not days or any(
@@ -408,7 +410,7 @@ class Automation:
         those an auto plug-in charge added."""
         if self.schedule_enabled:
             return self.entries
-        return [e for e in self.entries if e.get("source") == AUTO_SOURCE]
+        return [e for e in self.entries if e.get("source") in AUTO_SOURCES]
 
     def windows(self, entries: Optional[list] = None, now: Optional[datetime.datetime] = None,
                 skips: Optional[list] = None) -> list:
@@ -467,9 +469,8 @@ class Automation:
         for s in self._stretches(now.date() - datetime.timedelta(days=days - 1), days, self._active_entries(), self.skips):
             ones = [e for e in (s["plug"], s["unplug"]) if e.get("date")]
             if ones and s["start"] <= now:
-                auto = any(e.get("source") == AUTO_SOURCE for e in ones)
-                out.append({"start": _iso_local(s["start"]), "end": _iso_local(s["end"]),
-                            "source": AUTO_SOURCE if auto else "one_off"})
+                source = next((e["source"] for e in ones if e.get("source") in AUTO_SOURCES), "one_off")
+                out.append({"start": _iso_local(s["start"]), "end": _iso_local(s["end"]), "source": source})
         return out[::-1]
 
     def _stretches(self, start: datetime.date, days: int, entries: list, skips: list) -> list:
@@ -501,7 +502,8 @@ class Automation:
         return best
 
     def plan_auto_plug(self, minutes: int, ready_times: Optional[list] = None,
-                       cap_min: Optional[int] = None, provider: str = "your supplier") -> dict:
+                       cap_min: Optional[int] = None, provider: str = "your supplier",
+                       source: str = AUTO_SOURCE) -> dict:
         """An auto plug-in just plugged in: add a charge of `minutes` to the
         schedule as a one-off (see the module docstring). Returns what was done."""
         now = self._now().replace(second=0, microsecond=0)
@@ -511,7 +513,7 @@ class Automation:
 
         def one_off(t, action):
             return validate_entry({"time": t.strftime("%H:%M"), "date": t.date().isoformat(),
-                                   "action": action, "source": AUTO_SOURCE})
+                                   "action": action, "source": source})
 
         active = self._active_entries()
         skips = list(self.skips)
@@ -558,8 +560,10 @@ class Automation:
         self.auto_plug_last = {
             "at": _iso_local(now), "minutes": minutes, "ready_for": _iso_local(end),
             "end": _iso_local(slot_end), "combined": combined, "moved": moved, "notes": notes,
+            "source": source,
         }
-        logger.info("Auto plug-in charge: plugged in until %s%s", slot_end.strftime("%a %H:%M"),
+        logger.info("%s: plugged in until %s%s", "Charge now" if source == CHARGE_NOW_SOURCE else "Auto plug-in charge",
+                    slot_end.strftime("%a %H:%M"),
                     f" ({'; '.join(notes)})" if notes else "")
         if cap_min:
             worst = longest_day(self.windows(now=now), now - datetime.timedelta(days=1),
@@ -838,9 +842,9 @@ async def apply_ready_time(automation: "Automation",
 async def auto_plug_charge(automation: "Automation", hours: float,
                            set_ready_time: Optional[Callable[[datetime.datetime], Awaitable[dict]]] = None,
                            ready_times: Optional[list] = None, cap_min: Optional[int] = None,
-                           provider: str = "your supplier") -> dict:
-    """Auto plug-in just plugged in: plan the charge and set the ready time."""
-    plan = automation.plan_auto_plug(int(round(hours * 60)), ready_times, cap_min, provider)
+                           provider: str = "your supplier", source: str = AUTO_SOURCE) -> dict:
+    """Auto plug-in (or Charge now) just plugged in: plan the charge and set the ready time."""
+    plan = automation.plan_auto_plug(int(round(hours * 60)), ready_times, cap_min, provider, source)
     if set_ready_time is not None:
         await apply_ready_time(automation, set_ready_time)
     return plan
@@ -895,7 +899,7 @@ async def automation_loop(
                     await plug(source="schedule")
                     if automation.ready_time and set_ready_time is not None:
                         await apply_ready_time(automation, set_ready_time)
-                elif ((automation.ready_time or entry.get("source") == AUTO_SOURCE)
+                elif ((automation.ready_time or entry.get("source") in AUTO_SOURCES)
                       and automation.unplug_wait_s and shared_state.transaction_id is not None):
                     # Give the supplier a chance to end the session itself
                     automation.unplug_at = automation._clock() + automation.unplug_wait_s

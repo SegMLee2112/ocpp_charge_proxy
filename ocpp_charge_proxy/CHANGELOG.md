@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.13.0 — Tidier pages and Charge now
+
+- **Feature:** **Charge now** on the Overview: plug in straight away for the
+  hours you choose. The charge is added to the schedule as a one-off (as
+  auto plug-in does), your supplier's ready time is set, and it unplugs at
+  the end. Its sessions are tagged "Charge now"
+- **Feature:** Sessions tab: click a day in the per-day chart to show only
+  that day's sessions (click it again, or **Show all**, to go back)
+- **Change:** five tabs instead of seven: Messages, Provider and Health are
+  now one **Diagnostics** tab with a switch between them
+- **Change:** Auto plug-in and Auto re-plug moved from Settings to the
+  Schedule tab, next to the schedule they work with
+- **Improvement:** long help text is shortened to one line, with **More** to
+  read the rest
+- **Improvement:** all times are 24-hour
+- **Improvement:** Overview: warnings and errors come first in the chips,
+  and "Power from sensor" moved to the Power card
+- **Improvement:** Sessions table: the transaction ID and ID tag moved into
+  each session's details, so the table fits better
+
 ## 2.12.6 — Quieter log overnight
 
 - **Improvement:** the meter readings sent every 15 minutes while nothing

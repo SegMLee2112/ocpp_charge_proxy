@@ -15,7 +15,7 @@ from src.client import ChargePoint
 from src.config import load_config, starting_current_amps
 from src.gui_data import GuiSources, Health, PowerHistory, remove_old_history_files, sample_loop
 from src.ha_history import ChartHistory
-from src.automation import Automation, auto_plug_charge, automation_loop
+from src.automation import AUTO_SOURCE, CHARGE_NOW_SOURCE, Automation, auto_plug_charge, automation_loop
 from src.ha_link import HaLink
 from src import log_filters
 from src.persistence import Persistence
@@ -232,9 +232,9 @@ async def run() -> None:
         provider=cp.provider_info,
         health=_health_info,
     )
-    async def on_auto_plug(hours: float) -> None:
+    async def plan_charge(hours: float, source: str = AUTO_SOURCE) -> dict:
         sc = ha_link.smart_charging()
-        await auto_plug_charge(
+        plan = await auto_plug_charge(
             automation, hours,
             set_ready_time=ha_link.set_ready_time if sc.get("found") else None,
             ready_times=ha_link.ready_times,
@@ -242,8 +242,18 @@ async def run() -> None:
             # to only while Force schedule on supplier is on, as for the schedule
             cap_min=360 if sc.get("provider") == "Octopus Energy" and automation.ready_time else None,
             provider=sc.get("provider") or "your supplier",
+            source=source,
         )
         automation.publish(shared_state)
+        return plan
+
+    async def on_auto_plug(hours: float) -> None:
+        await plan_charge(hours)
+
+    async def charge_now(hours: float) -> dict:
+        """The Charge now button: plug in, and plan the charge as auto plug-in does."""
+        await do_plug(source="charge now")
+        return await plan_charge(hours, CHARGE_NOW_SOURCE)
 
     ha_link.on_auto_plug = on_auto_plug
     charger_tasks = [
@@ -271,6 +281,7 @@ async def run() -> None:
         automation=automation,
         ha_link=ha_link,
         on_set_ramp=cp.set_ramp,
+        on_charge_now=charge_now,
     )
     runner = web.AppRunner(api_app)
     await runner.setup()

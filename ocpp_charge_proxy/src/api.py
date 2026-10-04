@@ -28,6 +28,7 @@ def create_api_app(
     automation=None,
     on_set_ramp: Callable[[float, float], None] | None = None,
     ha_link=None,
+    on_charge_now: Callable[[float], Awaitable[dict]] | None = None,
 ) -> web.Application:
     app = web.Application()
     app["shared_state"] = shared_state
@@ -42,6 +43,7 @@ def create_api_app(
     app["automation"] = automation  # src.automation.Automation, or None
     app["ha_link"] = ha_link  # src.ha_link.HaLink, or None
     app["on_set_ramp"] = on_set_ramp
+    app["on_charge_now"] = on_charge_now
     # Open /api/events streams (web pages)
     app["event_clients"] = {"gui": 0}
     app.on_shutdown.append(_close_event_streams)
@@ -53,6 +55,7 @@ def create_api_app(
     app.router.add_get("/api/state", handle_get_state)
     app.router.add_post("/api/plug", handle_plug)
     app.router.add_post("/api/unplug", handle_unplug)
+    app.router.add_post("/api/charge_now", handle_charge_now)
     app.router.add_post("/api/current", handle_current)
     app.router.add_post("/api/power", handle_power)
     app.router.add_post("/api/soc", handle_soc)
@@ -111,6 +114,26 @@ async def handle_plug(request: web.Request) -> web.Response:
 async def handle_unplug(request: web.Request) -> web.Response:
     await request.app["on_unplug"]()
     return web.json_response({"status": "ok"})
+
+
+async def handle_charge_now(request: web.Request) -> web.Response:
+    """{"hours": 0.5..12 in half hours}: plug in now and add the charge to the
+    schedule as a one-off, as auto plug-in does (see src/automation.py)."""
+    on_charge_now = request.app["on_charge_now"]
+    if on_charge_now is None:
+        return web.json_response({"status": "error", "message": "Not available"}, status=503)
+    try:
+        body = await request.json()
+        hours = float(body["hours"])
+        if not 0.5 <= hours <= 12 or hours * 2 != int(hours * 2):
+            raise ValueError
+    except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+        return web.json_response({"status": "error", "message": "hours must be 0.5 to 12, in half hours"}, status=400)
+    try:
+        plan = await on_charge_now(hours)
+    except ValueError as err:
+        return web.json_response({"status": "error", "message": str(err)}, status=400)
+    return web.json_response({"status": "ok", "plan": plan}, dumps=_dumps)
 
 
 async def handle_current(request: web.Request) -> web.Response:

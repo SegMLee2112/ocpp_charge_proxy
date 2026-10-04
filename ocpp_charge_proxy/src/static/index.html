@@ -125,6 +125,19 @@
   .savebar { position: sticky; bottom: 12px; z-index: 4; display: flex; align-items: center; gap: 10px;
     background: var(--card); border-radius: var(--radius); padding: 10px 14px; box-shadow: 0 4px 14px rgba(0,0,0,.25), 0 0 0 1px var(--divider); }
   .savebar[hidden] { display: none; }
+  details.more { display: inline; }
+  details.more > summary { display: inline; cursor: pointer; color: var(--primary); list-style: none; white-space: nowrap; }
+  details.more > summary::-webkit-details-marker { display: none; }
+  details.more[open] > summary { display: none; }
+  details.more > div { display: inline; }
+  .subnav { max-width: 1100px; margin: 0 auto 4px; display: flex; gap: 8px; }
+  .subnav[hidden] { display: none; }
+  .subnav button { font: inherit; font-size: 13px; border: 1px solid var(--divider); background: none; color: var(--text2);
+    padding: 5px 12px; border-radius: 16px; cursor: pointer; }
+  .subnav button[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+  .daybars .d { cursor: pointer; }
+  .daybars .d.sel .b { outline: 2px solid var(--text); outline-offset: 1px; }
+  .daybars .d.dim { opacity: .45; }
   .savebar .grow { flex: 1; }
   .section-title { font-size: 13px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 -4px; }
   .picker { display: block; width: 100%; min-width: 0; }
@@ -254,15 +267,16 @@
   <nav role="tablist" id="tabs">
     <button role="tab" data-tab="overview"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg><span>Overview</span></button>
     <button role="tab" data-tab="sessions"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg><span>Sessions</span></button>
-    <button role="tab" data-tab="messages"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg><span>Messages</span></button>
-    <button role="tab" data-tab="provider"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg><span>Provider</span></button>
     <button role="tab" data-tab="automation"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg><span>Schedule</span></button>
     <button role="tab" data-tab="settings"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg><span>Settings</span></button>
-    <button role="tab" data-tab="health"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span>Health</span></button>
+    <button role="tab" data-tab="diagnostics"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span>Diagnostics</span></button>
   </nav>
 </header>
 
 <main>
+  <div class="subnav" id="diag-nav" hidden role="group" aria-label="Diagnostics">
+    <button data-sub="health">Health</button><button data-sub="messages">Messages</button><button data-sub="provider">Provider</button>
+  </div>
   <!-- ============ Overview ============ -->
   <section id="tab-overview" class="stack">
     <div class="card">
@@ -281,6 +295,12 @@
           <div style="margin-top:6px" id="o-tx">—</div>
         </div>
         <div style="margin-left:auto" id="o-chips"></div>
+      </div>
+      <div class="row" id="o-charge-row" style="margin-top:12px">
+        <button class="btn small primary" id="o-charge">Charge now</button>
+        <span class="ctl" id="o-charge-form" hidden>for <input type="number" id="o-charge-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours"> hours
+          <button class="btn small primary" id="o-charge-go">Start</button><button class="btn small" id="o-charge-cancel">Cancel</button></span>
+        <span class="muted" id="o-charge-note" style="font-size:13px"></span>
       </div>
     </div>
 
@@ -343,10 +363,10 @@
       <div class="note" id="d-note" hidden></div>
     </div>
     <div class="card">
-      <h2>Recent sessions<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400">Click a row for details</span></h2>
+      <h2>Recent sessions<span class="spacer"></span><span id="s-filter"></span><span class="muted" style="font-size:12px;font-weight:400">Click a row for details</span></h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Started</th><th class="num">Duration</th><th class="num">Energy</th><th class="num">Peak</th><th>Ended by</th><th class="num">Transaction ID</th><th>ID tag</th></tr></thead>
+          <thead><tr><th>Started</th><th class="num">Duration</th><th class="num">Energy</th><th class="num">Peak</th><th>Ended by</th></tr></thead>
           <tbody id="s-rows"></tbody>
         </table>
       </div>
@@ -416,19 +436,19 @@
       <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
         <div class="grow">
           <div>Force schedule on supplier</div>
-          <div class="note" style="margin:0">When the schedule plugs in, set your supplier's smart charging ready-by time to the schedule's next unplug. Only at scheduled plug-ins. Ready times are in 30-minute steps (Octopus: any time of day; EDF: 04:00–11:00), so while this is on, unplug times are limited to those.</div>
+          <div class="note" style="margin:0">Sets your supplier's ready time to the schedule's next unplug. <details class="more"><summary>More</summary><div>Only at scheduled plug-ins. Ready times are in 30-minute steps (Octopus: any time of day; EDF: 04:00–11:00), so while this is on, unplug times are limited to those.</div></details></div>
           <div id="a-ready-status" style="margin-top:6px"></div>
         </div>
         <label class="switch"><input type="checkbox" id="a-ready-on" aria-label="Force schedule on supplier"><span></span></label>
       </div>
       <div class="row" id="a-wait-row" style="margin-top:10px" hidden>
         <div class="grow">Wait for the supplier at unplug
-          <div class="note" style="margin:0">At a scheduled unplug during a session, give your supplier up to this long to stop the session itself first. 0 unplugs straight away.</div></div>
+          <div class="note" style="margin:0">Lets your supplier end the session itself. <details class="more"><summary>More</summary><div>At a scheduled unplug during a session, the add-on waits up to this long for your supplier to stop the session before unplugging. 0 unplugs straight away.</div></details></div></div>
         <span class="ctl"><input type="number" id="a-wait" min="0" max="600" step="10" aria-label="Seconds to wait for the supplier at unplug"> s</span>
       </div>
       <div class="row" id="a-plan-row" style="margin-top:10px" hidden>
         <div class="grow">Supplier's plan
-          <div class="note" style="margin:0">While plugged in, your supplier's planned slots up to the ready time are checked against the schedule.</div>
+          <div class="note" style="margin:0">Checked while the schedule has the car plugged in. <details class="more"><summary>More</summary><div>Your supplier's planned slots up to the ready time are checked against the schedule. A slot past the unplug, or a ready time changed in the supplier's app, is flagged.</div></details></div>
           <div id="a-plan" style="margin-top:6px"></div></div>
       </div>
       <div class="note" id="a-tz"></div>
@@ -438,6 +458,48 @@
       <div class="week" id="w-grid"></div>
       <div class="sub" id="w-warn" hidden style="margin-top:10px"></div>
       <div class="legend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span id="w-sup-legend" hidden><b class="band" id="w-sup-swatch" style="background:transparent;border:2px solid;box-sizing:border-box"></b><span id="w-sup-label"></span></span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px)"></b>Skipped</span><span class="hint">Click a slot to skip it once</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span></div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h2>Auto plug-in<span class="spacer"></span>
+          <label class="switch"><input type="checkbox" id="sim-auto" aria-label="Auto plug-in"><span></span></label>
+        </h2>
+        <div class="note" style="margin:0 0 10px">Plugs in when the car's charge drops below a level. <details class="more"><summary>More</summary><div>Switches Plugged In on once, so your provider can schedule a charge. It won't plug back in if you unplug by hand while the SoC is still low.</div></details></div>
+        <div class="row"><div class="grow">Plug in below<div class="note" style="margin:0">SoC level</div></div>
+          <span class="ctl"><input type="number" id="sim-auto-soc" min="1" max="99" step="1" aria-label="Plug in below SoC"> %</span></div>
+        <div class="row"><div class="grow">SoC sensor to watch<div class="note" style="margin:0">Normally your reporting SoC sensor. <details class="more"><summary>More</summary><div>Or pick another one to watch only for this (it is never reported), e.g. for a car that may be away.</div></details></div></div></div>
+        <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_plug_entity" data-domain="sensor" data-class="battery" data-units="%" data-none="Reporting SoC sensor"></span></div>
+        <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
+          <div class="grow">Automatically adjust schedule to fit auto plug-in
+            <div class="note" style="margin:0">Adds the charge to the schedule and sets your supplier's ready time. <details class="more"><summary>More</summary><div>As a one-off that unplugs when it's done; the ready time is set to that unplug. and set your supplier's ready time to that unplug. If it meets a scheduled slot they become one.
+              <br><b>Octopus Energy:</b> unplugs after the hours below (rounded up to the half hour); with Force schedule on supplier on,
+              if that takes the day over 6 hours, the next scheduled slot starts that much later.
+              <br><b>EDF Energy:</b> ready times can only be 04:00–11:00, so it unplugs at the first of those after the hours below
+              (e.g. plugging in at 18:00 for 3 hours unplugs at 04:00 the next morning).
+              <br><b>E.ON Next:</b> unplugs after the hours below (rounded up to the half hour); its integration has no ready time, so none is set.</div></details></div></div>
+          <label class="switch"><input type="checkbox" id="sim-auto-ready" aria-label="Automatically adjust schedule to fit auto plug-in"><span></span></label>
+        </div>
+        <div class="row" id="sim-auto-hours-row">
+          <div class="grow">Charge for<div class="note" style="margin:0">Hours from plugging in (30-minute steps)</div></div>
+          <span class="ctl"><input type="number" id="sim-auto-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours"> hours</span>
+        </div>
+        <div id="sim-auto-last" class="sub" style="margin-top:8px"></div>
+        <dl class="kv" id="sim-monitor" style="margin-top:14px"></dl>
+      </div>
+      <div class="card">
+        <h2>Auto re-plug<span class="spacer"></span>
+          <label class="switch"><input type="checkbox" id="a-rp-on" aria-label="Auto re-plug on"><span></span></label>
+        </h2>
+        <div id="a-rp-status" style="margin-bottom:12px"></div>
+        <div class="row">
+          <div class="grow">Re-plug after<div class="note" style="margin:0">Minutes plugged in with no session. <details class="more"><summary>More</summary><div>If your supplier's plan is found: nothing scheduled, or a slot running with no session. Then the add-on unplugs for 30 seconds and plugs back in.</div></details></div></div>
+          <span class="ctl"><input type="number" id="a-rp-after" min="1" max="240" step="1" aria-label="Re-plug after minutes"> min</span>
+        </div>
+        <div class="row">
+          <div class="grow">Tries<div class="note" style="margin:0">Before giving up until the car is next unplugged</div></div>
+          <span class="ctl"><input type="number" id="a-rp-tries" min="0" max="20" step="1" aria-label="Re-plug tries"></span>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -469,28 +531,12 @@
       </div>
       <div class="card">
         <h2>Simulated car</h2>
-        <div class="note" style="margin:0 0 10px">How the simulated car starts drawing power after a session starts or resumes, like a real car. Not used when power comes from your power sensor.</div>
+        <div class="note" style="margin:0 0 10px">How the simulated car starts drawing power. <details class="more"><summary>More</summary><div>After a session starts or resumes, like a real car. Not used when power comes from your power sensor.</div></details></div>
         <div class="row"><div class="grow">Start delay<div class="note" style="margin:0">Seconds before it draws any current</div></div>
           <span class="ctl"><input type="number" id="c-delay" min="0" max="60" step="0.5" aria-label="Start delay in seconds"> s</span></div>
         <div class="row"><div class="grow">Ramp-up<div class="note" style="margin:0">Seconds to rise from 0 to full power</div></div>
           <span class="ctl"><input type="number" id="c-ramp" min="0" max="60" step="0.5" aria-label="Ramp-up in seconds"> s</span></div>
         <div class="note">0 and 0 = full power straight away. Changes apply from the next start or resume.</div>
-      </div>
-      <div class="card">
-        <h2>Auto re-plug<span class="spacer"></span>
-          <label class="switch"><input type="checkbox" id="a-rp-on" aria-label="Auto re-plug on"><span></span></label>
-        </h2>
-        <div id="a-rp-status" style="margin-bottom:12px"></div>
-        <div class="row">
-          <div class="grow">Re-plug after<div class="note" style="margin:0">Minutes plugged in with no session (or, if your supplier's plan is found, nothing scheduled, or a slot running with no session)</div></div>
-          <span class="ctl"><input type="number" id="a-rp-after" min="1" max="240" step="1" aria-label="Re-plug after minutes"> min</span>
-        </div>
-        <div class="row">
-          <div class="grow">Tries<div class="note" style="margin:0">Before giving up until the car is next unplugged</div></div>
-          <span class="ctl"><input type="number" id="a-rp-tries" min="0" max="20" step="1" aria-label="Re-plug tries"></span>
-        </div>
-        <div class="note">If your provider hasn't started a session this long after Plugged In turns on, the add-on unplugs for 30 seconds and plugs back in.
-  </div>
       </div>
     </div>
     <div class="section-title">Your Home Assistant sensors</div>
@@ -503,51 +549,25 @@
       </div>
       <div class="card">
         <h2>Reporting SoC</h2>
-        <div class="row"><div class="grow">SoC sensor<div class="note" style="margin:0">Your car's charge, reported to your provider while plugged in. At 100% the car reports full, and power tapers above 90%</div></div></div>
+        <div class="row"><div class="grow">SoC sensor<div class="note" style="margin:0">Your car's charge, reported to your provider. <details class="more"><summary>More</summary><div>Sent while plugged in. At 100% the car reports full, and power tapers above 90%.</div></details></div></div></div>
         <div class="row" style="margin-top:6px"><span class="picker" data-key="soc_entity" data-domain="sensor" data-class="battery" data-units="%"></span></div>
         <dl class="kv" id="sim-soc" style="margin-top:14px"></dl>
       </div>
       <div class="card">
         <h2>Car plugged in</h2>
-        <div class="row"><div class="grow">Car plugged in sensor<div class="note" style="margin:0">A binary sensor such as your car's "charging cable connected". When it turns on, Plugged In switches on. It never switches it off</div></div></div>
+        <div class="row"><div class="grow">Car plugged in sensor<div class="note" style="margin:0">Turns Plugged In on when your car's cable is connected. <details class="more"><summary>More</summary><div>A binary sensor such as your car's "charging cable connected". It never switches Plugged In off.</div></details></div></div></div>
         <div class="row" style="margin-top:6px"><span class="picker" data-key="plug_entity" data-domain="binary_sensor" data-class="plug,connectivity,battery_charging,power"></span></div>
         <dl class="kv" id="sim-plug" style="margin-top:14px"></dl>
       </div>
-      <div class="card">
-        <h2>Auto plug-in<span class="spacer"></span>
-          <label class="switch"><input type="checkbox" id="sim-auto" aria-label="Auto plug-in"><span></span></label>
-        </h2>
-        <div class="note" style="margin:0 0 10px">Switch Plugged In on once when the SoC drops below the level below, so your provider can schedule a charge. It won't plug back in if you unplug by hand while the SoC is still low.</div>
-        <div class="row"><div class="grow">Plug in below<div class="note" style="margin:0">SoC level</div></div>
-          <span class="ctl"><input type="number" id="sim-auto-soc" min="1" max="99" step="1" aria-label="Plug in below SoC"> %</span></div>
-        <div class="row"><div class="grow">SoC sensor to watch<div class="note" style="margin:0">Leave as "Reporting SoC sensor" or pick another one to watch only for this (it is never reported, e.g. for a car that may be away)</div></div></div>
-        <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_plug_entity" data-domain="sensor" data-class="battery" data-units="%" data-none="Reporting SoC sensor"></span></div>
-        <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
-          <div class="grow">Automatically adjust schedule to fit auto plug-in
-            <div class="note" style="margin:0">When auto plug-in plugs in, add the charge to the schedule as a one-off that unplugs when it's done,
-              and set your supplier's ready time to that unplug. If it meets a scheduled slot they become one.
-              <br><b>Octopus Energy:</b> unplugs after the hours below (rounded up to the half hour); with Force schedule on supplier on,
-              if that takes the day over 6 hours, the next scheduled slot starts that much later.
-              <br><b>EDF Energy:</b> ready times can only be 04:00–11:00, so it unplugs at the first of those after the hours below
-              (e.g. plugging in at 18:00 for 3 hours unplugs at 04:00 the next morning).
-              <br><b>E.ON Next:</b> unplugs after the hours below (rounded up to the half hour); its integration has no ready time, so none is set.</div></div>
-          <label class="switch"><input type="checkbox" id="sim-auto-ready" aria-label="Automatically adjust schedule to fit auto plug-in"><span></span></label>
-        </div>
-        <div class="row" id="sim-auto-hours-row">
-          <div class="grow">Charge for<div class="note" style="margin:0">Hours from plugging in (30-minute steps)</div></div>
-          <span class="ctl"><input type="number" id="sim-auto-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours"> hours</span>
-        </div>
-        <div id="sim-auto-last" class="sub" style="margin-top:8px"></div>
-        <dl class="kv" id="sim-monitor" style="margin-top:14px"></dl>
-      </div>
     </div>
-    <label class="live" style="cursor:pointer"><input type="checkbox" id="sim-all"> Show all sensors in the lists</label>
-    <div class="savebar" id="set-bar" hidden>
+    <label class="live" style="cursor:pointer"><input type="checkbox" id="sim-all"> Show all sensors in the lists (here and on the Schedule tab)</label>
+  </section>
+
+  <div class="savebar" id="set-bar" hidden>
       <span>Unsaved changes</span><span class="grow"></span>
       <button class="btn small" id="set-discard">Discard</button>
       <button class="btn small primary" id="set-save">Save</button>
     </div>
-  </section>
 
   <!-- ============ Health ============ -->
   <section id="tab-health" class="stack" hidden>
@@ -607,14 +627,14 @@ function dur(s) {
   if (m) return `${m}m ${sec}s`;
   return `${sec}s`;
 }
-const time = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'}) : '—';
+const time = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'}) : '—';
 function dateTime(iso) {
   if (!iso) return '—';
   const d = new Date(iso), today = new Date();
-  const t = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+  const t = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
   return d.toDateString() === today.toDateString() ? `Today ${t}` : `${d.toLocaleDateString([], {day: 'numeric', month: 'short'})} ${t}`;
 }
-const hm = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '—';
+const hm = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) : '—';
 function msgTime(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -681,17 +701,24 @@ async function post(path, body) {
 }
 
 // ---------- tabs ----------
+const DIAG = ['health', 'messages', 'provider'];  // the Diagnostics tab's sections
 function showTab(name) {
   if (name === 'simulation') name = 'settings';
   if (name === 'schedule') name = 'automation';  // the Schedule tab
+  if (name === 'diagnostics') name = 'health';
   if (!document.getElementById('tab-' + name)) name = 'overview';
   activeTab = name;
-  document.querySelectorAll('#tabs button').forEach((b) => b.setAttribute('aria-selected', b.dataset.tab === name));
+  const diag = DIAG.includes(name);
+  document.querySelectorAll('#tabs button').forEach((b) => b.setAttribute('aria-selected',
+    b.dataset.tab === name || (diag && b.dataset.tab === 'diagnostics')));
+  $('diag-nav').hidden = !diag;
+  $('diag-nav').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.sub === name));
   document.querySelectorAll('main > section').forEach((s) => s.hidden = s.id !== 'tab-' + name);
   try { history.replaceState(null, '', '#' + name); } catch (e) {}
   refreshTab(true);
 }
 $('tabs').addEventListener('click', (e) => { if (e.target.dataset.tab) showTab(e.target.dataset.tab); });
+$('diag-nav').addEventListener('click', (e) => { if (e.target.dataset.sub) showTab(e.target.dataset.sub); });
 $('status-btn').addEventListener('click', () => showTab('health'));
 
 // ---------- header status: anything that needs attention ----------
@@ -719,9 +746,9 @@ function updateStatus() {
   const level = issues.some((i) => i[0] === 'err') ? 'err' : issues.length ? 'warn' : 'ok';
   $('status-btn').className = 'status-btn ' + (level === 'ok' ? '' : level);
   $('status-dot').className = 'dot ' + level;
-  $('status-btn').title = level === 'ok' ? 'Healthy: everything is working. Open the Health tab'
-    : `Unhealthy: ${issues.map((i) => i[1]).join('; ')}. Open the Health tab`;
-  $('status-btn').setAttribute('aria-label', level === 'ok' ? 'Healthy. Open the Health tab' : `Unhealthy, ${issues.length} issue${issues.length === 1 ? '' : 's'}. Open the Health tab`);
+  $('status-btn').title = level === 'ok' ? 'Healthy: everything is working. Open Diagnostics'
+    : `Unhealthy: ${issues.map((i) => i[1]).join('; ')}. Open Diagnostics`;
+  $('status-btn').setAttribute('aria-label', level === 'ok' ? 'Healthy. Open Diagnostics' : `Unhealthy, ${issues.length} issue${issues.length === 1 ? '' : 's'}. Open Diagnostics`);
   $('h-issues-card').hidden = !issues.length;
   $('h-issues').innerHTML = issues.map(([lvl, t]) => `<li><span class="chip ${lvl}">${lvl === 'err' ? 'Problem' : 'Check'}</span> ${esc(t)}</li>`).join('');
 }
@@ -787,10 +814,9 @@ function renderState(s) {
   const chips = [];
   if (s.plugged_in) chips.push('<span class="chip info">Plugged in</span>');
   if (s.held_messages) chips.push(`<span class="chip warn">${s.held_messages} held</span>`);
-  if (s.power_source === 'entity') chips.push('<span class="chip">Power from sensor</span>');
   if (s.schedule_enabled && s.schedule_next) chips.push(`<span class="chip">${s.schedule_next.action === 'plug' ? 'Plug in' : 'Unplug'} ${whenText(s.schedule_next.time)}</span>`);
   const rp = s.replug || {};
-  if (s.unplug_pending) chips.push(`<span class="chip warn" title="Giving your supplier time to stop the session first">Unplugging by ${new Date(s.unplug_pending).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'})}</span>`);
+  if (s.unplug_pending) chips.push(`<span class="chip warn" title="Giving your supplier time to stop the session first">Unplugging by ${new Date(s.unplug_pending).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'})}</span>`);
   const pc = s.plan_check;
   drawSmartCheck(pc);
   if (pc && pc.status === 'error') chips.push(`<span class="chip err" title="${esc(pc.problems.join('\n'))}">Supplier plan doesn't match the schedule</span>`);
@@ -798,11 +824,14 @@ function renderState(s) {
   if (rp.status === 'waiting' && rp.next_replug_at) chips.push(`<span class="chip warn">Re-plug ${hm(rp.next_replug_at)} if no session</span>`);
   if (rp.status === 'replugging') chips.push('<span class="chip warn">Re-plugging…</span>');
   if (rp.status === 'gave_up') chips.push('<span class="chip err">No session — re-plug gave up</span>');
-  if (activeTab === 'settings') drawReplugStatus(rp);
-  $('o-chips').innerHTML = chips.join(' ');
+  if (activeTab === 'automation') drawReplugStatus(rp);
+  const rank = (c) => c.includes('chip err') ? 0 : c.includes('chip warn') ? 1 : 2;
+  $('o-charge-row').hidden = s.transaction_id !== null && s.transaction_id !== undefined;  // already charging
+  $('o-chips').innerHTML = chips.map((c, i) => [rank(c), i, c]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((x) => x[2]).join(' ');
 
   $('o-power').textContent = num(s.power_kw, 2) + ' kW';
-  $('o-power-sub').textContent = s.power_offered_kw ? `Offered ${num(s.power_offered_kw, 1)} kW` : (s.power_source === 'entity' ? 'From your power sensor' : 'Simulated');
+  $('o-power-sub').textContent = [s.power_source === 'entity' ? 'From your power sensor' : 'Simulated',
+    s.power_offered_kw ? `offered ${num(s.power_offered_kw, 1)} kW` : null].filter(Boolean).join(' · ');
   const eff = s.current_amps_effective ?? s.current_amps_setting, max = s.current_amps_setting;
   $('o-amps').textContent = num(s.current_a, 1) + ' A';
   $('o-amps-sub').textContent = `Limit ${eff} A` + (eff < max ? ` (max ${max} A, provider)` : '') +
@@ -1012,7 +1041,7 @@ function drawChart() {
     const d = new Date(t * 1000);
     const label = step >= 86400 ? d.toLocaleDateString([], {weekday: 'short', day: 'numeric'})
       : d.getHours() === 0 && d.getMinutes() === 0 && (span > 6 * 3600 || t1 < now - 86400) ? d.toLocaleDateString([], {weekday: 'short', day: 'numeric'})
-      : d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+      : d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
     ctx.fillText(label, x(t), H - B + 6);
   }
   if (!data.length) {
@@ -1121,14 +1150,14 @@ $('chart-wrap').addEventListener('mousemove', (e) => {
   for (const s of g.data) if (!best || Math.abs(s.t - t) < Math.abs(best.t - t)) best = s;
   if (!best || Math.abs(best.t - t) > Math.max(60, (best.d || g.every) * 1.5)) { tip.style.display = 'none'; return; }
   const when = new Date(best.t * 1000);
-  tip.innerHTML = `<b>${g.isLong ? when.toLocaleString([], {weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})
-      : g.span > 6 * 3600 || g.t1 < Date.now() / 1000 - 86400 ? when.toLocaleString([], {weekday: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit'}) : when.toLocaleTimeString()}</b>`
+  tip.innerHTML = `<b>${g.isLong ? when.toLocaleString([], {weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'})
+      : g.span > 6 * 3600 || g.t1 < Date.now() / 1000 - 86400 ? when.toLocaleString([], {weekday: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'}) : when.toLocaleTimeString([], {hourCycle: 'h23'})}</b>`
     + (g.isLong ? ` <span class="muted">${(best.d || LONG_STEP) >= 3600 ? 'hourly' : Math.round((best.d || LONG_STEP) / 60) + '-min'} average</span>` : '') + '<br>' + g.defs.lines.map((l) => {
     const v = l.get(best); return `${esc(l.name)}: ${v == null ? '—' : fmtAxis(Math.round(v * 100) / 100) + ' ' + g.defs.unit}`;
   }).join('<br>') + (g.isLong && chart.series === 'power' && best.power_max_kw != null ? `<br>Peak: ${fmtAxis(Math.round(best.power_max_kw * 100) / 100)} kW` : '')
     + `<br><span class="muted">${esc(best.state)}</span>`
     + g.marks.filter(([mt]) => Math.abs(g.x(mt) - mx) <= 6).map(([mt, kind]) =>
-      `<br><b>Session ${kind === 'start' ? 'start' : 'end'}</b> <span class="muted">${new Date(mt * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</span>`).join('');
+      `<br><b>Session ${kind === 'start' ? 'start' : 'end'}</b> <span class="muted">${new Date(mt * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'})}</span>`).join('');
   tip.style.display = 'block';
   const left = Math.min(Math.max(g.x(best.t) + 10, 0), rect.width - tip.offsetWidth - 4);
   tip.style.left = left + 'px'; tip.style.top = '8px';
@@ -1160,7 +1189,7 @@ function providerColor(name) {
 function drawSmartCheck(pc) {
   const el = $('sc-check'); if (!el) return;
   if (!pc || !(smart.data && smart.data.found)) { el.innerHTML = ''; return; }
-  const t = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '—';
+  const t = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) : '—';
   const span = `${t(pc.start)}–${t(pc.end)}`;
   const line = {
     waiting: `<span class="chip">Checking at ${t(pc.check_at)}</span> <span class="muted">against your schedule (plugged in ${span})</span>`,
@@ -1176,7 +1205,7 @@ function drawStateSub() {
   const s = state || {}, d = smart.data;
   let text = '';
   if (s.state === 'Preparing' && d && d.found) {
-    const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
     if (d.current) text = `${esc(d.provider)}'s charge slot runs until ${t(d.current.end)}, but it hasn't started charging yet`;
     else if (d.planned && d.planned.length) text = `Next slot ${slotText(d.planned[0])}`;
     else text = `Waiting for ${esc(d.provider)} to schedule a charge`;
@@ -1188,7 +1217,7 @@ function slotText(s) {
   const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
   const day = a.toDateString() === now.toDateString() ? 'Today' : a.toDateString() === tomorrow.toDateString() ? 'Tomorrow'
     : a.toLocaleDateString([], {weekday: 'short', day: 'numeric'});
-  const t = (d) => d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+  const t = (d) => d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
   return `${day} ${t(a)}–${t(b)}` + (s.charge_kwh != null ? ` <span class="muted">· ${num(Math.abs(s.charge_kwh), 1)} kWh</span>` : '');
 }
 function drawSmart() {
@@ -1200,7 +1229,7 @@ function drawSmart() {
       <div class="sub">${d.error ? esc(d.error) : 'Install your supplier\'s Home Assistant integration (Octopus Energy, EDF Energy or E.ON Next) to see the charge slots it plans.'}</div>`;
     return;
   }
-  const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+  const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
   const c = d.current;
   const now = c
     ? `<span class="chip ok">Slot now</span> <span>${t(c.start)}–${t(c.end)}</span>${c.charge_kwh != null
@@ -1271,20 +1300,21 @@ async function refreshSessions() {
   const tag = (startIso) => {
     const t = new Date(startIso);
     const r = runs.find((x) => new Date(x.start) <= t && t <= new Date(x.end));
-    return !r ? '' : r.source === 'auto_plug' ? ' <span class="chip info">Auto plug-in</span>' : ' <span class="chip info">One-off</span>';
+    return !r ? '' : ` <span class="chip info">${{auto_plug: 'Auto plug-in', charge_now: 'Charge now'}[r.source] || 'One-off'}</span>`;
   };
-  const all = sessionsData.history || [];
+  const onDay = (iso) => !sessDay || (iso && new Date(iso).toLocaleDateString('en-CA') === sessDay);
+  const all = (sessionsData.history || []).filter((x) => onDay(x.start));
   const h = all.filter((s) => s.type !== 'no_session');
   const failed = all.filter((s) => s.type === 'no_session');
   const rows = [];
   const by = (src) => src ? ` <span class="muted">· plugged in by ${esc(src)}</span>` : '';
-  if (sessionsData.current) {
+  if (sessionsData.current && onDay(sessionsData.current.start)) {
     const c = sessionsData.current;
-    rows.push(`<tr class="srow" data-key="${esc(c.start)}"><td>${dateTime(c.start)} <span class="chip ok">charging now</span>${tag(c.start)}</td><td class="num">${dur(c.duration_s)}</td><td class="num">${num(c.energy_kwh, 2)} kWh</td><td class="num">${num(c.peak_power_kw, 1)} kW</td><td class="muted">—</td><td class="num">${esc(c.transaction_id)}</td><td><code>${esc(c.id_tag || '—')}</code></td></tr>`);
-    if (sessionsOpen.has(c.start)) rows.push(`<tr class="detail"><td colspan="7">${sessionDetail({...c, current: true})}</td></tr>`);
-  } else if (sessionsData.waiting) {
+    rows.push(`<tr class="srow" data-key="${esc(c.start)}"><td>${dateTime(c.start)} <span class="chip ok">charging now</span>${tag(c.start)}</td><td class="num">${dur(c.duration_s)}</td><td class="num">${num(c.energy_kwh, 2)} kWh</td><td class="num">${num(c.peak_power_kw, 1)} kW</td><td class="muted">—</td></tr>`);
+    if (sessionsOpen.has(c.start)) rows.push(`<tr class="detail"><td colspan="5">${sessionDetail({...c, current: true})}</td></tr>`);
+  } else if (sessionsData.waiting && onDay(sessionsData.waiting.plugged_at)) {
     const w = sessionsData.waiting;
-    rows.push(`<tr><td>${dateTime(w.plugged_at)} <span class="chip warn">waiting for a session</span></td><td class="num">${dur(w.duration_s)}</td><td class="num muted">—</td><td class="num muted">—</td><td class="muted">Plugged in${w.plugged_by ? ' by ' + esc(w.plugged_by) : ''}, no session yet</td><td class="num muted">—</td><td class="muted">—</td></tr>`);
+    rows.push(`<tr><td>${dateTime(w.plugged_at)} <span class="chip warn">waiting for a session</span></td><td class="num">${dur(w.duration_s)}</td><td class="num muted">—</td><td class="num muted">—</td><td class="muted">Plugged in${w.plugged_by ? ' by ' + esc(w.plugged_by) : ''}, no session yet</td></tr>`);
   }
   all.forEach((s, i) => {
     const open = sessionsOpen.has(s.start);
@@ -1292,13 +1322,15 @@ async function refreshSessions() {
       const why = s.reason === 'replugged'
         ? 'No session from your provider: re-plugged'
         : `Unplugged before a session started${s.unplugged_by ? ' (' + esc(s.unplugged_by) + ')' : ''}`;
-      rows.push(`<tr class="no-session srow" data-key="${esc(s.start)}"><td>${dateTime(s.start)} <span class="chip">no session</span>${tag(s.start)}</td><td class="num">${dur(s.duration_s)}</td><td class="num muted">—</td><td class="num muted">—</td><td>${why}${by(s.plugged_by)}</td><td class="num muted">—</td><td class="muted">—</td></tr>`);
+      rows.push(`<tr class="no-session srow" data-key="${esc(s.start)}"><td>${dateTime(s.start)} <span class="chip">no session</span>${tag(s.start)}</td><td class="num">${dur(s.duration_s)}</td><td class="num muted">—</td><td class="num muted">—</td><td>${why}${by(s.plugged_by)}</td></tr>`);
     } else {
-      rows.push(`<tr class="srow" data-key="${esc(s.start)}"><td>${dateTime(s.start)}${tag(s.start)}</td><td class="num">${dur(s.duration_s)}</td><td class="num">${num(s.energy_kwh, 2)} kWh</td><td class="num">${num(s.peak_power_kw, 1)} kW</td><td>${esc(reasonText(s.reason))}</td><td class="num">${esc(s.transaction_id)}</td><td><code>${esc(s.id_tag || '—')}</code></td></tr>`);
+      rows.push(`<tr class="srow" data-key="${esc(s.start)}"><td>${dateTime(s.start)}${tag(s.start)}</td><td class="num">${dur(s.duration_s)}</td><td class="num">${num(s.energy_kwh, 2)} kWh</td><td class="num">${num(s.peak_power_kw, 1)} kW</td><td>${esc(reasonText(s.reason))}</td></tr>`);
     }
-    if (open) rows.push(`<tr class="detail"><td colspan="7">${sessionDetail(s)}</td></tr>`);
+    if (open) rows.push(`<tr class="detail"><td colspan="5">${sessionDetail(s)}</td></tr>`);
   });
-  $('s-rows').innerHTML = rows.join('') || '<tr><td colspan="7" class="empty">No sessions yet. They appear here once your provider starts one.</td></tr>';
+  $('s-filter').innerHTML = sessDay
+    ? `<span class="chip info" style="margin-right:8px">${new Date(sessDay + 'T12:00:00').toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})} <a href="#" id="s-filter-clear" style="margin-left:4px">Show all</a></span>` : '';
+  $('s-rows').innerHTML = rows.join('') || `<tr><td colspan="5" class="empty">${sessDay ? 'No sessions kept for this day.' : 'No sessions yet. They appear here once your provider starts one.'}</td></tr>`;
   const total = h.reduce((a, s) => a + (s.energy_kwh || 0), 0);
   let week = h.filter((s) => Date.now() - new Date(s.start) < 7 * 86400e3).reduce((a, s) => a + (s.energy_kwh || 0), 0);
   try {
@@ -1342,16 +1374,16 @@ function sessionDetail(s) {
   const stop = s.stop ? new Date(s.stop).getTime() / 1000 : Date.now() / 1000;
   if (s.type === 'no_session') {
     return `<div class="detail-grid"><dl class="kv">${kv([
-      ['Plugged in', s.start ? new Date(s.start).toLocaleString() : '—'],
-      ['Unplugged', s.stop ? new Date(s.stop).toLocaleString() : '—'],
+      ['Plugged in', s.start ? new Date(s.start).toLocaleString([], {hourCycle: 'h23'}) : '—'],
+      ['Unplugged', s.stop ? new Date(s.stop).toLocaleString([], {hourCycle: 'h23'}) : '—'],
       ['Waited', dur(s.duration_s)],
       ['Plugged in by', esc(s.plugged_by || '—')],
       ['Unplugged by', esc(s.unplugged_by || '—')],
-    ])}</dl><div class="sub">Your provider didn't start a session while it was plugged in. If this keeps happening, check the Messages tab around this time.</div></div>`;
+    ])}</dl><div class="sub">Your provider didn't start a session while it was plugged in. If this keeps happening, check Diagnostics › Messages around this time.</div></div>`;
   }
   return `<div class="detail-grid"><dl class="kv">${kv([
-    ['Started', s.start ? new Date(s.start).toLocaleString() : '—'],
-    ['Ended', s.stop ? new Date(s.stop).toLocaleString() : 'Still charging'],
+    ['Started', s.start ? new Date(s.start).toLocaleString([], {hourCycle: 'h23'}) : '—'],
+    ['Ended', s.stop ? new Date(s.stop).toLocaleString([], {hourCycle: 'h23'}) : 'Still charging'],
     ['Meter start', s.meter_start_wh != null ? Number(s.meter_start_wh).toLocaleString() + ' Wh' : '—'],
     s.current
       ? ['Meter now', s.meter_start_wh != null && s.energy_kwh != null ? Math.round(s.meter_start_wh + s.energy_kwh * 1000).toLocaleString() + ' Wh' : '—']
@@ -1359,6 +1391,8 @@ function sessionDetail(s) {
     ['Energy so far', s.current ? num(s.energy_kwh, 2) + ' kWh' : null],
     ['Average', s.duration_s > 0 && s.energy_kwh != null ? num(s.energy_kwh / (s.duration_s / 3600), 2) + ' kW' : '—'],
     s.current ? ['Peak', num(s.peak_power_kw, 2) + ' kW'] : ['Stop reason', esc(s.reason || '—')],
+    ['Transaction ID', esc(s.transaction_id ?? '—')],
+    ['ID tag', `<code>${esc(s.id_tag || '—')}</code>`],
   ].filter((r) => r[1] !== null))}</dl><div>${start ? sparkline(start, stop) : ''}</div></div>`;
 }
 let dayData = [];
@@ -1383,7 +1417,7 @@ function drawDayBars(days) {
     const est = time && d.charging_estimated;
     const top = !v ? '' : time ? (d.charging_s < 3600 ? hmDur(d.charging_s) : num(v, v < 10 ? 1 : 0) + 'h') : num(v, v < 10 ? 1 : 0);
     const title = `${dt.toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})}: ${num(d.kwh, 2)} kWh · ${hmDur(d.charging_s || 0)} charging${d.charging_estimated ? ' (estimated from session length)' : ''}`;
-    return `<div class="d ${d.date === today ? 'today' : ''}" title="${title}">
+    return `<div class="d ${d.date === today ? 'today' : ''} ${sessDay === d.date ? 'sel' : sessDay ? 'dim' : ''}" data-date="${d.date}" title="${title} · click to show its sessions">
       <div class="bw"><div class="v">${top}</div>
       <div class="b ${v ? '' : 'zero'} ${est ? 'est' : ''}" style="height:${Math.max(1, v / max * 85)}%"></div></div>
       <div class="l">${label}</div></div>`;
@@ -1392,6 +1426,16 @@ function drawDayBars(days) {
   $('d-note').hidden = !anyEst;
   $('d-note').textContent = anyEst ? 'Faded bars are estimated from session lengths (days before 2.3.0, when the add-on started recording its state in Home Assistant), so they include any paused time.' : '';
 }
+let sessDay = null;  // YYYY-MM-DD: Recent sessions shows only this day
+$('d-bars').addEventListener('click', (e) => {
+  const bar = e.target.closest('.d[data-date]'); if (!bar) return;
+  sessDay = sessDay === bar.dataset.date ? null : bar.dataset.date;
+  drawDayBars(dayData); refreshSessions();
+});
+document.addEventListener('click', (e) => {
+  if (e.target.id !== 's-filter-clear') return;
+  e.preventDefault(); sessDay = null; drawDayBars(dayData); refreshSessions();
+});
 $('d-mode').addEventListener('click', (e) => {
   if (!e.target.dataset.mode) return;
   dayMode = e.target.dataset.mode;
@@ -1537,7 +1581,7 @@ function discardSettings() {
 }
 function drawPickers() {
   const all = $('sim-all').checked;
-  document.querySelectorAll('#tab-settings .picker').forEach((span) => {
+  document.querySelectorAll('main .picker').forEach((span) => {
     const key = span.dataset.key, domain = span.dataset.domain;
     const classes = (span.dataset.class || '').split(',').filter(Boolean);
     const units = (span.dataset.units || '').split(',').filter(Boolean);
@@ -1574,8 +1618,8 @@ function drawPickers() {
 function drawAutoPlugLast(d) {
   const el = $('sim-auto-last'); if (!el) return;
   const a = d && d.schedule && d.schedule.auto_plug_last;
-  if (!a) { el.innerHTML = ''; return; }
-  const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+  if (!a || a.source === 'charge_now') { el.innerHTML = ''; return; }  // Charge now's shows on the Overview
+  const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
   el.innerHTML = `Last: plugged in ${dateTime(a.at)} until ${t(a.end)}${a.notes && a.notes.length ? ` (${a.notes.map(esc).join('; ')})` : ''}`;
 }
 // A text box that filters the list as you type (every word must match the
@@ -1693,7 +1737,7 @@ const auto = {data: null, entries: [], dirty: false};
 function whenText(iso) {
   if (!iso) return '';
   const d = new Date(iso), now = new Date();
-  const t = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+  const t = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
   const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
   if (d.toDateString() === now.toDateString()) return `at ${t}`;
   if (d.toDateString() === tomorrow.toDateString()) return `tomorrow ${t}`;
@@ -1713,7 +1757,7 @@ async function refreshAutomation(force) {
   $('a-next').innerHTML = !d.schedule.enabled ? 'The schedule is off.' :
     n ? `Next: <b>${n.action === 'plug' ? 'plug in' : 'unplug'}</b> ${esc(whenText(n.time))}` : 'Nothing scheduled.';
   if (d.schedule.last_run) $('a-next').innerHTML += ` · last: ${d.schedule.last_run.action === 'plug' ? 'plugged in' : 'unplugged'} ${ago(d.schedule.last_run.timestamp)}${d.schedule.last_run.startup ? ' (when the add-on started)' : ''}`;
-  $('a-tz').textContent = `Times are in ${d.timezone} (add-on time now ${d.now ? d.now.slice(11, 16) : '—'}). A time missed while the add-on is stopped isn't caught up later. Unplugging during a session ends it.`;
+  $('a-tz').innerHTML = `Times are in ${esc(d.timezone)} (now ${d.now ? d.now.slice(11, 16) : '—'}). <details class="more"><summary>More</summary><div>A time missed while the add-on is stopped isn't caught up later. Unplugging during a session ends it.</div></details>`;
   if (!rpDirty) {
     $('a-rp-after').value = d.replug.after_min; $('a-rp-tries').value = d.replug.attempts;
     $('a-rp-on').checked = d.replug.enabled;
@@ -1725,7 +1769,7 @@ async function refreshAutomation(force) {
 function drawReadyStatus(d) {
   if (!d) return;
   const r = d.schedule.ready_status, on = d.schedule.ready_time;
-  const t = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '—';
+  const t = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) : '—';
   let html = '';
   if (on && smart.data && !smart.data.found) html = '<span class="chip warn">Supplier integration not found</span> <span class="muted">Needs the Octopus Energy or EDF Energy integration</span>';
   else if (on && smart.data && smart.data.provider === 'E.ON Next') html = '<span class="chip warn">Not supported</span> <span class="muted">The E.ON Next integration has no ready time setting</span>';
@@ -1740,7 +1784,7 @@ function drawReadyStatus(d) {
 }
 function drawPlanCheck(pc) {
   const el = $('a-plan'); if (!el) return;
-  const t = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '—';
+  const t = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) : '—';
   if (!pc) { el.innerHTML = '<span class="muted">Checked while the schedule has the car plugged in.</span>'; return; }
   const span = `${t(pc.start)}–${t(pc.end)}`;
   const head = {
@@ -2069,20 +2113,47 @@ async function refreshHealth() {
     : '<div class="empty">None. Transaction messages are held here if the connection drops, and sent when it\'s back.</div>';
 }
 
+// ---------- Charge now: plug in for a set time (added to the schedule as a one-off) ----------
+function chargeHours() {
+  let h = null;
+  try { h = parseFloat(localStorage.getItem('ocpp-charge-proxy-charge-hours')); } catch (e) {}
+  return h >= 0.5 && h <= 12 ? h : (sim.data && sim.data.settings && sim.data.settings.auto_plug_hours) || 3;
+}
+$('o-charge').addEventListener('click', () => {
+  $('o-charge-hours').value = chargeHours();
+  $('o-charge').hidden = true; $('o-charge-form').hidden = false; $('o-charge-hours').focus();
+});
+$('o-charge-cancel').addEventListener('click', () => { $('o-charge').hidden = false; $('o-charge-form').hidden = true; });
+$('o-charge-go').addEventListener('click', async () => {
+  const h = parseFloat($('o-charge-hours').value);
+  if (!(h >= 0.5 && h <= 12) || h * 2 !== Math.round(h * 2)) { toast('0.5 to 12 hours, in half hours'); return; }
+  try { localStorage.setItem('ocpp-charge-proxy-charge-hours', String(h)); } catch (e) {}
+  $('o-charge-go').disabled = true;
+  try {
+    const r = await api('charge_now', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({hours: h})});
+    const until = r.plan && r.plan.end ? new Date(r.plan.end).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) : null;
+    toast(until ? `Plugged in until ${until}` : 'Plugged in');
+    $('o-charge-note').textContent = until ? `Charging until ${until}${r.plan.notes && r.plan.notes.length ? ' (' + r.plan.notes.join('; ') + ')' : ''}` : '';
+    $('o-charge').hidden = false; $('o-charge-form').hidden = true;
+    pollState();
+  } catch (e) { toast('Failed: ' + e.message); }
+  $('o-charge-go').disabled = false;
+});
+
 // ---------- refresh loop ----------
 function refreshTab(full) {
   if (activeTab === 'overview') { refreshSessionCard(); refreshHistory(full && !chart.samples.length); refreshSmart(full); }
   else if (activeTab === 'sessions') refreshSessions();
   else if (activeTab === 'messages') refreshMessages();
   else if (activeTab === 'provider') refreshProvider();
-  else if (activeTab === 'automation') refreshAutomation(false);
+  else if (activeTab === 'automation') { refreshAutomation(false); refreshSimulation(false); }
   else if (activeTab === 'settings') { refreshAutomation(false); refreshSimulation(false); }
   else if (activeTab === 'health') { refreshHealth(); refreshSimulation(false); }
 }
 setInterval(() => {
   if (document.hidden) return;
   if (activeTab === 'messages') refreshMessages();
-  if (activeTab === 'settings') refreshSimulation(false);
+  if (activeTab === 'settings' || activeTab === 'automation') refreshSimulation(false);
 }, 2000);
 setInterval(() => { if (!document.hidden) refreshTab(false); }, 10000);
 // keep the chart's history filling in while on other tabs

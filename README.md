@@ -111,38 +111,38 @@ sensors live through Home Assistant's API.
   tab).
 - **Auto re-plug.** If your provider hasn't started a session 10 minutes
   after plugging in, the add-on unplugs for 30 seconds and plugs back in, up
-  to 3 times. On/off, minutes and tries are on the Settings tab.
+  to 3 times. On/off, minutes and tries are on the Schedule tab.
 
 ### Diagnostics
 
 - A **web GUI** in the Home Assistant sidebar (the add-on's Web UI), live
   over push updates and styled to match your HA theme, light or dark:
   - **Header:** a health dot left of the title, green when healthy and amber/red
-    when not (hover for the issues), linking to the Health tab.
+    when not (hover for the issues), linking to Diagnostics › Health.
   - **Overview:** state, power, current, SoC and energy; the current
     session; your supplier's planned smart charging slots (found
     automatically from the Octopus Energy, EDF Energy or E.ON Next integration); and a chart (shaded by state, with session start/end marked)
     of power, current (with your max and the provider limit) or SoC over
     the last 30 minutes to 24 hours, or 14 days, read from Home Assistant's
     history of the add-on's sensors. Drag or scroll on it to zoom.
-  - **Sessions:** energy per day for the last 14 days; the last 20 charging
-    sessions (energy, duration, peak power, what ended them, transaction ID
-    and ID tag, with details and the power curve on click), and plug-ins that
-    never got a session with the reason, kept across restarts.
-  - **Messages:** the last 300 OCPP messages both ways, kept across
-    restarts, with a filter, full JSON on click and a Copy button for
-    sharing.
-  - **Provider:** what your provider has set: charging limits, charging
-    profiles drawn as a timeline, the local authorisation list and every
-    configuration key.
-  - **Schedule:** the plug-in schedule (below), with one-off times and a view of the next 7 days where you can click a slot to skip it once.
+    **Charge now** plugs in for the hours you choose.
+  - **Sessions:** energy per day for the last 14 days (click a day to show
+    its sessions); the last 20 charging sessions (energy, duration, peak
+    power, what ended them, with details, IDs and the power curve on click),
+    and plug-ins that never got a session with the reason, kept across
+    restarts.
+  - **Schedule:** the plug-in schedule (below), with one-off times and a
+    view of the next 7 days where you can click a slot to skip it once;
+    auto plug-in and auto re-plug.
   - **Settings:** controls for Plugged In, max current, a power override and
-    a test SoC; the simulated car's start delay and ramp-up; auto re-plug;
-    and your power, SoC and car plugged in sensors and auto plug-in, with
-    live values (power source, reporting SoC, monitored SoC).
-  - **Health:** version, uptime, reconnects and the last drop's reason,
-    heartbeat and clock offset, the Home Assistant link and the add-on's
-    Home Assistant entities, and any held messages.
+    a test SoC; the simulated car's start delay and ramp-up; and your power,
+    SoC and car plugged in sensors, with live values.
+  - **Diagnostics:** **Health** (version, uptime, reconnects and the last
+    drop's reason, heartbeat and clock offset, the Home Assistant link and
+    the add-on's entities, held messages), **Messages** (the last 300 OCPP
+    messages both ways, with a filter, full JSON on click and Copy) and
+    **Provider** (charging limits, charging profiles as a timeline, the
+    local authorisation list and every configuration key).
 - **Quieter logs.** OCPP messages are logged at `info`, except Heartbeats
   (every 10s with Octopus) and periodic meter readings (every 60s), which only
   show at `debug`. Clock-aligned readings (every 15 min) stay at `info`.
@@ -183,7 +183,9 @@ power, SoC and car plugged in sensors and set up auto plug-in.
 Until the integration is removed, the add-on leaves the sensors alone (its
 Health tab says so).
 
-### Settings tab options
+### Sensor and auto plug-in options
+
+Sensors are on the **Settings** tab, auto plug-in on the **Schedule** tab.
 
 All optional. Choose "None" to stop using a sensor.
 

@@ -70,7 +70,7 @@ comes back.
 
 ### Auto plug-in
 
-**Auto plug-in** (Settings tab) switches Plugged In on once when the SoC
+**Auto plug-in** (Schedule tab) switches Plugged In on once when the SoC
 drops below the level you set. With **Automatically adjust schedule to fit
 auto plug-in** on, it also adds the charge to the schedule as a one-off,
 for the hours you choose (**Charge for**, 0.5 to 12):
@@ -141,7 +141,7 @@ even with the schedule off.
   Schedule tab; a mismatch also as a red chip on the Overview, and in the
   log. The supplier's planned slots are outlined in its colour on the Next
   7 days card (whether or not this is on).
-- **Auto re-plug** (**Settings** tab): Octopus sometimes doesn't start a session after you plug
+- **Auto re-plug** (**Schedule** tab): Octopus sometimes doesn't start a session after you plug
   in. When Plugged In has been on for the set minutes (default 10) with no
   session and the add-on is connected, it unplugs, waits 30 seconds and
   plugs back in, up to the set number of tries (default 3). It then gives up
@@ -245,9 +245,9 @@ The add-on creates its own entities (no integration needed):
   add-on leaves the sensors alone until you remove it (Settings > Devices &
   services). `sensor.ocpp_charge_proxy_energy` keeps its entity ID, so its
   Energy dashboard history carries on.
-- Your power, SoC and car plugged in sensors and auto plug-in are set up on
-  the web page's **Settings** tab; the add-on reads them through Home
-  Assistant's API.
+- Your power, SoC and car plugged in sensors are set up on the web page's
+  **Settings** tab, and auto plug-in on the **Schedule** tab; the add-on
+  reads them through Home Assistant's API.
 
 ## Web GUI
 
@@ -265,29 +265,37 @@ follows your Home Assistant theme.
   energy per day are read from Home Assistant's history of the add-on's
   sensors (keep them recorded): 10-second detail for 24 hours, then
   5-minute points while HA keeps them (10 days by default, `purge_keep_days`)
-  and hourly beyond that.
+  and hourly beyond that. **Charge now** plugs in straight away for the hours
+  you choose: the charge is added to the schedule as a one-off, as auto
+  plug-in does (see [Auto plug-in](#auto-plug-in)), and it unplugs at the end.
 - **Header:** a health dot left of the title (green / amber / red) that
-  opens the Health tab.
-- **Sessions:** energy and time spent charging per day for the last 14 days, and the last 20 charging sessions (energy, duration, peak
-  power, what ended them, transaction ID and ID tag), kept across restarts,
+  opens Diagnostics › Health.
+- **Sessions:** energy and time spent charging per day for the last 14
+  days (click a day to show only its sessions), and the last 20 charging
+  sessions (energy, duration, peak power, what ended them; transaction ID
+  and ID tag in the details), kept across restarts,
   and the last 20 plug-ins that never got a session: when, for how long, who
   plugged in, and whether auto re-plug gave up on it or it was unplugged
   first.
-- **Messages:** the last 300 OCPP messages both ways, kept across restarts
-  (with a marker where the add-on restarted), with a filter, full JSON on
-  click and a Copy button for sharing.
-- **Provider:** what your provider has set: charging limits, charging
-  profiles drawn as a timeline, the local authorisation list and every
-  configuration key.
 - **Schedule:** the plug-in schedule (see below), with a week view of when
-  it has the car plugged in.
+  it has the car plugged in; Force schedule on supplier; auto plug-in and
+  auto re-plug.
 - **Settings:** controls for Plugged In, max current, a power override and a
-  test SoC; auto re-plug (see below); and your power, SoC and car plugged in
-  sensors and auto plug-in, with their live values (power source, reporting
-  SoC, monitored SoC).
-- **Health:** version, uptime, reconnects and the last drop's reason,
-  heartbeat and clock offset, the Home Assistant link and the add-on's Home
-  Assistant entities, and any held messages.
+  test SoC; the simulated car's start delay and ramp-up; and your power, SoC
+  and car plugged in sensors, with their live values.
+- **Diagnostics**, in three parts:
+  - **Health:** version, uptime, reconnects and the last drop's reason,
+    heartbeat and clock offset, the Home Assistant link and the add-on's
+    Home Assistant entities, and any held messages.
+  - **Messages:** the last 300 OCPP messages both ways, kept across
+    restarts (with a marker where the add-on restarted), with a filter,
+    full JSON on click and a Copy button for sharing.
+  - **Provider:** what your provider has set: charging limits, charging
+    profiles drawn as a timeline, the local authorisation list and every
+    configuration key.
+
+Times on the page are 24-hour. Longer explanations are behind **More**
+links.
 
 ## Getting your OCPP credentials
 
