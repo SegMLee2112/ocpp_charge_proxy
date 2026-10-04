@@ -297,16 +297,18 @@ follows your Home Assistant theme.
 - **Schedule:** the plug-in schedule (see below), with a week view of when
   it has the car plugged in; Force schedule on supplier; auto plug-in and
   auto re-plug.
-- **Settings:** controls for Plugged In, max current, a power override and a
-  test SoC; the simulated car's start delay and ramp-up; and your power, SoC
-  and car plugged in sensors, with their live values.
-- **Diagnostics**, in two parts:
+- **Settings:** Charge now; controls for Plugged In and max current; the
+  simulated car's start delay and ramp-up; and your power, SoC and car
+  plugged in sensors, with their live values.
+- **Diagnostics**, in three parts:
   - **Health:** version, uptime, reconnects and the last drop's reason,
     heartbeat and clock offset, the Home Assistant link and the add-on's
     Home Assistant entities, and any held messages; then **Supplier** (below).
   - **Messages:** the last 300 OCPP messages both ways, kept across
     restarts (with a marker where the add-on restarted), with a filter,
     full JSON on click and a Copy button for sharing.
+  - **Debug:** test values: a power override (reported instead of the
+    simulation) and a test SoC.
   - **Supplier** (at the bottom of Health): what your supplier has set: charging limits, charging
     profiles drawn as a timeline, the local authorisation list and every
     configuration key.

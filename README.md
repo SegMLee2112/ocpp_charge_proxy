@@ -134,16 +134,16 @@ sensors live through Home Assistant's API.
     view of the next 7 days where you click or drag to add a slot and click
     one to change, delete or skip it;
     auto plug-in and auto re-plug.
-  - **Settings:** controls for Plugged In, max current, a power override and
-    a test SoC; the simulated car's start delay and ramp-up; and your power,
-    SoC and car plugged in sensors, with live values.
+  - **Settings:** Charge now; controls for Plugged In and max current; the
+    simulated car's start delay and ramp-up; and your power, SoC and car
+    plugged in sensors, with live values.
   - **Diagnostics:** **Health** (version, uptime, reconnects and the last
     drop's reason, heartbeat and clock offset, the Home Assistant link and
     the add-on's entities, held messages, and at the bottom what your
     supplier has set: charging limits, charging profiles as a timeline, the
     local authorisation list and every configuration key) and **Messages**
     (the last 300 OCPP messages both ways, with a filter, full JSON on click
-    and Copy).
+    and Copy), and **Debug** (a power override and a test SoC).
 - **Quieter logs.** OCPP messages are logged at `info`, except Heartbeats
   (every 10s with Octopus) and periodic meter readings (every 60s), which only
   show at `debug`. Clock-aligned readings (every 15 min) stay at `info`.

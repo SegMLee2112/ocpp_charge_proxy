@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.20.0 — Debug page
+
+- **Change:** the power override and test SoC moved from Settings › Controls
+  to a new **Debug** page under Diagnostics
+
 ## 2.19.0 — Your supplier by name
 
 - **Improvement:** once your supplier's integration is found, the page uses

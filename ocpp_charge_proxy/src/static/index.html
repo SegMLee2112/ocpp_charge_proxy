@@ -299,7 +299,7 @@
 
 <main>
   <div class="subnav" id="diag-nav" hidden role="group" aria-label="Diagnostics">
-    <button data-sub="health">Health</button><button data-sub="messages">Messages</button>
+    <button data-sub="health">Health</button><button data-sub="messages">Messages</button><button data-sub="debug">Debug</button>
   </div>
   <!-- ============ Overview ============ -->
   <section id="tab-overview" class="stack">
@@ -516,18 +516,7 @@
           <div class="grow"><div>Max current</div><div class="note" style="margin:0"><span class="supn" data-f="Your supplier">Your supplier</span> can lower it, not raise it</div></div>
         </div>
         <div class="row" style="margin-top:6px"><div class="seg" id="c-amps" role="group" aria-label="Max current"></div></div>
-        <div class="row">
-          <div class="grow"><div>Power override</div><div class="note" style="margin:0" id="c-power-note">Report this power instead of the simulation</div></div>
-          <span class="ctl"><input type="number" id="c-power" min="0" max="22" step="0.1" placeholder="kW" aria-label="Power override in kW">
-          <button class="btn small" id="c-power-set">Set</button>
-          <button class="btn small" id="c-power-clear">Clear</button></span>
-        </div>
-        <div class="row">
-          <div class="grow"><div>SoC</div><div class="note" style="margin:0" id="c-soc-note">Test value reported to <span class="supn" data-f="your supplier">your supplier</span></div></div>
-          <span class="ctl"><input type="number" id="c-soc" min="0" max="100" step="1" placeholder="%" aria-label="SoC in percent">
-          <button class="btn small" id="c-soc-set">Set</button>
-          <button class="btn small" id="c-soc-clear">Clear</button></span>
-        </div>
+      </div>
       </div>
       <div class="card">
         <h2>Simulated car</h2>
@@ -570,6 +559,24 @@
     </div>
 
   <!-- ============ Health ============ -->
+  <section id="tab-debug" class="stack" hidden>
+    <div class="card">
+      <h2>Test values</h2>
+      <div class="note" style="margin:0 0 10px">For testing: values reported in place of the simulation or your sensors.</div>
+        <div class="row" style="margin-top:0">
+          <div class="grow"><div>Power override</div><div class="note" style="margin:0" id="c-power-note">Report this power instead of the simulation</div></div>
+          <span class="ctl"><input type="number" id="c-power" min="0" max="22" step="0.1" placeholder="kW" aria-label="Power override in kW">
+          <button class="btn small" id="c-power-set">Set</button>
+          <button class="btn small" id="c-power-clear">Clear</button></span>
+        </div>
+        <div class="row">
+          <div class="grow"><div>SoC</div><div class="note" style="margin:0" id="c-soc-note">Test value reported to <span class="supn" data-f="your supplier">your supplier</span></div></div>
+          <span class="ctl"><input type="number" id="c-soc" min="0" max="100" step="1" placeholder="%" aria-label="SoC in percent">
+          <button class="btn small" id="c-soc-set">Set</button>
+          <button class="btn small" id="c-soc-clear">Clear</button></span>
+      </div>
+  </section>
+
   <section id="tab-health" class="stack" hidden>
     <div class="card" id="h-issues-card" hidden><h2>Needs attention</h2><ul class="issues" id="h-issues"></ul></div>
     <div class="grid">
@@ -724,7 +731,7 @@ async function post(path, body) {
 }
 
 // ---------- tabs ----------
-const DIAG = ['health', 'messages'];  // the Diagnostics tab's sections (Provider is at the bottom of Health)
+const DIAG = ['health', 'messages', 'debug'];  // the Diagnostics tab's sections (Supplier is at the bottom of Health)
 function showTab(name) {
   if (name === 'simulation') name = 'settings';
   if (name === 'schedule') name = 'automation';  // the Schedule tab
@@ -2422,6 +2429,7 @@ function refreshTab(full) {
   if (activeTab === 'overview') { refreshSessionCard(); refreshHistory(full && !chart.samples.length); refreshSmart(full); }
   else if (activeTab === 'sessions') refreshSessions();
   else if (activeTab === 'messages') refreshMessages();
+  else if (activeTab === 'debug') refreshSmart(false);  // for the supplier's name
   else if (activeTab === 'automation') { refreshAutomation(false); refreshSimulation(false); }
   else if (activeTab === 'settings') { refreshAutomation(false); refreshSimulation(false); refreshSmart(false); }
   else if (activeTab === 'health') { refreshHealth(); refreshSimulation(false); refreshProvider(); }
