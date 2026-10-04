@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.14.1 — Charge now in Controls
+
+- **Change:** **Charge now** moved from the Overview to Settings › Controls,
+  as a row of buttons like Max current: click 1, 2, 3, 4, 6 or 8 hours. It
+  adjusts the schedule the same way auto plug-in does, adding a one-off
+  slot you can change on the Schedule tab (there's a link to it)
+
 ## 2.14.0 — Edit the schedule on the week view
 
 - **Feature:** the schedule is edited on the Next 7 days view. Click or

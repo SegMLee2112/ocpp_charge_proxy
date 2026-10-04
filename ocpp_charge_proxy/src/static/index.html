@@ -305,12 +305,6 @@
         </div>
         <div style="margin-left:auto" id="o-chips"></div>
       </div>
-      <div class="row" id="o-charge-row" style="margin-top:12px">
-        <button class="btn small primary" id="o-charge">Charge now</button>
-        <span class="ctl" id="o-charge-form" hidden>for <input type="number" id="o-charge-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours"> hours
-          <button class="btn small primary" id="o-charge-go">Start</button><button class="btn small" id="o-charge-cancel">Cancel</button></span>
-        <span class="muted" id="o-charge-note" style="font-size:13px"></span>
-      </div>
     </div>
 
     <div class="grid tiles">
@@ -518,6 +512,11 @@
           <div class="grow"><div>Max current</div><div class="note" style="margin:0">Your provider can lower it, not raise it</div></div>
         </div>
         <div class="row" style="margin-top:6px"><div class="seg" id="c-amps" role="group" aria-label="Max current"></div></div>
+        <div class="row">
+          <div class="grow"><div>Charge now</div><div class="note" style="margin:0">Plug in now for this long. <details class="more"><summary>More</summary><div>The schedule is adjusted the same way as for auto plug-in: the charge is added as a one-off slot (which you can change on the Schedule tab) that unplugs at the first ready time your supplier accepts after these hours, and the ready time is set to it. If it meets a scheduled slot they become one; with Octopus and Force schedule on supplier on, if it takes the day over 6 hours, the next scheduled slot starts that much later.</div></details></div></div>
+        </div>
+        <div class="row" style="margin-top:6px"><div class="seg" id="c-charge" role="group" aria-label="Charge now for"></div></div>
+        <div class="sub" id="c-charge-note"></div>
         <div class="row">
           <div class="grow"><div>Power override</div><div class="note" style="margin:0" id="c-power-note">Report this power instead of the simulation</div></div>
           <span class="ctl"><input type="number" id="c-power" min="0" max="22" step="0.1" placeholder="kW" aria-label="Power override in kW">
@@ -828,7 +827,6 @@ function renderState(s) {
   if (rp.status === 'gave_up') chips.push('<span class="chip err">No session — re-plug gave up</span>');
   if (activeTab === 'automation') drawReplugStatus(rp);
   const rank = (c) => c.includes('chip err') ? 0 : c.includes('chip warn') ? 1 : 2;
-  $('o-charge-row').hidden = s.transaction_id !== null && s.transaction_id !== undefined;  // already charging
   $('o-chips').innerHTML = chips.map((c, i) => [rank(c), i, c]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((x) => x[2]).join(' ');
 
   $('o-power').textContent = num(s.power_kw, 2) + ' kW';
@@ -2255,31 +2253,23 @@ async function refreshHealth() {
     : '<div class="empty">None. Transaction messages are held here if the connection drops, and sent when it\'s back.</div>';
 }
 
-// ---------- Charge now: plug in for a set time (added to the schedule as a one-off) ----------
-function chargeHours() {
-  let h = null;
-  try { h = parseFloat(localStorage.getItem('ocpp-charge-proxy-charge-hours')); } catch (e) {}
-  return h >= 0.5 && h <= 12 ? h : (sim.data && sim.data.settings && sim.data.settings.auto_plug_hours) || 3;
-}
-$('o-charge').addEventListener('click', () => {
-  $('o-charge-hours').value = chargeHours();
-  $('o-charge').hidden = true; $('o-charge-form').hidden = false; $('o-charge-hours').focus();
-});
-$('o-charge-cancel').addEventListener('click', () => { $('o-charge').hidden = false; $('o-charge-form').hidden = true; });
-$('o-charge-go').addEventListener('click', async () => {
-  const h = parseFloat($('o-charge-hours').value);
-  if (!(h >= 0.5 && h <= 12) || h * 2 !== Math.round(h * 2)) { toast('0.5 to 12 hours, in half hours'); return; }
-  try { localStorage.setItem('ocpp-charge-proxy-charge-hours', String(h)); } catch (e) {}
-  $('o-charge-go').disabled = true;
+// ---------- Charge now (Settings > Controls): plug in for a set time ----------
+// Added to the schedule as a one-off, so it can be changed on the Schedule tab
+const CHARGE_HOURS = [1, 2, 3, 4, 6, 8];
+CHARGE_HOURS.forEach((h) => { const b = document.createElement('button'); b.textContent = h + ' h'; b.dataset.hours = h; $('c-charge').appendChild(b); });
+$('c-charge').addEventListener('click', async (e) => {
+  const h = Number(e.target.dataset.hours); if (!h) return;
+  const buttons = $('c-charge').querySelectorAll('button');
+  buttons.forEach((b) => { b.disabled = true; });
   try {
     const r = await api('charge_now', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({hours: h})});
     const until = r.plan && r.plan.end ? new Date(r.plan.end).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) : null;
     toast(until ? `Plugged in until ${until}` : 'Plugged in');
-    $('o-charge-note').textContent = until ? `Charging until ${until}${r.plan.notes && r.plan.notes.length ? ' (' + r.plan.notes.join('; ') + ')' : ''}` : '';
-    $('o-charge').hidden = false; $('o-charge-form').hidden = true;
-    pollState();
-  } catch (e) { toast('Failed: ' + e.message); }
-  $('o-charge-go').disabled = false;
+    $('c-charge-note').innerHTML = until ? `Plugged in until <b>${until}</b>${r.plan.notes && r.plan.notes.length ? ' (' + esc(r.plan.notes.join('; ')) + ')' : ''}. `
+      + '<a href="#schedule">Change it on the Schedule tab</a>' : '';
+    pollState(); refreshAutomation(true);
+  } catch (err) { toast('Failed: ' + err.message); }
+  buttons.forEach((b) => { b.disabled = false; });
 });
 
 // ---------- refresh loop ----------

@@ -267,9 +267,12 @@ follows your Home Assistant theme.
   energy per day are read from Home Assistant's history of the add-on's
   sensors (keep them recorded): 10-second detail for 24 hours, then
   5-minute points while HA keeps them (10 days by default, `purge_keep_days`)
-  and hourly beyond that. **Charge now** plugs in straight away for the hours
-  you choose: the charge is added to the schedule as a one-off, as auto
-  plug-in does (see [Auto plug-in](#auto-plug-in)), and it unplugs at the end.
+  and hourly beyond that.
+- **Charge now** (**Settings** tab, Controls): click how long to plug in
+  for (1 to 8 hours). It plugs in straight away and adjusts the schedule
+  the same way auto plug-in does (see [Auto plug-in](#auto-plug-in)): a
+  one-off slot you can change on the Schedule tab, the ready time set to
+  its end, and it unplugs then.
 - **Header:** a health dot left of the title (green / amber / red) that
   opens Diagnostics › Health.
 - **Sessions:** energy and time spent charging per day for the last 14
