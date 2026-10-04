@@ -511,6 +511,12 @@
       <div class="card">
         <h2>Controls</h2>
         <div class="row">
+          <div class="grow"><div>Charge now</div><div class="note" style="margin:0">Plug in now for this long. <details class="more"><summary>More</summary><div>The schedule is adjusted the same way as for auto plug-in: the charge is added as a one-off slot (which you can change on the Schedule tab) that unplugs at the first ready time your supplier accepts after these hours, and the ready time is set to it. If it meets a scheduled slot they become one; with Octopus and Force schedule on supplier on, if it takes the day over 6 hours, the next scheduled slot starts that much later.</div></details></div></div>
+        </div>
+        <div class="row" style="margin-top:6px"><div class="seg" id="c-charge" role="group" aria-label="Charge now for"></div></div>
+        <div class="note" id="c-charge-cap" hidden style="margin:4px 0 0">Up to 6 hours: Octopus's daily smart charging limit, while Force schedule on supplier is on.</div>
+        <div class="sub" id="c-charge-note" style="margin-bottom:6px"></div>
+        <div class="row">
           <div class="grow"><div>Plugged In</div><div class="note" style="margin:0">Simulate the car's cable</div></div>
           <label class="switch"><input type="checkbox" id="c-plug" aria-label="Plugged In"><span></span></label>
         </div>
@@ -518,12 +524,6 @@
           <div class="grow"><div>Max current</div><div class="note" style="margin:0">Your provider can lower it, not raise it</div></div>
         </div>
         <div class="row" style="margin-top:6px"><div class="seg" id="c-amps" role="group" aria-label="Max current"></div></div>
-        <div class="row">
-          <div class="grow"><div>Charge now</div><div class="note" style="margin:0">Plug in now for this long. <details class="more"><summary>More</summary><div>The schedule is adjusted the same way as for auto plug-in: the charge is added as a one-off slot (which you can change on the Schedule tab) that unplugs at the first ready time your supplier accepts after these hours, and the ready time is set to it. If it meets a scheduled slot they become one; with Octopus and Force schedule on supplier on, if it takes the day over 6 hours, the next scheduled slot starts that much later.</div></details></div></div>
-        </div>
-        <div class="row" style="margin-top:6px"><div class="seg" id="c-charge" role="group" aria-label="Charge now for"></div></div>
-        <div class="note" id="c-charge-cap" hidden style="margin:4px 0 0">Up to 6 hours: Octopus's daily smart charging limit, while Force schedule on supplier is on.</div>
-        <div class="sub" id="c-charge-note"></div>
         <div class="row">
           <div class="grow"><div>Power override</div><div class="note" style="margin:0" id="c-power-note">Report this power instead of the simulation</div></div>
           <span class="ctl"><input type="number" id="c-power" min="0" max="22" step="0.1" placeholder="kW" aria-label="Power override in kW">

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.15.1 — Charge now first in Controls
+
+- **Improvement:** Charge now is at the top of Settings › Controls
+
 ## 2.15.0 — Schedule colours and the last 3 days
 
 - **Feature:** the schedule's week view also shows the last 3 days, above
