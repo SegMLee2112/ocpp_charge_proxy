@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.12.6 — Quieter log overnight
+
+- **Improvement:** the meter readings sent every 15 minutes while nothing
+  is charging (0 W, no session) now only show with `log_level: debug`.
+  Readings during a session still show at `info`
+
 ## 2.12.5
 
 - Schedule tab, Next 7 days: your supplier's planned slots are shown as

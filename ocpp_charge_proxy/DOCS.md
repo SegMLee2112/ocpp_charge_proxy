@@ -34,7 +34,7 @@ updates its state so Home Assistant automations can respond.
 | `current_amps` | `32` | Maximum charging current in amps (6/10/13/16/20/25/32). Starting value: once you change Max current on the add-on's web page that's remembered, until you change this option again |
 | `initial_energy_wh` | `0` | Seed the energy register (Wh). Set to your old charger's meter reading when migrating. Only applied if higher than the stored register (the meter never goes backwards); cleared after first boot. |
 | `continue_session_on_restart` | `true` | Carry a charging session on across an add-on restart (e.g. an update) instead of ending it; see [While offline](#while-offline) |
-| `log_level` | `info` | Logging level (debug/info/warning/error). OCPP messages are logged at `info`, except Heartbeats and periodic meter readings (in a session or not), which only show at `debug`. Clock-aligned readings stay at `info` |
+| `log_level` | `info` | Logging level (debug/info/warning/error). OCPP messages are logged at `info`, except Heartbeats and periodic meter readings (in a session or not), which only show at `debug`. Clock-aligned readings stay at `info` during a session (outside one, they're `debug` too) |
 
 ### Controlling your charger
 

@@ -63,17 +63,17 @@ def test_periodic_meter_values_hidden_at_info(monkeypatch):
         assert f.filter(_record("receive", [3, uid, {}])) is False
 
 
-def test_clock_aligned_meter_values_still_shown(monkeypatch):
+def test_clock_aligned_meter_values_shown_only_in_a_session(monkeypatch):
     monkeypatch.setattr(logging.getLogger(), "level", logging.INFO)
     f = DemoteRoutineMessages()
-    for uid, frame in (
-        ("clk", _reading("clk", context="Sample.Clock")),  # every 15 min
-        ("txclk", _reading("txclk", context="Sample.Clock", transaction_id=1)),  # in a session
-    ):
-        rec = _record("send", frame)
-        assert f.filter(rec) is True and rec.levelname == "INFO"
-        reply = _record("receive", [3, uid, {}])
-        assert f.filter(reply) is True and reply.levelname == "INFO"
+    # In a session: shown
+    rec = _record("send", _reading("txclk", context="Sample.Clock", transaction_id=1))
+    assert f.filter(rec) is True and rec.levelname == "INFO"
+    reply = _record("receive", [3, "txclk", {}])
+    assert f.filter(reply) is True and reply.levelname == "INFO"
+    # Idle (every 15 min, 0 W): hidden, reply too
+    assert f.filter(_record("send", _reading("clk", context="Sample.Clock"))) is False
+    assert f.filter(_record("receive", [3, "clk", {}])) is False
 
 
 # --- 2.1.6: the web page's requests ---

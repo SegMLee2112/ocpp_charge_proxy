@@ -13,13 +13,17 @@ DEBUG_ONLY_ACTIONS = frozenset({"Heartbeat", "MeterValues"})
 
 
 def _routine_meter_values(payload) -> bool:
-    """A periodic reading (every MeterValueSampleInterval), in a session or not.
+    """A periodic reading (every MeterValueSampleInterval), in a session or
+    not, or any reading outside a session (no transactionId: e.g. the
+    clock-aligned 0 W readings every 15 minutes while nothing charges).
 
-    Clock-aligned readings (Sample.Clock, every ClockAlignedDataInterval) stay
-    at INFO.
+    Clock-aligned readings during a session (Sample.Clock, every
+    ClockAlignedDataInterval) stay at INFO.
     """
     if not isinstance(payload, dict):
         return False
+    if payload.get("transactionId") is None:
+        return True
     contexts = {
         sv.get("context", "Sample.Periodic")  # OCPP default context
         for mv in payload.get("meterValue") or []
