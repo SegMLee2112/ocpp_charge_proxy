@@ -132,7 +132,8 @@ sensors live through Home Assistant's API.
     and plug-ins that never got a session with the reason, kept across
     restarts.
   - **Schedule:** the plug-in schedule (below), with one-off times and a
-    view of the next 7 days where you can click a slot to skip it once;
+    view of the next 7 days where you click or drag to add a slot and click
+    one to change, delete or skip it;
     auto plug-in and auto re-plug.
   - **Settings:** controls for Plugged In, max current, a power override and
     a test SoC; the simulated car's start delay and ramp-up; and your power,

@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.14.0 — Edit the schedule on the week view
+
+- **Feature:** the schedule is edited on the Next 7 days view. Click or
+  drag across a day to add a slot; click a slot to change its plug-in and
+  unplug times, the days it repeats on or its date, turn it off, delete it
+  or skip it once. Changes are saved straight away
+- **Feature:** unplug times with no plug-in before them (e.g. unplug at
+  07:00 every day) show as small ticks you can click to change or delete
+- **Change:** the list of times above the week view is gone; one Schedule
+  card holds the week view, and Force schedule on supplier, the unplug wait
+  and the supplier's plan check are in a **Your supplier** card
+- **Improvement:** while Force schedule on supplier is on, the slot editor
+  only offers unplug times your supplier accepts, and won't save a change
+  that goes over Octopus's 6 hours in a day
+
 ## 2.13.0 — Tidier pages and Charge now
 
 - **Feature:** **Charge now** on the Overview: plug in straight away for the

@@ -93,18 +93,21 @@ even with the schedule off.
 
 ### Schedule, auto re-plug and start-up
 
-- **Schedule** (**Schedule** tab): add as many times as you like, each with a time, the days
-  it runs on, and whether it plugs in or unplugs; turn single times or the
-  whole schedule on and off. Times are in your Home Assistant time zone. A
-  time missed while the add-on was stopped isn't run later. Unplugging
-  during a session ends the session.
-- **One-off times and skips** (**Schedule** tab): **+ Add a one-off** adds
-  a plug-in or unplug for one date only. Once it has run it's hidden from
-  the list and kept for 14 days: sessions on the **Sessions** tab that ran
-  in a one-off slot are tagged **One-off** (or **Auto plug-in**). Click a
-  slot in the **Next 7 days** view to skip it once: its plug-in and unplug
-  both don't run (the slot shows hatched; click it again to undo). A
-  skipped unplug isn't used for the ready time.
+- **Schedule** (**Schedule** tab): the next 7 days are shown as slots,
+  each running from a plug-in to its unplug. Click or drag across a day to
+  add a slot; click a slot to change its times, the days it repeats on
+  (**Every week**) or its date (**Once**), turn it off, delete it, or skip
+  it once (its plug-in and unplug both don't run; it shows hatched, and
+  **Undo skip** puts it back). Changes are saved straight away. An unplug
+  time with no plug-in before it (e.g. "unplug at 07:00 every day", to
+  unplug anything left plugged in) shows as a small tick, and can be
+  changed or deleted the same way. Times are in your Home Assistant time
+  zone. A time missed while the add-on was stopped isn't run later.
+  Unplugging during a session ends the session.
+- **One-off slots:** a **Once** slot runs on its date only. Once it has
+  run it's kept for 14 days: sessions on the **Sessions** tab that ran in
+  a one-off slot are tagged **One-off** (or **Auto plug-in** / **Charge
+  now**). A skipped unplug isn't used for the ready time.
 - **Starting inside a scheduled stretch:** if the add-on starts (or
   restarts) while the schedule has the car plugged in, e.g. at 02:00 with
   plug in 23:30 and unplug 07:00, and Plugged In is off, it plugs in
@@ -116,13 +119,12 @@ even with the schedule off.
   02:00 and unplug 04:00 sets 04:00; plug in 06:00 and unplug 08:00 sets
   08:00. Only at scheduled plug-ins. Ready times are in 30-minute steps:
   Octopus Energy accepts any time of day, EDF Energy 04:00 to 11:00. While
-  it's on, unplug times in the schedule are limited to those (the page
-  marks any that aren't, and won't save them). E.ON Next's integration
+  it's on, unplug times in the schedule are limited to those (the slot
+  editor only offers those). E.ON Next's integration
   has no ready time setting. While it's on, the Next 7 days card outlines
   the schedule's slots in grey, and with Octopus Energy the schedule can't plug in for more than
-  6 hours in any 24 (Octopus's daily smart charging cap): the times and
-  stretches that go over are marked in red and the schedule won't save
-  until they're shortened. With the ready time off, there's no limit.
+  6 hours in any 24 (Octopus's daily smart charging cap): slots that go
+  over are marked in red, and a change that goes over isn't saved. With the ready time off, there's no limit.
   At a scheduled unplug during a charging session, it waits for your
   supplier to stop the session itself (so it ends cleanly), then unplugs;
   if the supplier hasn't stopped it in time, it unplugs anyway. The wait

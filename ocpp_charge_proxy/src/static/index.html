@@ -197,19 +197,28 @@
   .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 24px; }
   .spark { width: 100%; height: 60px; display: block; }
   .week { display: grid; grid-template-columns: 52px 1fr; gap: 6px 8px; align-items: center; }
-  .week .seg { cursor: pointer; }
-  .week .seg.skip { opacity: 1; background: repeating-linear-gradient(135deg, var(--divider) 0 6px, transparent 6px 12px) !important;
+  .week .track .seg { cursor: pointer; }
+  .week .track .seg.skip { opacity: 1; background: repeating-linear-gradient(135deg, var(--divider) 0 6px, transparent 6px 12px) !important;
     outline: 1px dashed var(--text2); outline-offset: -1px; }
-  .week .seg.picked { box-shadow: 0 0 0 2px var(--text); }
+  .week .track .seg.picked { box-shadow: 0 0 0 2px var(--text); }
   .slot-pop { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px;
     border-radius: 8px; background: var(--hover); }
   .once { font-size: 12px; color: var(--text2); }
   .week .dl { font-size: 12px; color: var(--text2); }
   .week .dl.today { color: var(--primary); font-weight: 500; }
   .week .track { position: relative; height: 18px; background: var(--hover); border-radius: 4px; overflow: hidden; }
-  .week .seg { position: absolute; top: 0; bottom: 0; background: var(--primary); opacity: .8; }
-  .week .seg.off { opacity: .35; }
-  .week .seg.linked { box-shadow: inset 0 0 0 2px var(--text2); }
+  .week .track .seg { position: absolute; top: 0; bottom: 0; background: var(--primary); opacity: .8; }
+  .week .track .seg.off { opacity: .35; }
+  .week .track { touch-action: pan-y; cursor: copy; }
+  .week .track .seg.ghost { opacity: .45; pointer-events: none; }
+  .week .track .seg.once { background-image: linear-gradient(90deg, transparent 0 calc(100% - 3px), rgba(255,255,255,.55) calc(100% - 3px)); }
+  .week .tick { position: absolute; top: -3px; bottom: -3px; width: 12px; margin-left: -6px; cursor: pointer;
+    background: linear-gradient(var(--text2), var(--text2)) center / 3px 100% no-repeat; }
+  .week .tick.off { opacity: .35; }
+  .slot-pop .ed { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+  .slot-pop .ed .row { margin: 0; gap: 10px; }
+  .slot-pop select { font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--divider); background: var(--card); color: var(--text); }
+  .week .track .seg.linked { box-shadow: inset 0 0 0 2px var(--text2); }
   .week .sup { position: absolute; top: 0; bottom: 0; box-sizing: border-box; border: 2px solid; border-radius: 4px;
     pointer-events: none; }
   .sched input.bad { border-color: var(--err); color: var(--err); }
@@ -419,21 +428,21 @@
   <section id="tab-automation" class="stack" hidden>
     <div class="card">
       <h2>Schedule<span class="spacer"></span>
+        <span class="muted" style="font-size:12px;font-weight:400;margin-right:10px" id="w-note"></span>
         <span class="muted" style="font-size:13px;font-weight:400">On</span>
         <label class="switch"><input type="checkbox" id="a-sched-on" aria-label="Schedule on"><span></span></label>
       </h2>
-      <div class="sub" id="a-next" style="margin-bottom:12px"></div>
-      <div id="a-entries"></div>
-      <div class="note" id="a-rules" hidden></div>
-      <div class="row" style="margin-top:12px">
-        <button class="btn small" id="a-add">+ Add a time</button>
-        <button class="btn small" id="a-add-once" title="A time that runs on one date only">+ Add a one-off</button>
-        <span class="grow"></span>
-        <span class="muted" id="a-dirty" style="font-size:12px"></span>
-        <button class="btn small" id="a-discard" disabled>Discard</button>
-        <button class="btn small primary" id="a-save" disabled>Save</button>
-      </div>
-      <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
+      <div class="sub" id="a-next" style="margin-bottom:6px"></div>
+      <div class="note" style="margin:0 0 12px">Click a slot to change, delete or skip it. Click or drag across a day to add one.</div>
+      <div class="week" id="w-grid"></div>
+      <div class="empty" id="w-empty" hidden>No times yet: click or drag across a day above to add a slot, e.g. 23:30 to 07:00.</div>
+      <div class="sub" id="w-warn" hidden style="margin-top:10px"></div>
+      <div class="legend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span id="w-sup-legend" hidden><b class="band" id="w-sup-swatch" style="background:transparent;border:2px solid;box-sizing:border-box"></b><span id="w-sup-label"></span></span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px)"></b>Skipped</span><span><b class="band" style="background:linear-gradient(var(--text2),var(--text2)) center/3px 100% no-repeat"></b>Unplug only</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span></div>
+      <div class="note" id="a-tz"></div>
+    </div>
+    <div class="card">
+      <h2>Your supplier</h2>
+      <div class="row">
         <div class="grow">
           <div>Force schedule on supplier</div>
           <div class="note" style="margin:0">Sets your supplier's ready time to the schedule's next unplug. <details class="more"><summary>More</summary><div>Only at scheduled plug-ins. Ready times are in 30-minute steps (Octopus: any time of day; EDF: 04:00–11:00), so while this is on, unplug times are limited to those.</div></details></div>
@@ -451,13 +460,6 @@
           <div class="note" style="margin:0">Checked while the schedule has the car plugged in. <details class="more"><summary>More</summary><div>Your supplier's planned slots up to the ready time are checked against the schedule. A slot past the unplug, or a ready time changed in the supplier's app, is flagged.</div></details></div>
           <div id="a-plan" style="margin-top:6px"></div></div>
       </div>
-      <div class="note" id="a-tz"></div>
-    </div>
-    <div class="card">
-      <h2>Next 7 days<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400" id="w-note"></span></h2>
-      <div class="week" id="w-grid"></div>
-      <div class="sub" id="w-warn" hidden style="margin-top:10px"></div>
-      <div class="legend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span id="w-sup-legend" hidden><b class="band" id="w-sup-swatch" style="background:transparent;border:2px solid;box-sizing:border-box"></b><span id="w-sup-label"></span></span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px)"></b>Skipped</span><span class="hint">Click a slot to skip it once</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span></div>
     </div>
     <div class="grid">
       <div class="card">
@@ -1819,159 +1821,18 @@ function drawReplugStatus(r) {
   }[r.status] || '';
   $('a-rp-status').innerHTML = html + (r.last_replug ? `<div class="sub">Last re-plug ${dateTime(r.last_replug)}</div>` : '');
 }
-function setDirty(v) {
-  auto.dirty = v; $('a-save').disabled = !v; $('a-discard').disabled = !v;
-  $('a-dirty').textContent = v ? 'Unsaved changes' : '';
-  drawWeek();
-}
-// The week as the schedule would play it: plugged in from a "plug" time until
-// the next "unplug" time, carrying over midnight and the end of the week.
-function drawWeek() {
-  const on = auto.data ? auto.data.schedule.enabled : false;
-  // Grey outline when the schedule sets the supplier's ready time; the
-  // supplier's planned slots as outlines in its colour
-  const sc = smart.data && smart.data.found ? smart.data : null;
-  const linked = sc && auto.data && auto.data.schedule.ready_time;
-  const segStyle = '';
-  $('w-swatch').style.boxShadow = linked ? 'inset 0 0 0 2px var(--text2)' : '';
-  $('w-label').textContent = linked ? `Plugged in by the schedule, ready time sent to ${sc.provider}` : 'Plugged in by the schedule';
-  const supColor = sc ? providerColor(sc.provider) : null;
-  $('w-sup-legend').hidden = !sc;
-  if (sc) { $('w-sup-swatch').style.borderColor = supColor; $('w-sup-label').textContent = `Planned by ${sc.provider}`; }
-  const {events, segs, skippedSegs, worst, badSegs, over, today: day0} = weekPlan();
-  week.segs = segs; week.skipped = skippedSegs; week.day0 = day0;
-  const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
-  const dayLabel = (d) => { const t = new Date(day0); t.setDate(day0.getDate() + d); return t.toLocaleDateString([], {weekday: 'short', day: 'numeric'}); };
-  let html = '';
-  for (let d = 0; d < 7; d++) {
-    const lo = d * 1440, hi = lo + 1440;
-    const bar = (a, b, attrs, cls, style, note) => {
-      const x0 = (Math.max(a, lo) - lo) / 14.4, x1 = (Math.min(b, hi) - lo) / 14.4;
-      return `<div class="seg ${cls}" ${attrs} style="${style}left:${x0}%;width:${x1 - x0}%" title="${dayLabel(d)} ${hhmm(Math.max(a, lo) - lo)}–${hhmm(Math.min(b, hi) - lo)}${note}"></div>`;
-    };
-    const picked = (a) => week.picked && week.picked.start === a ? 'picked' : '';
-    const bars = segs.map((sg, k) => [sg, k]).filter(([[a, b]]) => b > lo && a < hi).map(([[a, b], k]) =>
-      bar(a, b, `data-start="${a}" data-day="${d}"`, `${on ? '' : 'off'} ${linked ? 'linked' : ''} ${picked(a)}`,
-        badSegs.has(k) ? 'background:var(--err);' : segStyle, badSegs.has(k) ? ' (over Octopus\'s 6 hours a day)' : '')).join('')
-      + skippedSegs.filter(([a, b]) => b > lo && a < hi).map(([a, b]) =>
-        bar(a, b, `data-start="${a}" data-day="${d}"`, `skip ${picked(a)}`, '', ' (skipped)')).join('');
-    const sup = (sc ? sc.periods || [] : []).map((p) => [(new Date(p.start) - day0) / 60000, (new Date(p.end) - day0) / 60000])
-      .filter(([a, b]) => b > lo && a < hi).map(([a, b]) => {
-        const x0 = (Math.max(a, lo) - lo) / 14.4, x1 = (Math.min(b, hi) - lo) / 14.4;
-        return `<div class="sup" style="border-color:${supColor};left:${x0}%;width:${x1 - x0}%" title="Planned by ${esc(sc.provider)}: ${hhmm(Math.max(a, lo) - lo)}–${hhmm(Math.min(b, hi) - lo)}"></div>`;
-      }).join('');
-    html += `<div class="dl ${d === 0 ? 'today' : ''}">${d === 0 ? 'Today' : dayLabel(d)}</div><div class="track">${bars}${sup}${d === 0 ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
-    if (week.picked && week.picked.day === d) html += '<div class="slot-pop" id="w-pop"></div>';
-  }
-  html += '<div></div><div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';
-  $('w-grid').innerHTML = html;
-  drawSlotPop();
-  $('w-note').textContent = !events.length ? 'No times set' : on ? (auto.dirty ? 'Preview of unsaved changes' : '') : 'Schedule is off: preview only';
-  $('w-warn').hidden = !over;
-  if (over) {
-    $('w-warn').innerHTML = `<span class="chip err">Over 6 hours</span> Plugged in for ${dur(worst.total * 60)} in the 24 hours from ${dayLabel(Math.floor(worst.start / 1440))} ${hhmm(((worst.start % 1440) + 1440) % 1440)}. `
-      + 'Octopus schedules at most 6 hours of smart charging in a day: shorten the times marked in red to save the schedule.';
-  }
-}
-// Click a slot in the week view to skip it once (its plug-in and unplug), or undo
-const week = {segs: [], skipped: [], day0: null, picked: null};
-function slotTimes(sg) {
-  return [sg[4], sg[5]].filter((ev) => ev && ev.id).map((ev) => ({entry_id: ev.id, date: ev.date}));
-}
-function pickedSlot() {
-  const p = week.picked; if (!p) return null;
-  const on = week.segs.find((sg) => sg[0] === p.start);
-  if (on) return {sg: on, skipped: false};
-  const off = week.skipped.find((sg) => sg[0] === p.start);
-  return off ? {sg: off, skipped: true} : null;
-}
-function drawSlotPop() {
-  const pop = $('w-pop');
-  if (!pop) return;
-  const found = pickedSlot();
-  if (!found) { pop.remove(); week.picked = null; return; }
-  const {sg, skipped} = found;
-  // "03/10 16:00"
-  const at = (min) => {
-    const t = new Date(week.day0); t.setMinutes(min);
-    const two = (n) => String(n).padStart(2, '0');
-    return `${two(t.getDate())}/${two(t.getMonth() + 1)} ${two(t.getHours())}:${two(t.getMinutes())}`;
-  };
-  const saved = slotTimes(sg).length > 0;
-  pop.innerHTML = `<span class="grow"><b>${skipped ? 'Skipped slot' : 'Slot'}:</b> ${at(sg[0])} → ${sg[5] ? at(sg[1]) : 'no unplug in the next week'}</span>`
-    + (!saved || auto.dirty ? '<span class="muted">Save the schedule first</span>'
-      : `<button class="btn small ${skipped ? '' : 'primary'}" id="w-skip">${skipped ? 'Undo skip' : 'Skip this slot'}</button>`)
-    + '<button class="btn small" id="w-close">Close</button>';
-}
-$('w-grid').addEventListener('click', async (ev) => {
-  if (ev.target.id === 'w-close') { week.picked = null; drawWeek(); return; }
-  if (ev.target.id === 'w-skip') {
-    const found = pickedSlot(); if (!found) return;
-    ev.target.disabled = true;
-    if (await post('automation/skip', {times: slotTimes(found.sg), skip: !found.skipped})) {
-      toast(found.skipped ? 'Slot back on' : 'Slot skipped');
-      await refreshAutomation(false);  // redraws: the panel stays open, showing the new state
-    } else ev.target.disabled = false;
-    return;
-  }
-  const el = ev.target.closest('.seg[data-start]'); if (!el) return;
-  const start = Number(el.dataset.start), day = Number(el.dataset.day);
-  week.picked = week.picked && week.picked.start === start && week.picked.day === day ? null : {start, day};
-  drawWeek();
-});
-// The schedule's plugged-in stretches over a week (minutes from Monday 00:00),
-// and with Octopus, which of them go over its 6 hours of smart charging a day
+function setDirty(v) { auto.dirty = false; }  // edits are saved straight away
+function drawEntries() { drawWeek(); }
 const OCTOPUS_CAP_MIN = 360;
-function weekPlan() {
-  // Minutes from today 00:00 (local), a week back to 8 days on
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const skips = new Set(((auto.data && auto.data.schedule.skips) || []).map((k) => k.entry_id + '|' + k.date));
-  const events = [];
-  for (let d = -7; d <= 8; d++) {
-    const day = new Date(today); day.setDate(today.getDate() + d);
-    const iso = day.toLocaleDateString('en-CA'), wd = (day.getDay() + 6) % 7;
-    auto.entries.forEach((e, i) => {
-      if (!e.enabled || !/^\d{2}:\d{2}$/.test(e.time)) return;
-      if (e.date ? e.date !== iso : !e.days.includes(wd)) return;
-      const [h, m] = e.time.split(':').map(Number);
-      events.push({t: d * 1440 + h * 60 + m, plug: e.action === 'plug', i, id: e.id, date: iso,
-        skipped: !!(e.id && skips.has(e.id + '|' + iso))});
-    });
-  }
-  events.sort((a, b) => a.t - b.t || (a.plug === b.plug ? 0 : a.plug ? -1 : 1));
-  // [startMin, endMin, plug entry, unplug entry, plug event, unplug event]
-  const stretches = (evs) => {
-    const out = [];
-    let state = null, start = null;
-    for (const ev of evs) {
-      if (ev.plug && state !== true) { state = true; start = ev; }
-      else if (!ev.plug) { if (state === true) out.push([start.t, ev.t, start.i, ev.i, start, ev]); state = false; }
-    }
-    if (state === true) out.push([start.t, 9 * 1440, start.i, null, start, null]);
-    return out;
-  };
-  const segs = stretches(events.filter((ev) => !ev.skipped));  // what will happen
-  // Skipped slots, drawn hatched so they can be put back
-  const skippedSegs = stretches(events).filter((sg) => sg[4].skipped);
-  // Most plugged-in minutes in any 24 hours (from a stretch's start, yesterday to a week on)
-  const nowMin = (Date.now() - today.getTime()) / 60000;
-  let worst = null;
-  const badSegs = new Set();
-  const capped = smart.data && smart.data.found && smart.data.provider === 'Octopus Energy'
-    && auto.data && auto.data.schedule.ready_time;  // only while the schedule sets Octopus's ready time
-  segs.forEach(([a]) => {
-    if (a < nowMin - 1440 || a > 7 * 1440) return;
-    let total = 0;
-    const hit = [];
-    segs.forEach(([x, y], k) => { const o = Math.max(0, Math.min(y, a + 1440) - Math.max(x, a)); if (o) { total += o; hit.push(k); } });
-    if (!worst || total > worst.total) worst = {start: a, total};
-    if (capped && total > OCTOPUS_CAP_MIN) hit.forEach((k) => badSegs.add(k));
-  });
-  const badEntries = new Set();
-  badSegs.forEach((k) => { if (segs[k][2] !== null) badEntries.add(segs[k][2]); if (segs[k][3] !== null) badEntries.add(segs[k][3]); });
-  return {events, segs, skippedSegs, worst, badSegs, badEntries, over: badSegs.size > 0, today};
-}
+const DAY_MIN = 1440, WEEK_MIN = 7 * 1440;
 const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+const tmin = (t) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
+const wdOf = (iso) => (new Date(iso + 'T12:00:00').getDay() + 6) % 7;  // 0 = Monday
+const addDays = (iso, n) => { const t = new Date(iso + 'T12:00:00'); t.setDate(t.getDate() + n); return t.toLocaleDateString('en-CA'); };
+function today0() { const t = new Date(); t.setHours(0, 0, 0, 0); return t; }
+const isoAt = (n) => addDays(today0().toLocaleDateString('en-CA'), n);  // n days from today
+const dayIndex = (iso) => Math.round((new Date(iso + 'T00:00:00') - today0()) / 86400000);
+
 // While the schedule sets your supplier's ready time, unplug times are limited
 // to the ready times it accepts (30-minute steps; EDF 04:00-11:00)
 function readyRules() {
@@ -1981,84 +1842,365 @@ function readyRules() {
   return {times: d.ready_times, provider: d.provider, min: all ? null : first, max: all ? null : last,
     text: all ? 'on the hour or half hour' : `from ${first} to ${last}, on the hour or half hour`};
 }
-const badUnplug = (e, rules) => rules && e.enabled && e.action === 'unplug' && /^\d{2}:\d{2}$/.test(e.time) && !rules.times.includes(e.time);
-function drawEntries() {
-  const rules = readyRules(), overCap = weekPlan().badEntries;
-  const ranOnce = (e) => e.date && new Date(`${e.date}T${e.time}`) < new Date();
-  const past = auto.entries.filter(ranOnce).length;
-  const rows = auto.entries.map((e, i) => {
-    if (ranOnce(e)) return '';  // kept 14 days for the Sessions tab, not shown here
-    const lim = rules && e.action === 'unplug' ? ` step="1800"${rules.min ? ` min="${rules.min}" max="${rules.max}"` : ''}` : '';
-    return `
-    <div class="row sched" data-i="${i}" style="padding:10px 0;border-top:1px solid var(--divider);margin-top:0">
-      <input type="time" value="${esc(e.time)}" data-f="time" aria-label="Time" required${lim} class="${badUnplug(e, rules) || overCap.has(i) ? 'bad' : ''}"
-        ${badUnplug(e, rules) ? `title="${esc(rules.provider)} only accepts ready times ${rules.text}"` : overCap.has(i) ? 'title="Plugs in for more than Octopus\'s 6 hours of smart charging a day"' : ''}>
-      <select data-f="action" aria-label="Action">
-        <option value="plug" ${e.action === 'plug' ? 'selected' : ''}>Plug in</option>
-        <option value="unplug" ${e.action === 'unplug' ? 'selected' : ''}>Unplug</option>
-      </select>
-      ${e.date
-        ? `<span class="once">${e.source === 'auto_plug' ? 'Auto plug-in, once on' : 'Once on'}</span><input type="date" data-f="date" value="${esc(e.date)}" aria-label="Date" required>`
-        : `<div class="seg days" role="group" aria-label="Days">${DAYS.map((d, n) =>
-        `<button data-day="${n}" aria-pressed="${e.days.includes(n)}" title="${d}">${d.slice(0, 2)}</button>`).join('')}</div>`}
-      <span class="grow"></span>
-      <label class="switch" title="Enabled"><input type="checkbox" data-f="enabled" ${e.enabled ? 'checked' : ''} aria-label="Enabled"><span></span></label>
-      <button class="btn small" data-del aria-label="Delete">Delete</button>
-    </div>`;
-  }).join('');
-  drawWeek();
-  const bad = rules ? auto.entries.filter((e) => badUnplug(e, rules)) : [];
-  $('a-rules').hidden = !rules;
-  if (rules) {
-    $('a-rules').innerHTML = (bad.length ? '<span class="chip warn">Change unplug times</span> ' : '')
-      + `The schedule sets ${esc(rules.provider)}'s ready time, so unplug times must be ${rules.text}.`;
+
+// The schedule as the add-on plays it (plugged in from a plug-in time to the
+// next unplug), minutes from today 00:00, and with Octopus (while the schedule
+// sets its ready time) where it goes over 6 hours of smart charging in 24
+function weekPlan(entries = auto.entries) {
+  const today = today0();
+  const skips = new Set(((auto.data && auto.data.schedule.skips) || []).map((k) => k.entry_id + '|' + k.date));
+  const events = [];
+  for (let d = -7; d <= 8; d++) {
+    const iso = isoAt(d), wd = wdOf(iso);
+    entries.forEach((e) => {
+      if (!e.enabled || !/^\d{2}:\d{2}$/.test(e.time)) return;
+      if (e.date ? e.date !== iso : !e.days.includes(wd)) return;
+      if (e.id && skips.has(e.id + '|' + iso)) return;
+      events.push({t: d * DAY_MIN + tmin(e.time), plug: e.action === 'plug'});
+    });
   }
-  $('a-entries').innerHTML = (rows || '<div class="empty">No times yet. Add one, e.g. plug in at 23:30 and unplug at 07:00.</div>')
-    + (past ? `<div class="note">${past} one-off time${past === 1 ? '' : 's'} that ran in the last 14 days ${past === 1 ? 'is' : 'are'} kept for the Sessions tab.</div>` : '');
+  events.sort((a, b) => a.t - b.t || (a.plug === b.plug ? 0 : a.plug ? -1 : 1));
+  const segs = [];
+  let state = null, start = null;
+  for (const ev of events) {
+    if (ev.plug && state !== true) { state = true; start = ev.t; }
+    else if (!ev.plug) { if (state === true) segs.push([start, ev.t]); state = false; }
+  }
+  if (state === true) segs.push([start, 9 * DAY_MIN]);
+  const nowMin = (Date.now() - today.getTime()) / 60000;
+  let worst = null;
+  const bad = [];
+  const capped = smart.data && smart.data.found && smart.data.provider === 'Octopus Energy'
+    && auto.data && auto.data.schedule.ready_time;
+  segs.forEach(([a]) => {
+    if (a < nowMin - DAY_MIN || a > 7 * DAY_MIN) return;
+    let total = 0;
+    const hit = [];
+    segs.forEach(([x, y]) => { const o = Math.max(0, Math.min(y, a + DAY_MIN) - Math.max(x, a)); if (o) { total += o; hit.push([x, y]); } });
+    if (!worst || total > worst.total) worst = {start: a, total};
+    if (capped && total > OCTOPUS_CAP_MIN) bad.push(...hit);
+  });
+  return {segs, worst, bad, over: bad.length > 0};
 }
-$('a-entries').addEventListener('click', (ev) => {
-  const row = ev.target.closest('.sched'); if (!row) return;
-  const e = auto.entries[Number(row.dataset.i)];
-  if (ev.target.dataset.day !== undefined) {
-    const d = Number(ev.target.dataset.day);
-    e.days = e.days.includes(d) ? e.days.filter((x) => x !== d) : [...e.days, d].sort();
-    if (!e.days.length) { e.days = [d]; toast('Pick at least one day'); }
-    drawEntries(); setDirty(true);
-  } else if (ev.target.hasAttribute('data-del')) {
-    auto.entries.splice(Number(row.dataset.i), 1); drawEntries(); setDirty(true);
+
+// Slots: a plug-in time and the unplug that ends it, with the days (or the
+// date) they run. Unplug times no slot ends at are "unplug only" ticks.
+function deriveSlots(entries) {
+  const slots = [], usage = {}, usedOnce = new Set();
+  const weeklyU = entries.filter((e) => e.action === 'unplug' && !e.date && /^\d{2}:\d{2}$/.test(e.time));
+  const groups = new Map();
+  entries.forEach((p) => {
+    if (p.action !== 'plug' || p.date) return;
+    p.days.forEach((w) => {
+      const tp = w * DAY_MIN + tmin(p.time);
+      let best = null;
+      weeklyU.forEach((u) => u.days.forEach((ud) => {
+        const delta = ((ud * DAY_MIN + tmin(u.time) - tp) % WEEK_MIN + WEEK_MIN) % WEEK_MIN;
+        if (delta && (!best || delta < best.delta)) best = {u, ud, delta};
+      }));
+      const offset = best ? Math.floor((tp + best.delta) / DAY_MIN) - w : 0;
+      const key = `${p.id}|${best ? best.u.id : ''}|${offset}`;
+      if (!groups.has(key)) groups.set(key, {kind: 'weekly', plug: p, unplug: best ? best.u : null, offset, days: []});
+      groups.get(key).days.push(w);
+      if (best) { const use = usage[best.u.id] = usage[best.u.id] || {}; use[best.ud] = (use[best.ud] || 0) + 1; }
+    });
+  });
+  groups.forEach((g) => slots.push({...g, days: g.days.sort(), start: g.plug.time, end: g.unplug ? g.unplug.time : null,
+    enabled: g.plug.enabled && (!g.unplug || g.unplug.enabled)}));
+  entries.forEach((p) => {
+    if (p.action !== 'plug' || !p.date) return;
+    const t0 = new Date(`${p.date}T${p.time}`);
+    let best = null;
+    entries.forEach((u) => {
+      if (u.action !== 'unplug' || !/^\d{2}:\d{2}$/.test(u.time)) return;
+      const cands = u.date ? [new Date(`${u.date}T${u.time}`)]
+        : [0, 1, 2, 3, 4, 5, 6, 7].map((n) => addDays(p.date, n)).filter((iso) => u.days.includes(wdOf(iso)))
+          .map((iso) => new Date(`${iso}T${u.time}`));
+      cands.forEach((t) => { if (t > t0 && (!best || t < best.t)) best = {u, t}; });
+    });
+    if (best && best.u.date) usedOnce.add(best.u.id);
+    slots.push({kind: 'once', plug: p, unplug: best ? best.u : null, date: p.date, start: p.time,
+      end: best ? best.u.time : null, unplugDate: best ? best.t.toLocaleDateString('en-CA') : null,
+      shared: !!(best && !best.u.date), enabled: p.enabled && (!best || best.u.enabled), source: p.source});
+  });
+  const orphans = [];
+  entries.forEach((u) => {
+    if (u.action !== 'unplug') return;
+    if (u.date) { if (!usedOnce.has(u.id)) orphans.push({u, date: u.date}); return; }
+    const left = u.days.filter((d) => !(usage[u.id] && usage[u.id][d]));
+    if (left.length) orphans.push({u, days: left});
+  });
+  return {slots, orphans, usage};
+}
+
+// Each slot's runs from yesterday to a week on: [{a, b, i, date, udate, skipped}] (minutes from today 00:00)
+function occurrences(model) {
+  const skips = new Set(((auto.data && auto.data.schedule.skips) || []).map((k) => k.entry_id + '|' + k.date));
+  const out = [];
+  model.slots.forEach((s, i) => {
+    const add = (n, iso) => {
+      const udays = s.kind === 'weekly' ? s.offset : (s.unplugDate ? dayIndex(s.unplugDate) - dayIndex(s.date) : 0);
+      const a = n * DAY_MIN + tmin(s.start);
+      const b = s.end ? (n + udays) * DAY_MIN + tmin(s.end) : 9 * DAY_MIN;
+      out.push({a, b, i, date: iso, udate: s.end ? addDays(iso, udays) : null, skipped: skips.has(s.plug.id + '|' + iso)});
+    };
+    if (s.kind === 'weekly') { for (let n = -7; n <= 6; n++) { const iso = isoAt(n); if (s.days.includes(wdOf(iso))) add(n, iso); } }
+    else { const n = dayIndex(s.date); if (n >= -8 && n <= 7) add(n, s.date); }
+  });
+  return out;
+}
+
+const week = {model: null, occ: [], edit: null, day0: null};
+
+function drawWeek() {
+  const on = auto.data ? auto.data.schedule.enabled : false;
+  // Grey outline when the schedule sets the supplier's ready time; the
+  // supplier's planned slots as outlines in its colour
+  const sc = smart.data && smart.data.found ? smart.data : null;
+  const linked = sc && auto.data && auto.data.schedule.ready_time;
+  $('w-swatch').style.boxShadow = linked ? 'inset 0 0 0 2px var(--text2)' : '';
+  $('w-label').textContent = linked ? `Plugged in by the schedule, ready time sent to ${sc.provider}` : 'Plugged in by the schedule';
+  const supColor = sc ? providerColor(sc.provider) : null;
+  $('w-sup-legend').hidden = !sc;
+  if (sc) { $('w-sup-swatch').style.borderColor = supColor; $('w-sup-label').textContent = `Planned by ${sc.provider}`; }
+  const plan = weekPlan();
+  const model = deriveSlots(auto.entries || []);
+  const occ = occurrences(model);
+  week.model = model; week.occ = occ; week.day0 = today0();
+  const day0 = week.day0;
+  const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+  const dayLabel = (d) => { const t = new Date(day0); t.setDate(day0.getDate() + d); return t.toLocaleDateString([], {weekday: 'short', day: 'numeric'}); };
+  const ed = week.edit;
+  let html = '';
+  for (let d = 0; d < 7; d++) {
+    const lo = d * DAY_MIN, hi = lo + DAY_MIN;
+    const span = (a, b) => ({x0: (Math.max(a, lo) - lo) / 14.4, x1: (Math.min(b, hi) - lo) / 14.4});
+    const bars = occ.map((o, k) => [o, k]).filter(([o]) => o.b > lo && o.a < hi).map(([o, k]) => {
+      const s = model.slots[o.i];
+      const {x0, x1} = span(o.a, o.b);
+      const red = !o.skipped && plan.bad.some(([x, y]) => x < o.b && y > o.a);
+      const picked = ed && ed.mode === 'slot' && ed.k === k;
+      const who = s.source === 'charge_now' ? ' (Charge now)' : s.source === 'auto_plug' ? ' (auto plug-in)' : s.kind === 'once' ? ' (once)' : '';
+      const title = `${dayLabel(d)} ${hhmm(Math.max(o.a, lo) - lo)}–${hhmm(Math.min(o.b, hi) - lo)}${who}`
+        + (o.skipped ? ' (skipped)' : !s.enabled ? ' (off)' : red ? ' (over Octopus\'s 6 hours a day)' : '');
+      return `<div class="seg ${o.skipped ? 'skip' : ''} ${!on || !s.enabled ? 'off' : ''} ${linked ? 'linked' : ''} ${picked ? 'picked' : ''} ${s.kind === 'once' ? 'once' : ''}"
+        data-occ="${k}" data-row="${d}" style="${red ? 'background:var(--err);' : ''}left:${x0}%;width:${x1 - x0}%" title="${title}"></div>`;
+    }).join('');
+    const ticks = model.orphans.map((o, j) => [o, j]).filter(([o]) => o.date ? dayIndex(o.date) === d : o.days.includes(wdOf(isoAt(d))))
+      .map(([o, j]) => `<div class="tick ${!on || !o.u.enabled ? 'off' : ''}" data-orphan="${j}" data-row="${d}" style="left:${tmin(o.u.time) / 14.4}%"
+        title="${dayLabel(d)} ${o.u.time}: unplug${o.date ? ' (once)' : ''}"></div>`).join('');
+    const sup = (sc ? sc.periods || [] : []).map((p) => [(new Date(p.start) - day0) / 60000, (new Date(p.end) - day0) / 60000])
+      .filter(([a, b]) => b > lo && a < hi).map(([a, b]) => {
+        const {x0, x1} = span(a, b);
+        return `<div class="sup" style="border-color:${supColor};left:${x0}%;width:${x1 - x0}%" title="Planned by ${esc(sc.provider)}: ${hhmm(Math.max(a, lo) - lo)}–${hhmm(Math.min(b, hi) - lo)}"></div>`;
+      }).join('');
+    html += `<div class="dl ${d === 0 ? 'today' : ''}">${d === 0 ? 'Today' : dayLabel(d)}</div><div class="track" data-row="${d}">${bars}${ticks}${sup}${d === 0 ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
+    if (ed && ed.row === d) html += '<div class="slot-pop" id="w-pop"></div>';
   }
+  html += '<div></div><div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';
+  $('w-grid').innerHTML = html;
+  drawEditor();
+  const empty = !model.slots.length && !model.orphans.length;
+  $('w-note').textContent = empty ? 'No times yet' : on ? '' : 'Off: shown, but won\'t run';
+  $('w-empty').hidden = !empty;
+  $('w-warn').hidden = !plan.over;
+  if (plan.over) {
+    const w = plan.worst;
+    $('w-warn').innerHTML = `<span class="chip err">Over 6 hours</span> Plugged in for ${dur(w.total * 60)} in the 24 hours from ${dayLabel(Math.floor(w.start / DAY_MIN))} ${hhmm(((w.start % DAY_MIN) + DAY_MIN) % DAY_MIN)}. `
+      + 'Octopus schedules at most 6 hours of smart charging in a day: shorten the slots marked in red.';
+  }
+}
+
+// ---------- the editor: under the clicked day ----------
+function timeOptions(val, only, none) {
+  const list = only ? [...only] : Array.from({length: 96}, (_, k) => hhmm(k * 15));
+  if (val && !list.includes(val)) list.unshift(val);
+  return (none ? `<option value="" ${!val ? 'selected' : ''}>${none}</option>` : '')
+    + list.map((t) => `<option ${t === val ? 'selected' : ''}>${t}</option>`).join('');
+}
+function openEditor(mode, row, extra) {
+  const iso = isoAt(row);
+  if (mode === 'new') {
+    week.edit = {mode, row, form: {start: extra.start, end: extra.end, repeat: 'weekly', days: [wdOf(iso)], date: iso, enabled: true}};
+  } else if (mode === 'slot') {
+    const o = week.occ[extra.k], s = week.model.slots[o.i];
+    week.edit = {mode, row, k: extra.k, form: {start: s.start, end: s.end || '', repeat: s.kind === 'once' ? 'once' : 'weekly',
+      days: s.kind === 'weekly' ? [...s.days] : [wdOf(s.date)], date: s.kind === 'once' ? s.date : iso, enabled: s.enabled}};
+  } else {
+    const o = week.model.orphans[extra.j];
+    week.edit = {mode, row, j: extra.j, form: {start: '', end: o.u.time, repeat: o.date ? 'once' : 'weekly',
+      days: o.date ? [wdOf(o.date)] : [...o.days], date: o.date || iso, enabled: o.u.enabled}};
+  }
+  drawWeek();
+}
+function drawEditor() {
+  const pop = $('w-pop'); const ed = week.edit;
+  if (!pop || !ed) return;
+  const f = ed.form, rules = readyRules();
+  const s = ed.mode === 'slot' ? week.model.slots[week.occ[ed.k].i] : null;
+  const o = ed.mode === 'slot' ? week.occ[ed.k] : null;
+  const nextDay = f.start && f.end && tmin(f.end) <= tmin(f.start);
+  const title = ed.mode === 'new' ? 'New slot' : ed.mode === 'orphan' ? 'Unplug only' : s.source === 'charge_now' ? 'Charge now slot'
+    : s.source === 'auto_plug' ? 'Auto plug-in slot' : 'Slot';
+  const times = ed.mode === 'orphan'
+    ? `<label>Unplug at <select data-f="end">${timeOptions(f.end, rules && rules.times)}</select></label>`
+    : `<label>Plug in <select data-f="start">${timeOptions(f.start)}</select></label>
+       <label>Unplug <select data-f="end">${timeOptions(f.end, rules && rules.times, 'No unplug')}</select></label>
+       ${nextDay ? '<span class="muted">next day</span>' : ''}`;
+  const repeat = `<div class="seg" role="group" aria-label="Repeat">
+      <button data-rep="weekly" aria-pressed="${f.repeat === 'weekly'}">Every week</button><button data-rep="once" aria-pressed="${f.repeat === 'once'}">Once</button></div>
+    ${f.repeat === 'weekly'
+      ? `<div class="seg days" role="group" aria-label="Days">${DAYS.map((d, n) => `<button data-day="${n}" aria-pressed="${f.days.includes(n)}" title="${d}">${d.slice(0, 2)}</button>`).join('')}</div>`
+      : `<input type="date" data-f="date" value="${esc(f.date)}" aria-label="Date">`}`;
+  const canSkip = s && o && o.udate !== undefined && new Date(`${o.date}T${s.start}`) > new Date();
+  pop.innerHTML = `<div class="ed">
+    <div class="row"><b>${title}</b>${times}</div>
+    <div class="row">${repeat}<span class="grow"></span>
+      <label class="switch" title="On"><input type="checkbox" data-f="enabled" ${f.enabled ? 'checked' : ''} aria-label="On"><span></span></label></div>
+    ${rules ? `<div class="note" style="margin:0">${esc(rules.provider)} ready times: unplug times are ${rules.text}.</div>` : ''}
+    <div class="sub" id="w-err" style="color:var(--err)"></div>
+    <div class="row"><button class="btn small primary" id="w-save">Save</button>
+      ${ed.mode !== 'new' ? '<button class="btn small" id="w-del">Delete</button>' : ''}
+      ${canSkip ? `<button class="btn small" id="w-skip">${o.skipped ? 'Undo skip' : 'Skip this one'}</button>` : ''}
+      <span class="grow"></span><button class="btn small" id="w-close">Cancel</button></div></div>`;
+}
+const clone = (x) => JSON.parse(JSON.stringify(x));
+// Take a slot out of the entries; returns the ids freed, to reuse (keeps skips)
+function removeSlot(entries, s, usage) {
+  const ids = {};
+  const P = entries.find((e) => e.id === s.plug.id);
+  const U = s.unplug ? entries.find((e) => e.id === s.unplug.id) : null;
+  if (s.kind === 'weekly') {
+    if (P) { P.days = P.days.filter((d) => !s.days.includes(d)); if (!P.days.length) { entries.splice(entries.indexOf(P), 1); ids.plug = P.id; } }
+    if (U) {
+      const use = usage[U.id] || {};
+      const drop = s.days.map((d) => (d + s.offset) % 7).filter((ud) => (use[ud] || 0) <= 1);
+      U.days = U.days.filter((d) => !drop.includes(d));
+      if (!U.days.length) { entries.splice(entries.indexOf(U), 1); ids.unplug = U.id; }
+    }
+  } else {
+    if (P) { entries.splice(entries.indexOf(P), 1); ids.plug = P.id; }
+    if (U && !s.shared) { entries.splice(entries.indexOf(U), 1); ids.unplug = U.id; }
+  }
+  return ids;
+}
+function newEntries(f, ids, source, mode) {
+  const off = f.start && f.end && tmin(f.end) <= tmin(f.start) ? 1 : 0;
+  const base = (action, time, extra) => {
+    const e = {time, action, enabled: f.enabled, ...extra};
+    const id = action === 'plug' ? ids.plug : ids.unplug;
+    if (id) e.id = id;
+    if (source && f.repeat === 'once') e.source = source;
+    return e;
+  };
+  const out = [];
+  if (f.repeat === 'once') {
+    if (mode !== 'orphan') out.push(base('plug', f.start, {date: f.date, days: [wdOf(f.date)]}));
+    if (f.end) { const d = addDays(f.date, off); out.push(base('unplug', f.end, {date: d, days: [wdOf(d)]})); }
+  } else {
+    const days = [...f.days].sort();
+    if (mode !== 'orphan') out.push(base('plug', f.start, {days}));
+    if (f.end) out.push(base('unplug', f.end, {days: days.map((d) => (d + off) % 7).sort()}));
+  }
+  return out;
+}
+async function saveEditor(del) {
+  const ed = week.edit; if (!ed) return;
+  const f = ed.form, rules = readyRules();
+  const fail = (m) => { const e = $('w-err'); if (e) e.textContent = m; };
+  if (!del) {
+    if (f.repeat === 'weekly' && !f.days.length) return fail('Pick at least one day');
+    if (f.repeat === 'once' && !/^\d{4}-\d{2}-\d{2}$/.test(f.date || '')) return fail('Pick a date');
+    if (ed.mode !== 'orphan' && !f.start) return fail('Pick a plug-in time');
+    if (ed.mode === 'orphan' && !f.end) return fail('Pick an unplug time');
+    if (f.start && f.end === f.start) return fail('Plug in and unplug must be at different times');
+    if (rules && f.end && !rules.times.includes(f.end)) return fail(`${rules.provider} only accepts ready times ${rules.text}`);
+  }
+  const entries = clone(auto.entries);
+  let ids = {}, source = null;
+  if (ed.mode === 'slot') {
+    const s = week.model.slots[week.occ[ed.k].i];
+    source = s.source;
+    ids = removeSlot(entries, s, week.model.usage);
+  } else if (ed.mode === 'orphan') {
+    const o = week.model.orphans[ed.j], U = entries.find((e) => e.id === o.u.id);
+    if (U && o.date) { entries.splice(entries.indexOf(U), 1); ids.unplug = U.id; }
+    else if (U) { U.days = U.days.filter((d) => !o.days.includes(d)); if (!U.days.length) { entries.splice(entries.indexOf(U), 1); ids.unplug = U.id; } }
+  }
+  if (!del) entries.push(...newEntries(f, ids, source, ed.mode));
+  if (!del && weekPlan(entries).over) return fail('That takes a day over Octopus\'s 6 hours of smart charging: make it shorter');
+  const btn = $(del ? 'w-del' : 'w-save'); if (btn) btn.disabled = true;
+  if (await post('automation/schedule', {entries})) {
+    toast(del ? 'Deleted' : 'Schedule saved');
+    week.edit = null;
+    await refreshAutomation(true);
+  } else if (btn) btn.disabled = false;
+}
+$('w-grid').addEventListener('click', async (ev) => {
+  const t = ev.target, ed = week.edit;
+  if (t.id === 'w-close') { week.edit = null; drawWeek(); return; }
+  if (t.id === 'w-save') { saveEditor(false); return; }
+  if (t.id === 'w-del') { saveEditor(true); return; }
+  if (t.id === 'w-skip') {
+    const o = week.occ[ed.k], s = week.model.slots[o.i];
+    const times = [{entry_id: s.plug.id, date: o.date}];
+    if (s.unplug && o.udate) times.push({entry_id: s.unplug.id, date: o.udate});
+    t.disabled = true;
+    if (await post('automation/skip', {times, skip: !o.skipped})) {
+      toast(o.skipped ? 'Slot back on' : 'Skipped this once'); week.edit = null; await refreshAutomation(false);
+    } else t.disabled = false;
+    return;
+  }
+  if (ed && t.dataset.rep) { ed.form.repeat = t.dataset.rep; drawEditor(); return; }
+  if (ed && t.dataset.day !== undefined && t.closest('#w-pop')) {
+    const d = Number(t.dataset.day);
+    ed.form.days = ed.form.days.includes(d) ? ed.form.days.filter((x) => x !== d) : [...ed.form.days, d];
+    drawEditor(); return;
+  }
+  const seg = t.closest('.seg[data-occ]');
+  if (seg) {
+    const k = Number(seg.dataset.occ), row = Number(seg.dataset.row);
+    if (ed && ed.mode === 'slot' && ed.k === k && ed.row === row) { week.edit = null; drawWeek(); } else openEditor('slot', row, {k});
+    return;
+  }
+  const tick = t.closest('.tick[data-orphan]');
+  if (tick) openEditor('orphan', Number(tick.dataset.row), {j: Number(tick.dataset.orphan)});
 });
-$('a-entries').addEventListener('change', (ev) => {
-  const row = ev.target.closest('.sched'); if (!row) return;
-  const e = auto.entries[Number(row.dataset.i)], f = ev.target.dataset.f;
-  if (f === 'enabled') e.enabled = ev.target.checked; else if (f) e[f] = ev.target.value;
-  setDirty(true);
-  if (f === 'date') e.days = [(new Date(e.date + 'T12:00:00').getDay() + 6) % 7];
-  if (f === 'time' || f === 'action' || f === 'enabled' || f === 'date') drawEntries();
+$('w-grid').addEventListener('change', (ev) => {
+  const ed = week.edit, f = ev.target.dataset.f;
+  if (!ed || !f) return;
+  ed.form[f] = f === 'enabled' ? ev.target.checked : ev.target.value;
+  drawEditor();
 });
-$('a-add').onclick = () => {
-  const last = auto.entries[auto.entries.length - 1];
-  auto.entries.push({time: last && last.action === 'plug' ? '07:00' : '23:30', action: last && last.action === 'plug' ? 'unplug' : 'plug', days: [0, 1, 2, 3, 4, 5, 6], enabled: true});
-  drawEntries(); setDirty(true);
-};
-$('a-add-once').onclick = () => {
-  const d = new Date(); d.setDate(d.getDate() + 1);
-  const date = d.toLocaleDateString('en-CA');
-  auto.entries.push({time: '07:00', action: 'unplug', date, days: [(d.getDay() + 6) % 7], enabled: true});
-  drawEntries(); setDirty(true);
-};
-$('a-discard').onclick = () => refreshAutomation(true);
-$('a-save').onclick = async () => {
-  if (auto.entries.some((e) => !/^\d{2}:\d{2}$/.test(e.time))) { toast('Every row needs a time'); return; }
-  if (auto.entries.some((e) => 'date' in e && !/^\d{4}-\d{2}-\d{2}$/.test(e.date || ''))) { toast('Every one-off needs a date'); return; }
-  const rules = readyRules();
-  if (rules && auto.entries.some((e) => badUnplug(e, rules))) { toast(`Unplug times must be ${rules.text} (${rules.provider} ready time)`); return; }
-  if (weekPlan().over) { toast('Over Octopus\'s 6 hours of smart charging a day: shorten the times marked in red'); return; }
-  if (await post('automation/schedule', {entries: auto.entries})) { toast('Schedule saved'); setDirty(false); refreshAutomation(true); }
-};
+// Click (1 hour) or drag across a day to add a slot there
+const wdrag = {on: false};
+$('w-grid').addEventListener('pointerdown', (ev) => {
+  const track = ev.target.closest('.track');
+  if (!track || ev.target.closest('.seg, .tick') || ev.button !== 0) return;
+  const rect = track.getBoundingClientRect();
+  Object.assign(wdrag, {on: true, track, rect, x0: ev.clientX, x1: ev.clientX, row: Number(track.dataset.row)});
+  track.setPointerCapture(ev.pointerId);
+});
+$('w-grid').addEventListener('pointermove', (ev) => {
+  if (!wdrag.on) return;
+  wdrag.x1 = ev.clientX;
+  let g = wdrag.track.querySelector('.ghost');
+  if (!g) { g = document.createElement('div'); g.className = 'seg ghost'; wdrag.track.appendChild(g); }
+  const a = Math.min(wdrag.x0, wdrag.x1) - wdrag.rect.left, b = Math.max(wdrag.x0, wdrag.x1) - wdrag.rect.left;
+  g.style.left = `${Math.max(0, a) / wdrag.rect.width * 100}%`; g.style.width = `${(Math.min(b, wdrag.rect.width) - Math.max(0, a)) / wdrag.rect.width * 100}%`;
+});
+$('w-grid').addEventListener('pointerup', () => {
+  if (!wdrag.on) return;
+  wdrag.on = false;
+  const toMin = (x) => Math.max(0, Math.min(DAY_MIN, (x - wdrag.rect.left) / wdrag.rect.width * DAY_MIN));
+  let a = Math.round(toMin(Math.min(wdrag.x0, wdrag.x1)) / 30) * 30, b = Math.round(toMin(Math.max(wdrag.x0, wdrag.x1)) / 30) * 30;
+  if (Math.abs(wdrag.x1 - wdrag.x0) < 6) { a = Math.floor(toMin(wdrag.x0) / 30) * 30; b = a + 60; }
+  if (b <= a) b = a + 30;
+  a = Math.min(a, DAY_MIN - 30); b = Math.min(b, DAY_MIN);
+  openEditor('new', wdrag.row, {start: hhmm(a), end: hhmm(b % DAY_MIN)});
+});
 $('a-sched-on').addEventListener('change', async (e) => {
-  if (auto.dirty && !(await post('automation/schedule', {entries: auto.entries}))) { e.target.checked = !e.target.checked; return; }
-  if (await post('automation/schedule', {enabled: e.target.checked})) { toast(e.target.checked ? 'Schedule on' : 'Schedule off'); setDirty(false); refreshAutomation(true); }
+  if (await post('automation/schedule', {enabled: e.target.checked})) { toast(e.target.checked ? 'Schedule on' : 'Schedule off'); refreshAutomation(true); }
   else e.target.checked = !e.target.checked;
 });
 ['a-rp-on', 'a-rp-after', 'a-rp-tries'].forEach((id) => $(id).addEventListener('input', () => { rpDirty = true; updateSaveBar(); }));
