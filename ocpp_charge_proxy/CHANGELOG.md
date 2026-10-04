@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.16.2 — Schedule description
+
+- **Improvement:** the Schedule card has a short description (with
+  **More**), like the other cards
+
 ## 2.16.1 — Auto re-plug description
 
 - **Improvement:** Auto re-plug has a short description (with **More**),
