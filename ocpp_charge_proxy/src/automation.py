@@ -227,6 +227,7 @@ class Automation:
         self.ready_status: Optional[dict] = None  # the last time it was set (or why not)
         self.auto_plug_last: Optional[dict] = None  # the last auto plug-in charge planned
         self.unplug_wait_s = GRACEFUL_UNPLUG_S
+        self.override_guards = False  # Diagnostics › Debug: no 6-hour limit with Octopus
         self.plan_check: Optional[dict] = None  # the supplier's plan vs the schedule, while plugged in
         self._plan_problems: tuple = ()
         self.replug = options.as_dict()
@@ -263,6 +264,7 @@ class Automation:
         schedule = data.get("schedule") or {}
         self.schedule_enabled = bool(schedule.get("enabled", False))
         self.ready_time = bool(schedule.get("ready_time", False))
+        self.override_guards = bool(schedule.get("override_guards", False))
         try:
             self.unplug_wait_s = self._valid_wait(schedule.get("unplug_wait_s", GRACEFUL_UNPLUG_S))
         except ValueError:
@@ -293,7 +295,8 @@ class Automation:
                 json.dump({
                     "schedule": {"enabled": self.schedule_enabled, "entries": self.entries,
                                  "ready_time": self.ready_time, "skips": self.skips,
-                                 "unplug_wait_s": self.unplug_wait_s},
+                                 "unplug_wait_s": self.unplug_wait_s,
+                                 "override_guards": self.override_guards},
                     "replug": self.replug,
                 }, f, indent=1)
                 f.flush()
@@ -309,8 +312,10 @@ class Automation:
     def set_schedule(self, enabled: Optional[bool] = None, entries: Optional[list] = None,
                      ready_time: Optional[bool] = None, ready_times: Optional[list] = None,
                      provider: str = "your supplier", daily_cap_min: Optional[int] = None,
-                     unplug_wait_s=None) -> None:
-        """ready_times: the times your supplier accepts as a ready time (None:
+                     unplug_wait_s=None, override_guards: Optional[bool] = None) -> None:
+        """override_guards: with it on, daily_cap_min isn't applied (turning it
+        back off checks the schedule, as turning on the ready time does).
+        ready_times: the times your supplier accepts as a ready time (None:
         unknown). While the schedule sets it, unplug times must be among them,
         and with daily_cap_min (Octopus: 360) it can't plug in for longer than
         that in any 24 hours. Checked when times are saved or the ready time
@@ -323,7 +328,11 @@ class Automation:
             if len(entries) > 50:
                 raise ValueError("At most 50 schedule entries")
             new_entries = [validate_entry(e) for e in entries]
-        checking = entries is not None or bool(ready_time)
+        guards_off = self.override_guards if override_guards is None else bool(override_guards)
+        if guards_off:
+            daily_cap_min = None
+        checking = (entries is not None or bool(ready_time)
+                    or (override_guards is not None and not override_guards and self.override_guards))
         if checking and (self.ready_time if ready_time is None else bool(ready_time)):
             if ready_times:
                 check_unplug_times([e for e in new_entries if not self._past_one_off(e)], ready_times, provider)
@@ -339,6 +348,10 @@ class Automation:
             self.ready_time = bool(ready_time)
         if wait is not None:
             self.unplug_wait_s = wait
+        if override_guards is not None and bool(override_guards) != self.override_guards:
+            self.override_guards = bool(override_guards)
+            logger.info("Scheduling guards %s", "overridden: no 6-hour limit with Octopus"
+                        if self.override_guards else "back on")
         self._save()
         logger.info(
             "Schedule %s, %d entr%s", "on" if self.schedule_enabled else "off",
@@ -620,7 +633,7 @@ class Automation:
             if not any(True for _ in self._occurrences(entry, day, 1)):
                 raise ValueError(f"That time doesn't run on {date}")
             keys.append(({"entry_id": entry_id, "date": day.isoformat()}, entry))
-        if daily_cap_min and self.ready_time:
+        if daily_cap_min and self.ready_time and not self.override_guards:
             new = list(self.skips)
             for key, _ in keys:
                 new = [k for k in new if k != key] + ([key] if skip else [])
@@ -840,6 +853,7 @@ class Automation:
                 "auto_plug_last": self.auto_plug_last,
                 "one_off_runs": self.one_off_runs(),
                 "unplug_wait_s": self.unplug_wait_s,
+                "override_guards": self.override_guards,
                 "plan_check": self.plan_check,
                 "skips": self.skips,
                 "upcoming": self.upcoming(),

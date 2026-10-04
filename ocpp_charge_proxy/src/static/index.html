@@ -232,6 +232,9 @@
   .slot-pop #w-err { flex-basis: 100%; margin: 0; }
   .slot-pop #w-err:empty { display: none; }
   .week .slot-pop.top { margin-bottom: 4px; }
+  #tab-debug select { font: inherit; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--divider); background: var(--card); color: var(--text); }
+  .logs { max-height: 340px; overflow: auto; margin: 12px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--hover);
+    font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
   .slot-pop select { font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--divider); background: var(--card); color: var(--text); }
   .week .track .seg.linked { box-shadow: inset 0 0 0 2px var(--text2); }
   .week .sup { position: absolute; top: 0; bottom: 0; box-sizing: border-box; border: 2px solid; border-radius: 4px;
@@ -517,7 +520,6 @@
         </div>
         <div class="row" style="margin-top:6px"><div class="seg" id="c-amps" role="group" aria-label="Max current"></div></div>
       </div>
-      </div>
       <div class="card">
         <h2>Simulated car</h2>
         <div class="note" style="margin:0 0 10px">How the simulated car starts drawing power. <details class="more"><summary>More</summary><div>After a session starts or resumes, like a real car. Not used when power comes from your power sensor.</div></details></div>
@@ -574,7 +576,63 @@
           <span class="ctl"><input type="number" id="c-soc" min="0" max="100" step="1" placeholder="%" aria-label="SoC in percent">
           <button class="btn small" id="c-soc-set">Set</button>
           <button class="btn small" id="c-soc-clear">Clear</button></span>
+        </div>
+    </div>
+    <div class="card">
+      <h2>Send a message</h2>
+      <div class="note" style="margin:0 0 10px">Sent now to <span class="supn" data-f="your supplier">your supplier</span> as the charger. <details class="more"><summary>More</summary><div>A status sent here doesn't change the charger's own state: its next real change is sent as usual. Faulted is sent with the error code OtherError. Only while connected.</div></details></div>
+      <div class="row" style="margin-top:0;flex-wrap:wrap;gap:8px">
+        <select id="d-msg" aria-label="Message"><option>StatusNotification</option><option>MeterValues</option><option>Heartbeat</option><option>BootNotification</option></select>
+        <select id="d-status" aria-label="Status"><option>Available</option><option>Preparing</option><option>Charging</option><option>SuspendedEV</option><option>SuspendedEVSE</option><option>Finishing</option><option>Unavailable</option><option>Faulted</option></select>
+        <button class="btn small primary" id="d-send">Send</button>
       </div>
+      <div class="sub" id="d-send-out" style="margin-top:8px;overflow-wrap:anywhere"></div>
+    </div>
+    <div class="card">
+      <h2>Connection</h2>
+      <div class="row" style="margin-top:0">
+        <div class="grow">Drop the connection<div class="note" style="margin:0">Reconnects after this long (at least 5 s). <details class="more"><summary>More</summary><div>Closes the connection to <span class="supn" data-f="your supplier">your supplier</span>'s OCPP server, as on a real dropout: charging carries on and transaction messages are held until it's back.</div></details></div></div>
+        <span class="ctl"><input type="number" id="d-drop-s" min="0" max="600" step="5" value="30" aria-label="Seconds offline"> s
+          <button class="btn small" id="d-drop">Drop</button></span>
+      </div>
+      <div class="row">
+        <div class="grow">Restart the add-on<div class="note" style="margin:0">A real restart. <details class="more"><summary>More</summary><div>Asks Home Assistant to restart the add-on. During a session, it carries on after the restart if the continue_session_on_restart option is on (as it is by default).</div></details></div></div>
+        <button class="btn small" id="d-restart">Restart</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Scheduling guards<span class="spacer"></span>
+        <span class="muted" style="font-size:13px;font-weight:400">Override</span>
+        <label class="switch"><input type="checkbox" id="d-guards" aria-label="Override scheduling guards"><span></span></label>
+      </h2>
+      <div class="note" style="margin:0">Off by default. On: the schedule, auto plug-in and Charge now can plug in for more than 6 hours a day with Octopus Energy while Force schedule on supplier is on. <details class="more"><summary>More</summary><div>Octopus schedules at most 6 hours of smart charging in a day, so it may not charge for the rest. Turning the guards back on needs the schedule to be within 6 hours a day again.</div></details></div>
+    </div>
+    <div class="card">
+      <h2>Logs<span class="spacer"></span><button class="btn small" id="d-log-refresh">Refresh</button></h2>
+      <div class="row" style="margin-top:0">
+        <div class="grow">Log level<div class="note" style="margin:0" id="d-level-note">Until the add-on restarts</div></div>
+        <div class="seg" id="d-level" role="group" aria-label="Log level"><button data-level="debug">Debug</button><button data-level="info">Info</button><button data-level="warning">Warning</button></div>
+      </div>
+      <pre class="logs" id="d-logs">Loading…</pre>
+    </div>
+    <div class="card">
+      <h2>Diagnostics bundle</h2>
+      <div class="row" style="margin-top:0">
+        <div class="grow"><div class="note" style="margin:0">One file to attach to a bug report. <details class="more"><summary>More</summary><div>The add-on's state, schedule, sessions, your supplier's plan and settings, health, recent OCPP messages and log lines, and the add-on's options with the password and most of the charge point ID hidden.</div></details></div></div>
+        <button class="btn small primary" id="d-bundle">Download</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Clear data</h2>
+      <div class="row" style="margin-top:0">
+        <div class="grow">Session history<div class="note" style="margin:0">Finished sessions on the Sessions tab. A session in progress carries on.</div></div>
+        <button class="btn small" id="d-clear-sessions">Clear</button>
+      </div>
+      <div class="row">
+        <div class="grow">Message log<div class="note" style="margin:0">Diagnostics › Messages</div></div>
+        <button class="btn small" id="d-clear-messages">Clear</button>
+      </div>
+    </div>
   </section>
 
   <section id="tab-health" class="stack" hidden>
@@ -1967,7 +2025,8 @@ function weekPlan(entries = auto.entries, skipList = null, forceCap = false) {
   let worst = null;
   const bad = [];
   const capped = smart.data && smart.data.found && smart.data.provider === 'Octopus Energy'
-    && ((auto.data && auto.data.schedule.ready_time) || forceCap);
+    && ((auto.data && auto.data.schedule.ready_time) || forceCap)
+    && !(auto.data && auto.data.schedule.override_guards);  // Diagnostics › Debug
   segs.forEach(([a]) => {
     if (a < nowMin - DAY_MIN || a > 7 * DAY_MIN) return;
     let total = 0;
@@ -2397,8 +2456,87 @@ async function refreshHealth() {
 // Octopus schedules at most 6 hours of smart charging a day: while the
 // schedule sets its ready time, charges can't be longer
 function octopusCapped() {
-  return !!(smart.data && smart.data.found && smart.data.provider === 'Octopus Energy' && auto.data && auto.data.schedule.ready_time);
+  return !!(smart.data && smart.data.found && smart.data.provider === 'Octopus Energy' && auto.data && auto.data.schedule.ready_time
+    && !auto.data.schedule.override_guards);
 }
+// ---------- Debug (Diagnostics › Debug) ----------
+async function refreshDebug() {
+  let i;
+  try { i = await api('debug/info?lines=300'); } catch (e) { $('d-logs').textContent = 'Couldn\'t read the logs: ' + e.message; return; }
+  $('d-level').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.level === i.log_level));
+  $('d-level-note').textContent = i.log_level === i.default_log_level ? 'Until the add-on restarts'
+    : `Until the add-on restarts (then back to ${i.default_log_level})`;
+  const pre = $('d-logs'), atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8;
+  pre.textContent = (i.logs || []).join('\n') || 'No log lines yet.';
+  if (atEnd) pre.scrollTop = pre.scrollHeight;
+  if (!auto.data) { try { auto.data = await api('automation'); } catch (e) { /* the switch waits */ } }
+  if (auto.data) $('d-guards').checked = !!auto.data.schedule.override_guards;
+}
+const drawDebugMsg = () => { $('d-status').hidden = $('d-msg').value !== 'StatusNotification'; };
+$('d-msg').addEventListener('change', drawDebugMsg);
+drawDebugMsg();
+$('d-send').addEventListener('click', async () => {
+  const message = $('d-msg').value, status = $('d-status').value, out = $('d-send-out');
+  out.textContent = 'Sending…';
+  try {
+    const r = await api('debug/send', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({message, status})});
+    out.innerHTML = `Sent ${esc(message)}${message === 'StatusNotification' ? ' (' + esc(status) + ')' : ''} at ${new Date().toLocaleTimeString([], {hourCycle: 'h23'})}`
+      + (r.response ? ` · reply <code>${esc(JSON.stringify(r.response))}</code>` : '');
+  } catch (e) { out.innerHTML = `<span style="color:var(--err)">${esc(e.message)}</span>`; }
+});
+$('d-drop').addEventListener('click', async () => {
+  const s = Number($('d-drop-s').value);
+  if (!(s >= 0 && s <= 600)) { toast('Seconds: 0–600'); return; }
+  if (await post('debug/drop', {seconds: s})) toast(`Connection dropped: reconnecting in ${Math.max(5, Math.round(s))} s`);
+});
+// Two clicks for anything that can't be undone
+function confirmClick(btn, run) {
+  const label = btn.textContent;
+  btn.addEventListener('click', async () => {
+    clearTimeout(btn._reset);
+    if (!btn.dataset.armed) {
+      btn.dataset.armed = '1'; btn.textContent = 'Click again to confirm';
+      btn._reset = setTimeout(() => { delete btn.dataset.armed; btn.textContent = label; }, 4000);
+      return;
+    }
+    delete btn.dataset.armed; btn.textContent = label;
+    await run();
+  });
+}
+confirmClick($('d-restart'), async () => { if (await post('debug/restart')) toast('Restarting the add-on: the page reconnects when it\'s back'); });
+confirmClick($('d-clear-sessions'), async () => { if (await post('debug/clear', {what: 'sessions'})) { sessionsData = null; toast('Session history cleared'); } });
+confirmClick($('d-clear-messages'), async () => { if (await post('debug/clear', {what: 'messages'})) { msgs.list = []; toast('Message log cleared'); } });
+$('d-level').addEventListener('click', async (e) => {
+  const level = e.target.dataset.level; if (!level) return;
+  if (await post('debug/log_level', {level})) { toast(`Log level: ${level} until the add-on restarts`); refreshDebug(); }
+});
+$('d-log-refresh').addEventListener('click', () => refreshDebug());
+$('d-guards').addEventListener('change', async (e) => {
+  const on = e.target.checked;
+  try {
+    auto.data = await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({override_guards: on})});
+    applyOctopusCap();
+    toast(on ? 'Scheduling guards overridden: no 6-hour limit' : 'Scheduling guards back on');
+  } catch (err) { e.target.checked = !on; toast('Failed: ' + err.message); }
+});
+$('d-bundle').addEventListener('click', async () => {
+  const btn = $('d-bundle'); btn.disabled = true;
+  const parts = {state: 'state', schedule: 'automation', supplier_plan: 'smart_charging', sessions: 'sessions',
+    health: 'health', supplier_settings: 'provider', messages: 'messages', debug: 'debug/info?lines=500'};
+  const out = {generated: new Date().toISOString()};
+  for (const [k, p] of Object.entries(parts)) { try { out[k] = await api(p); } catch (e) { out[k] = {error: e.message}; } }
+  const mask = (v) => { const t = String(v || ''); return t.length > 4 ? '…' + t.slice(-4) : (t ? '***' : ''); };
+  if (out.health && out.health.chargepoint_id) out.health.chargepoint_id = mask(out.health.chargepoint_id);
+  const blob = new Blob([JSON.stringify(out, null, 1)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `ocpp_charge_proxy_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  btn.disabled = false;
+  toast('Diagnostics bundle downloaded');
+});
+
 function applyOctopusCap() {
   const capped = octopusCapped();
   document.querySelectorAll('#c-charge button').forEach((b) => { b.hidden = capped && Number(b.dataset.hours) > 6; });
@@ -2429,7 +2567,7 @@ function refreshTab(full) {
   if (activeTab === 'overview') { refreshSessionCard(); refreshHistory(full && !chart.samples.length); refreshSmart(full); }
   else if (activeTab === 'sessions') refreshSessions();
   else if (activeTab === 'messages') refreshMessages();
-  else if (activeTab === 'debug') refreshSmart(false);  // for the supplier's name
+  else if (activeTab === 'debug') { refreshSmart(false); refreshDebug(); }  // the supplier's name; logs
   else if (activeTab === 'automation') { refreshAutomation(false); refreshSimulation(false); }
   else if (activeTab === 'settings') { refreshAutomation(false); refreshSimulation(false); refreshSmart(false); }
   else if (activeTab === 'health') { refreshHealth(); refreshSimulation(false); refreshProvider(); }

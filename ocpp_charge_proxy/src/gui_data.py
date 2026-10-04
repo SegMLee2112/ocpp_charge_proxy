@@ -115,6 +115,13 @@ class MessageLog:
             await asyncio.sleep(self.SAVE_INTERVAL_S)
             self.save()
 
+    def clear(self) -> None:
+        """Forget every message (Diagnostics › Debug). Numbering carries on."""
+        self._entries.clear()
+        self._actions.clear()
+        self._dirty = True
+        self.save()
+
     @property
     def last_seq(self) -> int:
         return self._seq
@@ -299,6 +306,12 @@ class SessionLog:
         self.history.insert(0, session)
         self.current = None
         self._trim()
+        self._save()
+
+    def clear_history(self) -> None:
+        """Forget the finished sessions and no-session plug-ins (Diagnostics ›
+        Debug). The current session, if any, carries on."""
+        self.history = []
         self._save()
 
     def mark_supplier(self, periods: list, provider: Optional[str] = None) -> bool:

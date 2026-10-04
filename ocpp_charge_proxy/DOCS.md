@@ -307,8 +307,25 @@ follows your Home Assistant theme.
   - **Messages:** the last 300 OCPP messages both ways, kept across
     restarts (with a marker where the add-on restarted), with a filter,
     full JSON on click and a Copy button for sharing.
-  - **Debug:** test values: a power override (reported instead of the
-    simulation) and a test SoC.
+  - **Debug:** tools for testing and bug reports:
+    - Test values: a power override (reported instead of the simulation)
+      and a test SoC.
+    - **Send a message** now as the charger: a StatusNotification (any
+      status; it doesn't change the charger's own state), MeterValues, a
+      Heartbeat or a BootNotification, with the supplier's reply.
+    - **Drop the connection** for a number of seconds (charging carries on
+      and transaction messages are held, as on a real dropout), or
+      **restart the add-on** (through the Supervisor; a session carries on
+      after it with `continue_session_on_restart`).
+    - **Scheduling guards** (off by default): override them to let the
+      schedule, auto plug-in and Charge now plug in for more than Octopus's
+      6 hours a day while Force schedule on supplier is on.
+    - **Logs:** the last few hundred log lines, and the log level (Debug,
+      Info, Warning) until the add-on restarts.
+    - **Diagnostics bundle:** one JSON file with the state, schedule,
+      sessions, supplier's plan and settings, health, recent messages, log
+      lines and options (password and most of the charge point ID hidden).
+    - **Clear data:** the session history or the message log.
   - **Supplier** (at the bottom of Health): what your supplier has set: charging limits, charging
     profiles drawn as a timeline, the local authorisation list and every
     configuration key.

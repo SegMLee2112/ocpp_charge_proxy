@@ -12,6 +12,7 @@ from aiohttp import web
 
 from src.api import create_api_app
 from src.client import ChargePoint
+from src.debug_tools import DebugTools, install_log_buffer
 from src.config import load_config, starting_current_amps
 from src.gui_data import GuiSources, Health, PowerHistory, remove_old_history_files, sample_loop
 from src.ha_history import ChartHistory
@@ -86,6 +87,7 @@ async def run() -> None:
         stream=sys.stdout,
     )
     log_filters.install()  # Heartbeat and periodic MeterValues lines at DEBUG, not INFO
+    log_buffer = install_log_buffer(log_format)  # recent lines for Diagnostics › Debug
 
     data_dir = os.environ.get("IO_DATA_DIR", "/data")
     os.makedirs(data_dir, exist_ok=True)
@@ -240,7 +242,8 @@ async def run() -> None:
             ready_times=ha_link.ready_times,
             # Octopus schedules at most 6 hours of smart charging a day: kept
             # to only while Force schedule on supplier is on, as for the schedule
-            cap_min=360 if sc.get("provider") == "Octopus Energy" and automation.ready_time else None,
+            cap_min=(360 if sc.get("provider") == "Octopus Energy" and automation.ready_time
+                     and not automation.override_guards else None),
             provider=sc.get("provider") or "your supplier",
             source=source,
         )
@@ -267,6 +270,52 @@ async def run() -> None:
             except Exception:
                 logger.debug("Could not mark sessions against the supplier's slots", exc_info=True)
             await asyncio.sleep(60)
+
+    # --- Diagnostics › Debug -------------------------------------------------
+    offline_hold = {"until": 0.0}  # a dropped connection waits until then to reconnect
+    debug_tasks: set = set()
+
+    async def debug_drop(seconds: float) -> dict:
+        ws = cp._connection
+        if ws is None:
+            raise ValueError("Not connected to the supplier's server")
+        offline_hold["until"] = loop.time() + seconds
+        logger.info("Debug: dropping the connection to the OCPP server, reconnecting in %d s (asked on the web page)",
+                    max(round(seconds), BACKOFF_STEPS[0]))
+        task = asyncio.create_task(ws.close())
+        debug_tasks.add(task)
+        task.add_done_callback(debug_tasks.discard)
+        return {"seconds": seconds}
+
+    async def debug_restart() -> dict:
+        token = os.environ.get("SUPERVISOR_TOKEN")
+        if not token:
+            raise ValueError("Can't reach the Supervisor: restart the add-on from Home Assistant")
+
+        async def restart_soon() -> None:
+            await asyncio.sleep(1)  # the page gets its answer first
+            import aiohttp
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post("http://supervisor/addons/self/restart",
+                                            headers={"Authorization": f"Bearer {token}"},
+                                            timeout=aiohttp.ClientTimeout(total=60)) as resp:
+                        if resp.status >= 400:
+                            logger.warning("Debug: the Supervisor refused the restart (HTTP %s): %s",
+                                           resp.status, (await resp.text())[:200])
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.warning("Debug: couldn't ask the Supervisor to restart the add-on", exc_info=True)
+
+        logger.info("Debug: restarting the add-on (asked on the web page)")
+        task = asyncio.create_task(restart_soon())
+        debug_tasks.add(task)
+        task.add_done_callback(debug_tasks.discard)
+        return {"restarting": True}
+
+    debug = DebugTools(send=cp.debug_send, drop=debug_drop, restart=debug_restart, config=config,
+                       log_buffer=log_buffer, sessions=cp.sessions, messages=cp.message_log)
 
     charger_tasks = [
         asyncio.create_task(supplier_marks_loop()),
@@ -295,6 +344,7 @@ async def run() -> None:
         ha_link=ha_link,
         on_set_ramp=cp.set_ramp,
         on_charge_now=charge_now,
+        debug=debug,
     )
     runner = web.AppRunner(api_app)
     await runner.setup()
@@ -336,6 +386,7 @@ async def run() -> None:
             shared_state.connected_to_server = False
             health.disconnected(str(e) or type(e).__name__)
             backoff = BACKOFF_STEPS[min(attempt, len(BACKOFF_STEPS) - 1)]
+            backoff = max(backoff, round(offline_hold["until"] - loop.time()))  # Debug: drop for N s
             logger.warning(
                 "Connection lost (%s), reconnecting in %ds...", e, backoff,
             )

@@ -774,3 +774,22 @@ def test_unskip_cant_go_over_six_hours():
         pass
     b.set_skips([{"entry_id": plug["id"], "date": "2026-10-04"}, {"entry_id": unplug["id"], "date": "2026-10-04"}],
                 True, daily_cap_min=360)  # the whole slot: fine
+
+
+def test_override_guards_lifts_the_six_hours():
+    every = list(range(7))
+    seven = [{"time": "23:30", "action": "plug", "days": every}, {"time": "06:30", "action": "unplug", "days": every}]
+    six = [{"time": "23:30", "action": "plug", "days": every}, {"time": "05:30", "action": "unplug", "days": every}]
+    a, clock = _automation()
+    a.set_schedule(entries=six, ready_time=True, daily_cap_min=360)
+    a.set_schedule(override_guards=True, daily_cap_min=360)
+    a.set_schedule(entries=seven, daily_cap_min=360)  # over 6 hours, allowed
+    assert a.override_guards and a.snapshot()["schedule"]["override_guards"]
+    try:
+        a.set_schedule(override_guards=False, daily_cap_min=360, provider="Octopus Energy")  # back on while over
+        raise AssertionError("should have refused")
+    except ValueError as err:
+        assert "6 hours" in str(err)
+    assert a.override_guards
+    a.set_schedule(entries=six, override_guards=False, daily_cap_min=360)
+    assert not a.override_guards

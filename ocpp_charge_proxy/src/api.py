@@ -29,6 +29,7 @@ def create_api_app(
     on_set_ramp: Callable[[float, float], None] | None = None,
     ha_link=None,
     on_charge_now: Callable[[float], Awaitable[dict]] | None = None,
+    debug=None,
 ) -> web.Application:
     app = web.Application()
     app["shared_state"] = shared_state
@@ -44,6 +45,7 @@ def create_api_app(
     app["ha_link"] = ha_link  # src.ha_link.HaLink, or None
     app["on_set_ramp"] = on_set_ramp
     app["on_charge_now"] = on_charge_now
+    app["debug"] = debug  # src.debug_tools.DebugTools, or None
     # Open /api/events streams (web pages)
     app["event_clients"] = {"gui": 0}
     app.on_shutdown.append(_close_event_streams)
@@ -78,6 +80,13 @@ def create_api_app(
     app.router.add_post("/api/sensors", handle_set_sensors)
     app.router.add_get("/api/sensors/entities", handle_sensor_entities)
     app.router.add_get("/api/smart_charging", handle_smart_charging)
+    # Diagnostics › Debug
+    app.router.add_get("/api/debug/info", handle_debug_info)
+    app.router.add_post("/api/debug/send", handle_debug_send)
+    app.router.add_post("/api/debug/drop", handle_debug_drop)
+    app.router.add_post("/api/debug/restart", handle_debug_restart)
+    app.router.add_post("/api/debug/log_level", handle_debug_log_level)
+    app.router.add_post("/api/debug/clear", handle_debug_clear)
 
     return app
 
@@ -405,6 +414,7 @@ async def handle_schedule(request: web.Request) -> web.Response:
             # Octopus schedules at most 6 hours of smart charging a day
             daily_cap_min=360 if sc.get("provider") == "Octopus Energy" else None,
             unplug_wait_s=b.get("unplug_wait_s"),
+            override_guards=b.get("override_guards"),
         ),
     )
 
@@ -481,3 +491,54 @@ async def handle_sensor_entities(request: web.Request) -> web.Response:
     except Exception as err:
         return web.json_response({"status": "error", "message": f"Couldn't list entities: {err}"}, status=502)
     return web.json_response({"entities": entities, "available": link.available}, dumps=_dumps)
+
+
+# --- Diagnostics › Debug (src/debug_tools.py) ---------------------------------
+
+
+async def handle_debug_info(request: web.Request) -> web.Response:
+    """The log level, the add-on's settings (redacted) and the last ?lines= log lines."""
+    debug = request.app["debug"]
+    if debug is None:
+        return _gui_unavailable()
+    return web.json_response(debug.info(int(_number_param(request, "lines", 200))), dumps=_dumps)
+
+
+async def _debug_call(request: web.Request, apply) -> web.Response:
+    debug = request.app["debug"]
+    if debug is None:
+        return _gui_unavailable()
+    try:
+        body = await request.json() if request.can_read_body else {}
+        if not isinstance(body, dict):
+            raise ValueError("Send a JSON object")
+        out = apply(debug, body)
+        if asyncio.iscoroutine(out):
+            out = await out
+    except (ValueError, TypeError, json.JSONDecodeError) as err:
+        return web.json_response({"status": "error", "message": str(err)}, status=400)
+    return web.json_response({"status": "ok", **(out or {})}, dumps=_dumps)
+
+
+async def handle_debug_send(request: web.Request) -> web.Response:
+    """{"message": "StatusNotification"|"MeterValues"|"Heartbeat"|"BootNotification", "status": ...}"""
+    return await _debug_call(request, lambda d, b: d.send(b.get("message"), b.get("status")))
+
+
+async def handle_debug_drop(request: web.Request) -> web.Response:
+    """{"seconds": 0..600}: close the connection, reconnect after that long (at least 5 s)."""
+    return await _debug_call(request, lambda d, b: d.drop(b.get("seconds", 0)))
+
+
+async def handle_debug_restart(request: web.Request) -> web.Response:
+    return await _debug_call(request, lambda d, b: d.restart())
+
+
+async def handle_debug_log_level(request: web.Request) -> web.Response:
+    """{"level": "debug"|"info"|"warning"|"error"}, until the add-on restarts."""
+    return await _debug_call(request, lambda d, b: d.set_log_level(b.get("level")))
+
+
+async def handle_debug_clear(request: web.Request) -> web.Response:
+    """{"what": "sessions"|"messages"}"""
+    return await _debug_call(request, lambda d, b: d.clear(b.get("what")))

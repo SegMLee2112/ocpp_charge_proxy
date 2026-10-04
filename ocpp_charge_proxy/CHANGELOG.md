@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.21.0 — Debug tools
+
+- **Feature:** Diagnostics › Debug: **Send a message** now as the charger
+  (StatusNotification with any status, MeterValues, Heartbeat,
+  BootNotification), with the supplier's reply
+- **Feature:** **Drop the connection** for a set time, or **restart the
+  add-on**, to test reconnecting and continuing a session
+- **Feature:** **Scheduling guards** switch (off by default): override the
+  6-hour daily limit with Octopus while Force schedule on supplier is on
+- **Feature:** **Logs**: recent log lines on the page, and a log level switch
+  until the add-on restarts
+- **Feature:** **Diagnostics bundle**: download one JSON file for bug
+  reports, with the password and most of the charge point ID hidden
+- **Feature:** **Clear data**: the session history or the message log (click
+  twice to confirm)
+- **Fix:** 2.20.0 left a stray closing tag in Settings › Controls, which
+  could upset the Settings tab's layout
+- **Change:** the add-on now asks for Supervisor API access (`hassio_api`),
+  only to restart itself from the Debug page
+
 ## 2.20.0 — Debug page
 
 - **Change:** the power override and test SoC moved from Settings › Controls

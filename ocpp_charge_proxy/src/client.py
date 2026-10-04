@@ -864,6 +864,46 @@ class ChargePoint(BaseChargePoint):
     async def send_status(self) -> None:
         await self._send_status_for_connector(self.connector_id)
 
+    DEBUG_STATUSES = ("Available", "Preparing", "Charging", "SuspendedEV", "SuspendedEVSE",
+                      "Finishing", "Unavailable", "Faulted")
+
+    async def debug_send(self, message: str, status: Optional[str] = None) -> dict:
+        """Diagnostics › Debug: send a message now, as the charger. A status
+        sent here doesn't change the charger's own state: its next real change
+        is sent as usual. Faulted goes with error code OtherError."""
+        if not self.is_online:
+            raise ValueError("Not connected to the supplier's server")
+        response = None
+        try:
+            if message == "StatusNotification":
+                if status not in self.DEBUG_STATUSES:
+                    raise ValueError("Pick a status: " + ", ".join(self.DEBUG_STATUSES))
+                st = ChargePointStatus(status)
+                response = await self.call(call.StatusNotificationPayload(
+                    connector_id=self.connector_id,
+                    error_code=(ChargePointErrorCode.other_error if status == "Faulted"
+                                else ChargePointErrorCode.no_error),
+                    status=st,
+                    timestamp=_now_iso(),
+                ))
+            elif message == "MeterValues":
+                await self.send_meter_values()
+            elif message == "Heartbeat":
+                response = await self.call(call.HeartbeatPayload())
+            elif message == "BootNotification":
+                if self._boot_request is None:
+                    raise ValueError("No BootNotification has been sent yet")
+                response = await self.call(self._boot_request)
+            else:
+                raise ValueError("Message must be StatusNotification, MeterValues, Heartbeat or BootNotification")
+        except ValueError:
+            raise
+        except Exception as err:
+            raise ValueError(f"{message} not sent: {err or type(err).__name__}")
+        logger.info("Debug: sent %s%s from the web page", message,
+                    f" ({status})" if message == "StatusNotification" else "")
+        return {"message": message, "response": _payload_to_dict(response) if response is not None else None}
+
     async def send_status_unavailable(self) -> None:
         await self._send_status_for_connector(
             self.connector_id, ChargePointStatus.unavailable,
