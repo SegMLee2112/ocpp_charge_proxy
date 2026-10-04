@@ -213,8 +213,12 @@
   .week .track .seg.ghost { opacity: .45; pointer-events: none; }
   .week .track.past { cursor: default; }
   .week .track.past .seg { opacity: .45; cursor: default; }
+  .week .track.past .seg[data-ses] { cursor: pointer; }
   .week .dl.past { opacity: .7; }
-  .week .ses { position: absolute; bottom: 0; height: 4px; background: var(--ok); border-radius: 2px; pointer-events: none; }
+  .week .ses { position: absolute; bottom: 0; height: 6px; background: var(--ok); border-radius: 3px; cursor: pointer; z-index: 2; }
+  .week .ses:hover { height: 9px; }
+  tr.srow.flash > td { animation: flash 2s ease-out; }
+  @keyframes flash { from { background: color-mix(in srgb, var(--ok) 25%, transparent); } to { background: transparent; } }
   .week .sep { grid-column: 1 / -1; border-top: 1px dashed var(--divider); margin: 2px 0; }
   .week .track .seg.once { background-image: linear-gradient(90deg, transparent 0 calc(100% - 3px), rgba(255,255,255,.55) calc(100% - 3px)); }
   .week .tick { position: absolute; top: -3px; bottom: -3px; width: 12px; margin-left: -6px; cursor: pointer;
@@ -1344,6 +1348,11 @@ async function refreshSessions() {
   $('s-filter').innerHTML = sessDay
     ? `<span class="chip info" style="margin-right:8px">${new Date(sessDay + 'T12:00:00').toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})} <a href="#" id="s-filter-clear" style="margin-left:4px">Show all</a></span>` : '';
   $('s-rows').innerHTML = rows.join('') || `<tr><td colspan="5" class="empty">${sessDay ? 'No sessions kept for this day.' : 'No sessions yet. They appear here once your provider starts one.'}</td></tr>`;
+  if (sessionsFocus) {
+    const row = [...document.querySelectorAll('#s-rows tr.srow')].find((r) => r.dataset.key === sessionsFocus);
+    sessionsFocus = null;
+    if (row) { row.scrollIntoView({block: 'center', behavior: 'smooth'}); row.classList.add('flash'); }
+  }
   const total = h.reduce((a, s) => a + (s.energy_kwh || 0), 0);
   let week = h.filter((s) => Date.now() - new Date(s.start) < 7 * 86400e3).reduce((a, s) => a + (s.energy_kwh || 0), 0);
   try {
@@ -1361,6 +1370,14 @@ async function refreshSessions() {
   ].map(([l, v]) => `<div class="card"><div class="label">${l}</div><div class="big">${v}</div></div>`).join('');
 }
 const sessionsOpen = new Set();
+let sessionsFocus = null;  // a session to scroll to (opened from the schedule)
+function openSession(x) {
+  if (!x) return;
+  sessDay = new Date(x.start).toLocaleDateString('en-CA');
+  sessionsOpen.add(x.start);
+  sessionsFocus = x.start;
+  showTab('sessions');
+}
 $('s-rows').addEventListener('click', (ev) => {
   const tr = ev.target.closest('tr.srow'); if (!tr) return;
   const k = tr.dataset.key;
@@ -2031,7 +2048,10 @@ function drawWeek() {
   $('w-types').innerHTML = Object.entries(TYPE).filter(([k]) => seen.has(k))
     .map(([, [c, label]]) => `<span><b class="band" style="background:${c};opacity:.8"></b>${label}</span>`).join('');
   // What actually charged (sessions), for the last 3 days and today
-  const ses = (week.sessions || []).map((x) => [(new Date(x.start) - day0) / 60000, ((x.stop ? new Date(x.stop) : new Date()) - day0) / 60000]);
+  // Sessions: hover for the details, click to open it on the Sessions tab
+  const ses = (week.sessions || []).map((x, n) => ({a: (new Date(x.start) - day0) / 60000, b: ((x.stop ? new Date(x.stop) : new Date()) - day0) / 60000, n, x}));
+  const sesText = (x) => `Charged ${dateTime(x.start)}–${x.stop ? hm(x.stop) : 'now'} · ${num(x.energy_kwh, 2)} kWh · ${dur(x.duration_s)}`
+    + (x.peak_power_kw != null ? ` · peak ${num(x.peak_power_kw, 1)} kW` : '') + (x.stop ? ` · ended by ${reasonText(x.reason)}` : ' (charging now)');
   for (let d = -3; d < 7; d++) {
     const lo = d * DAY_MIN, hi = lo + DAY_MIN;
     const span = (a, b) => ({x0: (Math.max(a, lo) - lo) / 14.4, x1: (Math.min(b, hi) - lo) / 14.4});
@@ -2041,11 +2061,13 @@ function drawWeek() {
       const red = !o.skipped && plan.bad.some(([x, y]) => x < o.b && y > o.a);
       const picked = ed && ed.mode === 'slot' && ed.k === k;
       const who = s.source === 'charge_now' ? ' (Charge now)' : s.source === 'auto_plug' ? ' (auto plug-in)' : s.kind === 'once' ? ' (once)' : '';
+      const got = ses.filter((z) => z.a < o.b && z.b > o.a);
       const title = `${dayLabel(d)} ${hhmm(Math.max(o.a, lo) - lo)}–${hhmm(Math.min(o.b, hi) - lo)}${who}`
-        + (o.skipped ? ' (skipped)' : !s.enabled ? ' (off)' : red ? ' (over Octopus\'s 6 hours a day)' : '');
+        + (o.skipped ? ' (skipped)' : !s.enabled ? ' (off)' : red ? ' (over Octopus\'s 6 hours a day)' : '')
+        + (got.length ? '\n' + got.map((z) => sesText(z.x)).join('\n') : '');
       const ty = typeOf(s);
       return `<div class="seg ${o.skipped ? 'skip' : ''} ${!on || !s.enabled ? 'off' : ''} ${linked ? 'linked' : ''} ${picked ? 'picked' : ''}"
-        data-occ="${k}" data-row="${d}" style="${red ? 'background:var(--err);' : ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}"></div>`;
+        data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${red ? 'background:var(--err);' : ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}"></div>`;
     }).join('');
     const ticks = model.orphans.map((o, j) => [o, j]).filter(([o]) => o.date ? dayIndex(o.date) === d : o.days.includes(wdOf(isoAt(d))))
       .map(([o, j]) => `<div class="tick ${!on || !o.u.enabled ? 'off' : ''}" data-orphan="${j}" data-row="${d}" style="left:${tmin(o.u.time) / 14.4}%"
@@ -2055,9 +2077,9 @@ function drawWeek() {
         const {x0, x1} = span(a, b);
         return `<div class="sup" style="border-color:${supColor};left:${x0}%;width:${x1 - x0}%" title="Planned by ${esc(sc.provider)}: ${hhmm(Math.max(a, lo) - lo)}–${hhmm(Math.min(b, hi) - lo)}"></div>`;
       }).join('');
-    const charged = d > 0 ? '' : ses.filter(([a, b]) => b > lo && a < hi).map(([a, b]) => {
-      const {x0, x1} = span(a, b);
-      return `<div class="ses" style="left:${x0}%;width:${Math.max(0.3, x1 - x0)}%"></div>`;
+    const charged = d > 0 ? '' : ses.filter((z) => z.b > lo && z.a < hi).map((z) => {
+      const {x0, x1} = span(z.a, z.b);
+      return `<div class="ses" data-ses="${z.n}" style="left:${x0}%;width:${Math.max(0.3, x1 - x0)}%" title="${esc(sesText(z.x))} · click to open it"></div>`;
     }).join('');
     if (d === 0) html += '<div class="sep"></div>';
     html += `<div class="dl ${d === 0 ? 'today' : d < 0 ? 'past' : ''}">${d === 0 ? 'Today' : dayLabel(d)}</div><div class="track ${d < 0 ? 'past' : ''}" data-row="${d}">${bars}${ticks}${sup}${charged}${d === 0 ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
@@ -2234,6 +2256,9 @@ $('w-grid').addEventListener('click', async (ev) => {
     ed.form.days = ed.form.days.includes(d) ? ed.form.days.filter((x) => x !== d) : [...ed.form.days, d];
     drawEditor(); return;
   }
+  // A session (the green line, or a past slot it charged in): open it on the Sessions tab
+  const sesEl = t.closest('.ses[data-ses]') || (t.closest('.track.past') && t.closest('.seg[data-ses]'));
+  if (sesEl) { openSession(week.sessions[Number(sesEl.dataset.ses)]); return; }
   if (t.closest('.track.past')) return;  // the last 3 days: history only
   const seg = t.closest('.seg[data-occ]');
   if (seg) {
@@ -2261,7 +2286,7 @@ $('w-add').addEventListener('click', () => {
 const wdrag = {on: false};
 $('w-grid').addEventListener('pointerdown', (ev) => {
   const track = ev.target.closest('.track');
-  if (!track || track.classList.contains('past') || ev.target.closest('.seg, .tick') || ev.button !== 0) return;
+  if (!track || track.classList.contains('past') || ev.target.closest('.seg, .tick, .ses') || ev.button !== 0) return;
   const rect = track.getBoundingClientRect();
   Object.assign(wdrag, {on: true, track, rect, x0: ev.clientX, x1: ev.clientX, row: Number(track.dataset.row)});
   track.setPointerCapture(ev.pointerId);

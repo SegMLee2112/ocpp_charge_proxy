@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.17.0 — Sessions on the schedule
+
+- **Feature:** on the schedule's week view, hover over the green "Charged"
+  line (or a past slot) to see that session: when, energy, how long, peak
+  power and what ended it
+- **Feature:** click it to open that session on the Sessions tab: the day
+  is filtered, the session's details are open and it's highlighted
+
 ## 2.16.4 — Charge now card
 
 - **Improvement:** Charge now has its own card, first on the Settings tab
