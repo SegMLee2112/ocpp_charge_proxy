@@ -519,6 +519,10 @@
           <div class="grow"><div>Max current</div><div class="note" style="margin:0"><span class="supn" data-f="Your supplier">Your supplier</span> can lower it, not raise it</div></div>
         </div>
         <div class="row" style="margin-top:6px"><div class="seg" id="c-amps" role="group" aria-label="Max current"></div></div>
+        <div class="row">
+          <div class="grow"><div>Continue session after a restart</div><div class="note" style="margin:0">Keeps a charging session going when the add-on restarts. <details class="more"><summary>More</summary><div>E.g. for an update: the session is left open and carried on when the add-on is back (within 10 minutes, still plugged in), as a charger does after losing its connection, instead of being ended. If your supplier starts a new session instead, the old one is closed first.</div></details></div></div>
+          <label class="switch"><input type="checkbox" id="c-resume" aria-label="Continue session after a restart"><span></span></label>
+        </div>
       </div>
       <div class="card">
         <h2>Simulated car</h2>
@@ -596,7 +600,7 @@
           <button class="btn small" id="d-drop">Drop</button></span>
       </div>
       <div class="row">
-        <div class="grow">Restart the add-on<div class="note" style="margin:0">A real restart. <details class="more"><summary>More</summary><div>Asks Home Assistant to restart the add-on. During a session, it carries on after the restart if the continue_session_on_restart option is on (as it is by default).</div></details></div></div>
+        <div class="grow">Restart the add-on<div class="note" style="margin:0">A real restart. <details class="more"><summary>More</summary><div>Asks Home Assistant to restart the add-on. During a session, it carries on after the restart if Continue session after a restart is on (Settings › Controls, on by default).</div></details></div></div>
         <button class="btn small" id="d-restart">Restart</button>
       </div>
     </div>
@@ -610,7 +614,7 @@
     <div class="card">
       <h2>Logs<span class="spacer"></span><button class="btn small" id="d-log-refresh">Refresh</button></h2>
       <div class="row" style="margin-top:0">
-        <div class="grow">Log level<div class="note" style="margin:0" id="d-level-note">Until the add-on restarts</div></div>
+        <div class="grow">Log level<div class="note" style="margin:0" id="d-level-note">Saved: kept after a restart. <details class="more"><summary>More</summary><div>OCPP messages are logged at Info, except Heartbeats and periodic meter readings, which only show at Debug. Clock-aligned readings stay at Info during a session.</div></details></div></div>
         <div class="seg" id="d-level" role="group" aria-label="Log level"><button data-level="debug">Debug</button><button data-level="info">Info</button><button data-level="warning">Warning</button></div>
       </div>
       <pre class="logs" id="d-logs">Loading…</pre>
@@ -2464,8 +2468,6 @@ async function refreshDebug() {
   let i;
   try { i = await api('debug/info?lines=300'); } catch (e) { $('d-logs').textContent = 'Couldn\'t read the logs: ' + e.message; return; }
   $('d-level').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.level === i.log_level));
-  $('d-level-note').textContent = i.log_level === i.default_log_level ? 'Until the add-on restarts'
-    : `Until the add-on restarts (then back to ${i.default_log_level})`;
   const pre = $('d-logs'), atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8;
   pre.textContent = (i.logs || []).join('\n') || 'No log lines yet.';
   if (atEnd) pre.scrollTop = pre.scrollHeight;
@@ -2489,6 +2491,15 @@ $('d-drop').addEventListener('click', async () => {
   if (!(s >= 0 && s <= 600)) { toast('Seconds: 0–600'); return; }
   if (await post('debug/drop', {seconds: s})) toast(`Connection dropped: reconnecting in ${Math.max(5, Math.round(s))} s`);
 });
+// Continue session after a restart (Settings › Controls)
+async function refreshAppSettings() {
+  try { const s = await api('settings'); $('c-resume').checked = !!s.continue_session; } catch (e) { /* stays as it was */ }
+}
+$('c-resume').addEventListener('change', async (e) => {
+  const on = e.target.checked;
+  if (await post('settings', {continue_session: on})) toast(on ? 'A session carries on after a restart' : 'A restart ends the session');
+  else e.target.checked = !on;
+});
 // Two clicks for anything that can't be undone
 function confirmClick(btn, run) {
   const label = btn.textContent;
@@ -2508,7 +2519,7 @@ confirmClick($('d-clear-sessions'), async () => { if (await post('debug/clear', 
 confirmClick($('d-clear-messages'), async () => { if (await post('debug/clear', {what: 'messages'})) { msgs.list = []; toast('Message log cleared'); } });
 $('d-level').addEventListener('click', async (e) => {
   const level = e.target.dataset.level; if (!level) return;
-  if (await post('debug/log_level', {level})) { toast(`Log level: ${level} until the add-on restarts`); refreshDebug(); }
+  if (await post('debug/log_level', {level})) { toast(`Log level: ${level}`); refreshDebug(); }
 });
 $('d-log-refresh').addEventListener('click', () => refreshDebug());
 $('d-guards').addEventListener('change', async (e) => {
@@ -2522,7 +2533,7 @@ $('d-guards').addEventListener('change', async (e) => {
 $('d-bundle').addEventListener('click', async () => {
   const btn = $('d-bundle'); btn.disabled = true;
   const parts = {state: 'state', schedule: 'automation', supplier_plan: 'smart_charging', sessions: 'sessions',
-    health: 'health', supplier_settings: 'provider', messages: 'messages', debug: 'debug/info?lines=500'};
+    health: 'health', supplier_settings: 'provider', messages: 'messages', settings: 'settings', debug: 'debug/info?lines=500'};
   const out = {generated: new Date().toISOString()};
   for (const [k, p] of Object.entries(parts)) { try { out[k] = await api(p); } catch (e) { out[k] = {error: e.message}; } }
   const mask = (v) => { const t = String(v || ''); return t.length > 4 ? '…' + t.slice(-4) : (t ? '***' : ''); };
@@ -2569,7 +2580,7 @@ function refreshTab(full) {
   else if (activeTab === 'messages') refreshMessages();
   else if (activeTab === 'debug') { refreshSmart(false); refreshDebug(); }  // the supplier's name; logs
   else if (activeTab === 'automation') { refreshAutomation(false); refreshSimulation(false); }
-  else if (activeTab === 'settings') { refreshAutomation(false); refreshSimulation(false); refreshSmart(false); }
+  else if (activeTab === 'settings') { refreshAutomation(false); refreshSimulation(false); refreshSmart(false); if (full) refreshAppSettings(); }
   else if (activeTab === 'health') { refreshHealth(); refreshSimulation(false); refreshProvider(); }
 }
 setInterval(() => {

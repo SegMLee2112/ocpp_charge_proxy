@@ -1,7 +1,7 @@
 """Diagnostics › Debug on the web page: tools for testing and bug reports.
 
-- Recent log lines (LogBuffer, on the root logger) and the log level, which
-  can be changed until the add-on restarts
+- Recent log lines (LogBuffer, on the root logger) and the log level (saved
+  in src/app_settings.py)
 - The add-on's settings for a diagnostics bundle, with the password and
   most of the charge point ID hidden
 - Clearing the session history or the message log
@@ -66,12 +66,13 @@ class DebugTools:
                  drop: Optional[Callable[[float], Awaitable[dict]]] = None,
                  restart: Optional[Callable[[], Awaitable[dict]]] = None,
                  config=None, log_buffer: Optional[LogBuffer] = None,
-                 sessions=None, messages=None) -> None:
+                 sessions=None, messages=None, settings=None) -> None:
         self._send, self._drop, self._restart = send, drop, restart
         self._config = config
         self._log_buffer = log_buffer
         self._sessions = sessions  # src.gui_data.SessionLog
         self._messages = messages  # src.gui_data.MessageLog
+        self._settings = settings  # src.app_settings.AppSettings: the log level is saved there
 
     # --- logs ------------------------------------------------------------
 
@@ -84,7 +85,6 @@ class DebugTools:
         lines = max(0, min(int(lines), LOG_LINES))
         return {
             "log_level": self.log_level(),
-            "default_log_level": str(getattr(self._config, "log_level", "info")).lower(),
             "config": redacted_config(self._config),
             "logs": logs[-lines:] if lines else [],
         }
@@ -93,8 +93,11 @@ class DebugTools:
         level = str(level or "").lower()
         if level not in LEVELS:
             raise ValueError("Log level must be one of: " + ", ".join(LEVELS))
-        logging.getLogger().setLevel(getattr(logging, level.upper()))
-        logger.warning("Log level set to %s from the web page (until the add-on restarts)", level)
+        if self._settings is not None:
+            self._settings.update({"log_level": level})  # saved, and applied by its on_change
+        else:
+            logging.getLogger().setLevel(getattr(logging, level.upper()))
+        logger.warning("Log level set to %s from the web page", level)
         return {"log_level": level}
 
     # --- data ------------------------------------------------------------

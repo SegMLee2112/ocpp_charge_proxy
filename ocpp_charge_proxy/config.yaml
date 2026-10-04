@@ -1,6 +1,6 @@
 name: "OCPP Charge Proxy"
 description: "Virtual OCPP 1.6 chargepoint for smart tariff suppliers"
-version: "2.21.0"
+version: "2.22.0"
 slug: "ocpp_charge_proxy"
 url: "https://github.com/thewhale21/ocpp_charge_proxy"
 arch:
@@ -26,10 +26,7 @@ options:
   charger_vendor: "Wall Box Chargers"
   charger_serial: ""
   firmware_version: "6.11.16"
-  current_amps: 32
   initial_energy_wh: 0
-  log_level: "info"
-  continue_session_on_restart: true
 schema:
   server_hostname: str
   chargepoint_id: str
@@ -38,7 +35,4 @@ schema:
   charger_vendor: str
   charger_serial: str?
   firmware_version: str
-  current_amps: "int(6,32)"
   initial_energy_wh: "int(0,)?"
-  log_level: list(debug|info|warning|error)
-  continue_session_on_restart: bool?

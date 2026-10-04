@@ -31,10 +31,14 @@ updates its state so Home Assistant automations can respond.
 | `charger_vendor` | `Wall Box Chargers` | Charger vendor reported in BootNotification |
 | `charger_serial` | Auto-generated | Charger serial number (generated on first boot if empty) |
 | `firmware_version` | `6.11.16` | Firmware version reported in BootNotification |
-| `current_amps` | `32` | Maximum charging current in amps (6/10/13/16/20/25/32). Starting value: once you change Max current on the add-on's web page that's remembered, until you change this option again |
 | `initial_energy_wh` | `0` | Seed the energy register (Wh). Set to your old charger's meter reading when migrating. Only applied if higher than the stored register (the meter never goes backwards); cleared after first boot. |
-| `continue_session_on_restart` | `true` | Carry a charging session on across an add-on restart (e.g. an update) instead of ending it; see [While offline](#while-offline) |
-| `log_level` | `info` | Logging level (debug/info/warning/error). OCPP messages are logged at `info`, except Heartbeats and periodic meter readings (in a session or not), which only show at `debug`. Clock-aligned readings stay at `info` during a session (outside one, they're `debug` too) |
+
+The max current and **Continue session after a restart** are set on the web
+page's Settings tab (Controls), and the log level on Diagnostics › Debug.
+They used to be add-on options; they're kept across restarts and updates.
+OCPP messages are logged at `info`, except Heartbeats and periodic meter
+readings (in a session or not), which only show at `debug`. Clock-aligned
+readings stay at `info` during a session (outside one, they're `debug` too).
 
 ### Controlling your charger
 
@@ -209,7 +213,7 @@ interruption.
 
 When the add-on is restarted mid-charge (an update, a restart from Home
 Assistant), it leaves the session open by default
-(`continue_session_on_restart`): no StopTransaction or Unavailable, just
+(**Continue session after a restart**, Settings › Controls): no StopTransaction or Unavailable, just
 the connection closing, as when a charger loses its connection. When it's
 back (within 10 minutes, with Plugged In still on) it reports Charging and
 carries on with the same transaction, energy and charging profile.
@@ -297,7 +301,8 @@ follows your Home Assistant theme.
 - **Schedule:** the plug-in schedule (see below), with a week view of when
   it has the car plugged in; Force schedule on supplier; auto plug-in and
   auto re-plug.
-- **Settings:** Charge now; controls for Plugged In and max current; the
+- **Settings:** Charge now; controls for Plugged In, max current and
+  continuing a session after a restart; the
   simulated car's start delay and ramp-up; and your power, SoC and car
   plugged in sensors, with their live values.
 - **Diagnostics**, in three parts:
@@ -316,12 +321,12 @@ follows your Home Assistant theme.
     - **Drop the connection** for a number of seconds (charging carries on
       and transaction messages are held, as on a real dropout), or
       **restart the add-on** (through the Supervisor; a session carries on
-      after it with `continue_session_on_restart`).
+      after it with Continue session after a restart on).
     - **Scheduling guards** (off by default): override them to let the
       schedule, auto plug-in and Charge now plug in for more than Octopus's
       6 hours a day while Force schedule on supplier is on.
     - **Logs:** the last few hundred log lines, and the log level (Debug,
-      Info, Warning) until the add-on restarts.
+      Info, Warning), kept across restarts.
     - **Diagnostics bundle:** one JSON file with the state, schedule,
       sessions, supplier's plan and settings, health, recent messages, log
       lines and options (password and most of the charge point ID hidden).

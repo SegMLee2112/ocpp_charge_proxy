@@ -30,6 +30,7 @@ def create_api_app(
     ha_link=None,
     on_charge_now: Callable[[float], Awaitable[dict]] | None = None,
     debug=None,
+    app_settings=None,
 ) -> web.Application:
     app = web.Application()
     app["shared_state"] = shared_state
@@ -46,6 +47,7 @@ def create_api_app(
     app["on_set_ramp"] = on_set_ramp
     app["on_charge_now"] = on_charge_now
     app["debug"] = debug  # src.debug_tools.DebugTools, or None
+    app["app_settings"] = app_settings  # src.app_settings.AppSettings, or None
     # Open /api/events streams (web pages)
     app["event_clients"] = {"gui": 0}
     app.on_shutdown.append(_close_event_streams)
@@ -80,6 +82,9 @@ def create_api_app(
     app.router.add_post("/api/sensors", handle_set_sensors)
     app.router.add_get("/api/sensors/entities", handle_sensor_entities)
     app.router.add_get("/api/smart_charging", handle_smart_charging)
+    # Settings made on the web page (log level, continue session)
+    app.router.add_get("/api/settings", handle_get_settings)
+    app.router.add_post("/api/settings", handle_set_settings)
     # Diagnostics › Debug
     app.router.add_get("/api/debug/info", handle_debug_info)
     app.router.add_post("/api/debug/send", handle_debug_send)
@@ -493,6 +498,28 @@ async def handle_sensor_entities(request: web.Request) -> web.Response:
     return web.json_response({"entities": entities, "available": link.available}, dumps=_dumps)
 
 
+# --- Settings made on the web page (src/app_settings.py) ----------------------
+
+
+async def handle_get_settings(request: web.Request) -> web.Response:
+    settings = request.app["app_settings"]
+    if settings is None:
+        return _gui_unavailable()
+    return web.json_response(dict(settings.data))
+
+
+async def handle_set_settings(request: web.Request) -> web.Response:
+    """Any of {"log_level": "debug"|"info"|"warning"|"error", "continue_session": bool}."""
+    settings = request.app["app_settings"]
+    if settings is None:
+        return _gui_unavailable()
+    try:
+        out = settings.update(await request.json())
+    except (ValueError, TypeError, json.JSONDecodeError) as err:
+        return web.json_response({"status": "error", "message": str(err)}, status=400)
+    return web.json_response({"status": "ok", **out})
+
+
 # --- Diagnostics › Debug (src/debug_tools.py) ---------------------------------
 
 
@@ -535,7 +562,7 @@ async def handle_debug_restart(request: web.Request) -> web.Response:
 
 
 async def handle_debug_log_level(request: web.Request) -> web.Response:
-    """{"level": "debug"|"info"|"warning"|"error"}, until the add-on restarts."""
+    """{"level": "debug"|"info"|"warning"|"error"}, saved (src/app_settings.py)."""
     return await _debug_call(request, lambda d, b: d.set_log_level(b.get("level")))
 
 

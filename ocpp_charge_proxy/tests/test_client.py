@@ -1233,20 +1233,14 @@ def test_invalid_ha_current_rejected(mock_connection, mock_persistence):
 
 
 def test_ha_max_current_remembered_across_restart(tmp_path):
-    from types import SimpleNamespace
     from src.persistence import Persistence
     from src.config import starting_current_amps as _starting_current
     persistence = Persistence(data_dir=str(tmp_path))
-    config = SimpleNamespace(current_amps=32)
-    assert _starting_current(config, persistence) == 32  # fresh install: add-on option
+    assert _starting_current(persistence) == 32  # fresh install
 
-    cp = ChargePoint(id="CP", connection=None, persistence=persistence,
-                     current_amps=32, current_amps_option=32)
+    cp = ChargePoint(id="CP", connection=None, persistence=persistence, current_amps=32)
     cp.set_max_current(16)
-    assert _starting_current(config, persistence) == 16  # restart: HA setting kept
-
-    # Changing the add-on option is an explicit choice and takes over again
-    assert _starting_current(SimpleNamespace(current_amps=20), persistence) == 20
+    assert _starting_current(persistence) == 16  # restart: the setting is kept
 
 
 # --- 0.9.7: Power Source reflects the configuration, charging or not ---

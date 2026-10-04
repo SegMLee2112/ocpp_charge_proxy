@@ -132,6 +132,14 @@ class Persistence:
     def save_current_setting(self, setting: dict) -> None:
         self._write(_CURRENT_FILE, "current", setting)
 
+    def load_app_settings(self) -> dict:
+        """Settings made on the web page (src/app_settings.py)."""
+        settings = self._read("settings.json", "settings", {})
+        return settings if isinstance(settings, dict) else {}
+
+    def save_app_settings(self, settings: dict) -> None:
+        self._write("settings.json", "settings", settings)
+
     def load_ramp_setting(self) -> dict | None:
         """Start delay / ramp-up set on the web page: {"start_delay_s", "ramp_up_s"}."""
         setting = self._read(_RAMP_FILE, "ramp", None)

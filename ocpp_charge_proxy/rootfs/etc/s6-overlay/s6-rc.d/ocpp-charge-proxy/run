@@ -12,10 +12,7 @@ export IO_CHARGER_MODEL=$(bashio::config 'charger_model')
 export IO_CHARGER_VENDOR=$(bashio::config 'charger_vendor')
 export IO_CHARGER_SERIAL=$(bashio::config 'charger_serial')
 export IO_FIRMWARE_VERSION=$(bashio::config 'firmware_version')
-export IO_CURRENT_AMPS=$(bashio::config 'current_amps')
 export IO_INITIAL_ENERGY_WH=$(bashio::config 'initial_energy_wh')
-export IO_LOG_LEVEL=$(bashio::config 'log_level')
-export IO_CONTINUE_SESSION=$(bashio::config 'continue_session_on_restart')
 
 # Auto-generate serial number if empty, write back to config
 if [ -z "${IO_CHARGER_SERIAL}" ]; then

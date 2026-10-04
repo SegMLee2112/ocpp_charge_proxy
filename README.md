@@ -134,7 +134,8 @@ sensors live through Home Assistant's API.
     view of the next 7 days where you click or drag to add a slot and click
     one to change, delete or skip it;
     auto plug-in and auto re-plug.
-  - **Settings:** Charge now; controls for Plugged In and max current; the
+  - **Settings:** Charge now; controls for Plugged In, max current and
+    continuing a session after a restart; the
     simulated car's start delay and ramp-up; and your power, SoC and car
     plugged in sensors, with live values.
   - **Diagnostics:** **Health** (version, uptime, reconnects and the last

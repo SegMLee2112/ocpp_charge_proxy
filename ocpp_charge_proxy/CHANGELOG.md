@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.22.0 — Settings on the web page
+
+- **Change:** the **Charger Current**, **Log Level** and **Continue the
+  session after a restart** add-on options are gone. Set them on the web
+  page instead: Max current and the new **Continue session after a
+  restart** switch in Settings › Controls, the log level in Diagnostics ›
+  Debug. All are kept across restarts and updates
+- **Change:** the max current is whatever you last set (on the page or in
+  Home Assistant), 32 A to start with. Continue session starts on and the
+  log level at Info; if you'd changed those options, set them again on the
+  page
+
 ## 2.21.0 — Debug tools
 
 - **Feature:** Diagnostics › Debug: **Send a message** now as the charger

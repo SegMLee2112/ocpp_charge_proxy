@@ -9,7 +9,7 @@ from src.gui_data import MessageLog, SessionLog
 def _config(**kw):
     base = dict(server_hostname="ocpp.example.com", chargepoint_id="ABCDEF123456", password="secret",
                 charger_model="m", charger_vendor="v", charger_serial="", firmware_version="1",
-                current_amps=32, initial_energy_wh=0, log_level="info")
+                initial_energy_wh=0)
     base.update(kw)
     return Config(**base)
 

@@ -13,6 +13,7 @@ from aiohttp import web
 from src.api import create_api_app
 from src.client import ChargePoint
 from src.debug_tools import DebugTools, install_log_buffer
+from src.app_settings import AppSettings
 from src.config import load_config, starting_current_amps
 from src.gui_data import GuiSources, Health, PowerHistory, remove_old_history_files, sample_loop
 from src.ha_history import ChartHistory
@@ -78,7 +79,13 @@ async def _cancel_all(tasks) -> None:
 async def run() -> None:
     config = load_config()
 
-    log_level = getattr(logging, config.log_level.upper(), logging.INFO)
+    data_dir = os.environ.get("IO_DATA_DIR", "/data")
+    os.makedirs(data_dir, exist_ok=True)
+    persistence = Persistence(data_dir=data_dir)
+    # Log level and continue session: set on the web page, no longer add-on options
+    app_settings = AppSettings(persistence)
+
+    log_level = getattr(logging, app_settings.log_level.upper(), logging.INFO)
     log_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 
     logging.basicConfig(
@@ -89,12 +96,7 @@ async def run() -> None:
     log_filters.install()  # Heartbeat and periodic MeterValues lines at DEBUG, not INFO
     log_buffer = install_log_buffer(log_format)  # recent lines for Diagnostics › Debug
 
-    data_dir = os.environ.get("IO_DATA_DIR", "/data")
-    os.makedirs(data_dir, exist_ok=True)
-
     logger.info("Starting OCPP Charge Proxy, connecting to %s", config.redacted_url)
-
-    persistence = Persistence(data_dir=data_dir)
 
     # Seed energy register if initial_energy_wh is set (cleared by s6 run script)
     if config.initial_energy_wh > 0:
@@ -192,9 +194,8 @@ async def run() -> None:
         id=config.chargepoint_id,
         connection=None,
         persistence=persistence,
-        current_amps=starting_current_amps(config, persistence),
-        current_amps_option=config.current_amps,
-        resume_on_restart=config.continue_session,
+        current_amps=starting_current_amps(persistence),
+        resume_on_restart=app_settings.continue_session,
         shared_state=shared_state,
         start_delay_s=DEFAULT_START_DELAY_S,  # until set on the Settings tab
         ramp_up_s=DEFAULT_RAMP_UP_S,
@@ -314,8 +315,17 @@ async def run() -> None:
         task.add_done_callback(debug_tasks.discard)
         return {"restarting": True}
 
+    def on_settings_change(changes: dict) -> None:
+        if "log_level" in changes:
+            app_settings.apply_log_level()
+        if "continue_session" in changes:
+            cp.resume_on_restart = changes["continue_session"]
+            logger.info("Continue the session after a restart: %s", "on" if changes["continue_session"] else "off")
+
+    app_settings.on_change = on_settings_change
     debug = DebugTools(send=cp.debug_send, drop=debug_drop, restart=debug_restart, config=config,
-                       log_buffer=log_buffer, sessions=cp.sessions, messages=cp.message_log)
+                       log_buffer=log_buffer, sessions=cp.sessions, messages=cp.message_log,
+                       settings=app_settings)
 
     charger_tasks = [
         asyncio.create_task(supplier_marks_loop()),
@@ -345,6 +355,7 @@ async def run() -> None:
         on_set_ramp=cp.set_ramp,
         on_charge_now=charge_now,
         debug=debug,
+        app_settings=app_settings,
     )
     runner = web.AppRunner(api_app)
     await runner.setup()
