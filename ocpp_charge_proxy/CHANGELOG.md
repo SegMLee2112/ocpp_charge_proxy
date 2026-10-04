@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.18.0 — Supplier slots on sessions
+
+- **Feature:** Sessions tab: each session is tagged **Supplier slot** when
+  it ran wholly inside your supplier's dispatch slots, or **Partly supplier
+  slot** (hover for how much) when only part of it did. Checked against the
+  dispatch sensor while it lists the slot, and kept with the session
+- **Docs:** fixed a repeated phrase in auto plug-in's More text
+
 ## 2.17.1 — Smaller slot editor
 
 - **Improvement:** the slot editor in the week view is much shorter: times,

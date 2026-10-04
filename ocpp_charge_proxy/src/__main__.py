@@ -256,7 +256,20 @@ async def run() -> None:
         return await plan_charge(hours, CHARGE_NOW_SOURCE)
 
     ha_link.on_auto_plug = on_auto_plug
+
+    async def supplier_marks_loop() -> None:
+        """Mark how much of each session was in the supplier's dispatch slots."""
+        while True:
+            try:
+                sc = ha_link.smart_charging()
+                if sc.get("found"):
+                    cp.sessions.mark_supplier(sc.get("periods") or [], sc.get("provider"))
+            except Exception:
+                logger.debug("Could not mark sessions against the supplier's slots", exc_info=True)
+            await asyncio.sleep(60)
+
     charger_tasks = [
+        asyncio.create_task(supplier_marks_loop()),
         asyncio.create_task(cp.meter_values_loop()),
         asyncio.create_task(cp.clock_aligned_loop()),
         asyncio.create_task(sample_loop(

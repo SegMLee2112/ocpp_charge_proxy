@@ -462,7 +462,7 @@
         <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_plug_entity" data-domain="sensor" data-class="battery" data-units="%" data-none="Reporting SoC sensor"></span></div>
         <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
           <div class="grow">Automatically adjust schedule to fit auto plug-in
-            <div class="note" style="margin:0">Adds the charge to the schedule and sets your supplier's ready time. <details class="more"><summary>More</summary><div>As a one-off that unplugs when it's done; the ready time is set to that unplug. and set your supplier's ready time to that unplug. If it meets a scheduled slot they become one.
+            <div class="note" style="margin:0">Adds the charge to the schedule and sets your supplier's ready time. <details class="more"><summary>More</summary><div>As a one-off that unplugs when it's done; the ready time is set to that unplug. If it meets a scheduled slot they become one.
               <br><b>Octopus Energy:</b> unplugs after the hours below (rounded up to the half hour); with Force schedule on supplier on,
               if that takes the day over 6 hours, the next scheduled slot starts that much later.
               <br><b>EDF Energy:</b> ready times can only be 04:00–11:00, so it unplugs at the first of those after the hours below
@@ -1325,6 +1325,14 @@ async function refreshSessions() {
     const r = runs.find((x) => new Date(x.start) <= t && t <= new Date(x.end));
     return !r ? '' : ` <span class="chip info">${{auto_plug: 'Auto plug-in', charge_now: 'Charge now'}[r.source] || 'One-off'}</span>`;
   };
+  // Was the session inside the supplier's dispatch slots? (5 minutes' leeway)
+  const supTag = (s) => {
+    if (!s.supplier_s || s.supplier_s < 60 || !s.duration_s) return '';
+    const who = esc(s.supplier || 'your supplier');
+    return s.duration_s - s.supplier_s <= 300
+      ? ` <span class="chip ok" title="The whole session was in ${who}'s dispatch slots">Supplier slot</span>`
+      : ` <span class="chip warn" title="${dur(s.supplier_s)} of ${dur(s.duration_s)} was in ${who}'s dispatch slots">Partly supplier slot</span>`;
+  };
   const onDay = (iso) => !sessDay || (iso && new Date(iso).toLocaleDateString('en-CA') === sessDay);
   const all = (sessionsData.history || []).filter((x) => onDay(x.start));
   const h = all.filter((s) => s.type !== 'no_session');
@@ -1333,7 +1341,7 @@ async function refreshSessions() {
   const by = (src) => src ? ` <span class="muted">· plugged in by ${esc(src)}</span>` : '';
   if (sessionsData.current && onDay(sessionsData.current.start)) {
     const c = sessionsData.current;
-    rows.push(`<tr class="srow" data-key="${esc(c.start)}"><td>${dateTime(c.start)} <span class="chip ok">charging now</span>${tag(c.start)}</td><td class="num">${dur(c.duration_s)}</td><td class="num">${num(c.energy_kwh, 2)} kWh</td><td class="num">${num(c.peak_power_kw, 1)} kW</td><td class="muted">—</td></tr>`);
+    rows.push(`<tr class="srow" data-key="${esc(c.start)}"><td>${dateTime(c.start)} <span class="chip ok">charging now</span>${tag(c.start)}${supTag(c)}</td><td class="num">${dur(c.duration_s)}</td><td class="num">${num(c.energy_kwh, 2)} kWh</td><td class="num">${num(c.peak_power_kw, 1)} kW</td><td class="muted">—</td></tr>`);
     if (sessionsOpen.has(c.start)) rows.push(`<tr class="detail"><td colspan="5">${sessionDetail({...c, current: true})}</td></tr>`);
   } else if (sessionsData.waiting && onDay(sessionsData.waiting.plugged_at)) {
     const w = sessionsData.waiting;
@@ -1347,7 +1355,7 @@ async function refreshSessions() {
         : `Unplugged before a session started${s.unplugged_by ? ' (' + esc(s.unplugged_by) + ')' : ''}`;
       rows.push(`<tr class="no-session srow" data-key="${esc(s.start)}"><td>${dateTime(s.start)} <span class="chip">no session</span>${tag(s.start)}</td><td class="num">${dur(s.duration_s)}</td><td class="num muted">—</td><td class="num muted">—</td><td>${why}${by(s.plugged_by)}</td></tr>`);
     } else {
-      rows.push(`<tr class="srow" data-key="${esc(s.start)}"><td>${dateTime(s.start)}${tag(s.start)}</td><td class="num">${dur(s.duration_s)}</td><td class="num">${num(s.energy_kwh, 2)} kWh</td><td class="num">${num(s.peak_power_kw, 1)} kW</td><td>${esc(reasonText(s.reason))}</td></tr>`);
+      rows.push(`<tr class="srow" data-key="${esc(s.start)}"><td>${dateTime(s.start)}${tag(s.start)}${supTag(s)}</td><td class="num">${dur(s.duration_s)}</td><td class="num">${num(s.energy_kwh, 2)} kWh</td><td class="num">${num(s.peak_power_kw, 1)} kW</td><td>${esc(reasonText(s.reason))}</td></tr>`);
     }
     if (open) rows.push(`<tr class="detail"><td colspan="5">${sessionDetail(s)}</td></tr>`);
   });

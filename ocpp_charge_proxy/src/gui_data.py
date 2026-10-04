@@ -301,6 +301,35 @@ class SessionLog:
         self._trim()
         self._save()
 
+    def mark_supplier(self, periods: list, provider: Optional[str] = None) -> bool:
+        """Note how much of each recent session was inside the supplier's
+        dispatch slots (supplier_s, seconds). Kept at its highest, as finished
+        slots drop out of the integration's list after a while."""
+        spans = []
+        for p in periods or []:
+            a, b = _parse_iso(p.get("start")), _parse_iso(p.get("end"))
+            if a and b and b > a:
+                spans.append((a, b))
+        if not spans:
+            return False
+        now = datetime.datetime.now(datetime.timezone.utc)
+        changed = False
+        for s in ([self.current] if self.current else []) + self.history:
+            if s.get("type") == "no_session":
+                continue
+            a, b = _parse_iso(s.get("start")), _parse_iso(s.get("stop")) or now
+            if not a or b <= a or now - b > datetime.timedelta(days=3):
+                continue
+            covered = sum(max(0.0, (min(b, e) - max(a, st)).total_seconds()) for st, e in spans)
+            covered = int(min(covered, (b - a).total_seconds()))
+            if covered > (s.get("supplier_s") or 0):
+                s["supplier_s"] = covered
+                s["supplier"] = provider
+                changed = True
+        if changed:
+            self._save()
+        return changed
+
     def snapshot(self, energy_register_wh: Optional[int] = None) -> dict:
         current = None
         if self.current is not None:

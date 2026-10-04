@@ -177,3 +177,23 @@ def test_old_history_files_removed(tmp_path):
     remove_old_history_files(str(tmp_path))
     assert sorted(p.name for p in tmp_path.iterdir()) == ["sessions.json"]
     remove_old_history_files(None)  # no data dir: nothing to do
+
+
+def test_session_marked_against_supplier_slots(tmp_path):
+    import datetime as dt
+    now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+    iso = lambda m: (now + dt.timedelta(minutes=m)).isoformat()
+    log = SessionLog(str(tmp_path))
+    log.start(1, "tag", 0, timestamp=iso(-180))
+    log.stop(5000, "Remote", timestamp=iso(-120))   # 60 min, all in a slot
+    log.start(1, "tag", 5000, timestamp=iso(-100))
+    log.stop(9000, "Remote", timestamp=iso(-40))    # 60 min, half in a slot
+    periods = [{"start": iso(-190), "end": iso(-110)}, {"start": iso(-70), "end": iso(-10)}]
+    assert log.mark_supplier(periods, "Octopus Energy")
+    newer, older = log.history[0], log.history[1]
+    assert older["supplier_s"] == 3600 and older["supplier"] == "Octopus Energy"
+    assert newer["supplier_s"] == 1800
+    # finished slots dropping out of the list don't lower it; kept across restarts
+    assert not log.mark_supplier([{"start": iso(-70), "end": iso(-60)}], "Octopus Energy")
+    again = SessionLog(str(tmp_path))
+    assert again.history[1]["supplier_s"] == 3600
