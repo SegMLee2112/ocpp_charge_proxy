@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.24.0 — Tidy-up
+
+- **Change:** settings on the Schedule and Settings tabs save as soon as you
+  change them (auto plug-in, auto re-plug, start delay and ramp-up, and your
+  sensors), like the rest of the page. The Save bar is gone
+- **Fix:** typing a sensor in by hand (when the list can't be read) now
+  works for auto plug-in's sensor on the Schedule tab
+- **Fix:** a session's details show what ended it in words ("Unplugged"),
+  as the table does
+- **Fix:** clearing the message log empties the list straight away
+- **Fix:** the week view is no longer drawn twice on each refresh
+- **Improvement:** wording made consistent: "supplier" in the remaining
+  places that said "provider" (e.g. who plugged in or unplugged, on the
+  Sessions tab), "Transaction ID" / "ID tag" and "Ended by" in session
+  details, "One-off" in slot tooltips, and the schedule's page link is
+  `#schedule`
+- **Change:** unused code, styles and old comments removed
+- **Docs:** brought up to date with the current tabs and settings (Status
+  and Current limit entities and their attributes, the schedule view,
+  Charge now, where settings are saved)
+
 ## 2.23.0 — Messages under Debug
 
 - **Change:** Diagnostics › Messages moved into Diagnostics › Debug › Logs,

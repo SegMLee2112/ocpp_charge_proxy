@@ -4,7 +4,7 @@
   many times a day as you like. Times are local (the add-on's TZ, which Home
   Assistant sets to your configured time zone). A time missed while the
   add-on was stopped isn't caught up.
-- Re-plug: if the car is plugged in but the provider hasn't started a
+- Re-plug: if the car is plugged in but the supplier hasn't started a
   session after `after_min` minutes, unplug, wait REPLUG_WAIT_S seconds and
   plug back in, up to `attempts` times. The count resets when a session
   starts or when the car is unplugged by anything else. If your supplier's
@@ -44,8 +44,8 @@
   smart charging ready-by time to the schedule's next unplug
   (src/ready_time.py). Only at a scheduled plug-in.
 
-Settings are saved in /data/automation.json and set on the web page
-(Settings tab for re-plug). Until they're saved, re-plug uses the defaults.
+Settings are saved in /data/automation.json and set on the web page's
+Schedule tab. Until they're saved, re-plug uses the defaults.
 """
 
 from __future__ import annotations
@@ -82,7 +82,7 @@ ONE_OFF_KEEP = datetime.timedelta(days=14)  # one-off times (and skips) are kept
 
 @dataclass(frozen=True)
 class ReplugOptions:
-    """Re-plug settings from the add-on configuration."""
+    """Re-plug defaults (the web page's settings are saved over them)."""
 
     enabled: bool = True
     after_min: int = 10
@@ -166,9 +166,6 @@ def validate_entry(raw: dict) -> dict:
     }
 
 
-DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-
-
 def plugged_windows(events):
     """(time, is_plug) events in time order -> the stretches plugged in, as
     (start, end). A stretch still open at the last event is left out."""
@@ -219,7 +216,6 @@ class Automation:
         self._path = os.path.join(data_dir, "automation.json") if data_dir else None
         self._now = now
         self._clock = clock
-        self._options = options
         self.schedule_enabled = False
         self.entries: list[dict] = []
         self.skips: list[dict] = []  # [{"entry_id", "date"}]: times skipped once

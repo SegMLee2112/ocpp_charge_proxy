@@ -1,4 +1,4 @@
-"""Records OCPP traffic for the diagnostic sensors.
+"""Records the last OCPP commands both ways, for the Overview's last command.
 
 Fed every frame the charger sends or receives (OCPP-J: [2, id, action,
 payload] call, [3, id, payload] result, [4, id, code, description, details]
@@ -24,9 +24,9 @@ from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
-# Routine traffic left out of the "last command sent" sensor
+# Routine traffic left out of the last command sent
 UNTRACKED_SENT_ACTIONS = {"Heartbeat", "MeterValues"}
-# Bulky list fields summarised (as a count) in the sensor attributes
+# Bulky list fields summarised (as a count) in the summaries
 SUMMARISED_FIELDS = {"transactionData", "meterValue", "configurationKey", "localAuthorizationList"}
 RECENT_COMMANDS = 10
 _MAX_PENDING = 200

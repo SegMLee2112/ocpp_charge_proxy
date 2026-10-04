@@ -13,7 +13,7 @@
 - Status (the OCPP state: Charging, Preparing..., or Waiting for supplier /
   Scheduled while plugged
   in with a slot planned by your supplier) and Current limit (the
-  current the charger uses, with your max and the provider's limit as
+  current the charger uses, with your max and the supplier's limit as
   attributes). HA records all of these, and the web page's charts and daily
   energy are read back from that history (src/ha_history.py).
 

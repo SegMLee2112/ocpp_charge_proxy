@@ -93,8 +93,8 @@ for the hours you choose (**Charge for**, 0.5 to 12):
 - The supplier's ready time is set to the end of the slot (E.ON Next has
   none to set).
 
-The entries show on the Schedule tab as "Auto plug-in, once on", and run
-even with the schedule off.
+The entries show on the Schedule tab as orange **Auto plug-in** slots, and
+run even with the schedule off.
 
 ### Schedule, auto re-plug and start-up
 
@@ -131,21 +131,23 @@ even with the schedule off.
   Octopus Energy accepts any time of day, EDF Energy 04:00 to 11:00. While
   it's on, unplug times in the schedule are limited to those (the slot
   editor only offers those). E.ON Next's integration
-  has no ready time setting. While it's on, the Next 7 days card outlines
+  has no ready time setting. While it's on, the Schedule tab outlines
   the schedule's slots in grey, and with Octopus Energy the schedule can't plug in for more than
   6 hours in any 24 (Octopus's daily smart charging cap): slots that go
   over are marked in red, and a change that goes over isn't saved (nor is
   putting a skipped slot back if that would go over). If Force schedule on
   supplier can't be turned on because of this (or an unplug time your
   supplier doesn't accept), the reason stays in red under the switch, with
-  the slots to change marked in red, until it's fixed. With the ready time off, there's no limit.
+  the slots to change marked in red, until it's fixed. With Force schedule
+  on supplier off (or **Scheduling guards** overridden, Diagnostics ›
+  Debug), there's no limit.
   At a scheduled unplug during a charging session, it waits for your
   supplier to stop the session itself (so it ends cleanly), then unplugs;
   if the supplier hasn't stopped it in time, it unplugs anyway. The wait
   is set under the switch (**Wait for the supplier at unplug**, 60 s by
   default, 0 to unplug straight away). The Overview shows "Unplugging by …"
   meanwhile.
-  **Supplier's plan check**: while the schedule has the car plugged in,
+  **Supplier's plan**: while the schedule has the car plugged in,
   the add-on checks your supplier's planned slots up to the ready time it
   set against the schedule. With plug-ins 16:00–18:00 and 20:00–22:00, the
   first stretch is checked from 16:00 (slots up to 18:00) and the second
@@ -155,8 +157,8 @@ even with the schedule off.
   plug-in, to give the supplier time to plan, and follows the plan as it
   changes. The result shows on the Overview's Smart charging card and the
   Schedule tab; a mismatch also as a red chip on the Overview, and in the
-  log. The supplier's planned slots are outlined in its colour on the Next
-  7 days card (whether or not this is on).
+  log. The supplier's planned slots are outlined in its colour on the
+  Schedule tab (whether or not this is on).
 - **Auto re-plug** (**Schedule** tab): Octopus sometimes doesn't start a session after you plug
   in. When Plugged In has been on for the set minutes (default 10) with no
   session and the add-on is connected, it unplugs, waits 30 seconds and
@@ -176,7 +178,8 @@ even with the schedule off.
   linearly to full power over the ramp-up (default 5s). 0 and 0 = full power
   straight away. Not applied when power comes from your power sensor.
 
-Settings are saved in `/data/automation.json`.
+The schedule and auto re-plug are saved in `/data/automation.json`, auto
+plug-in and your sensors in `/data/sensors.json`.
 
 ## How it works
 
@@ -248,8 +251,8 @@ The add-on creates its own entities (no integration needed):
 | `sensor.ocpp_charge_proxy_power` | Sensor | Current power draw (kW) |
 | `sensor.ocpp_charge_proxy_energy` | Sensor | Cumulative energy (kWh, works with the Energy dashboard) |
 | `sensor.ocpp_charge_proxy_current` | Sensor | Current draw (A) |
-| `sensor.ocpp_charge_proxy_status` | Sensor | OCPP state (Available, Preparing, Charging...) |
-| `sensor.ocpp_charge_proxy_current_limit` | Sensor | Current the charger uses (A), with your max and the supplier's limit as attributes |
+| `sensor.ocpp_charge_proxy_status` | Sensor | OCPP state (Available, Preparing, Charging...), or Scheduled / Waiting for supplier while plugged in with a supplier slot planned / running |
+| `sensor.ocpp_charge_proxy_current_limit` | Sensor | Current the charger uses (A), with your max (`max_amps`) and the supplier's limit (`provider_limit_amps`) as attributes |
 
 - The sensors are posted by the add-on, so they can't be renamed in the UI and
   aren't grouped under a device. They show as unavailable while the add-on is
@@ -265,11 +268,13 @@ The add-on creates its own entities (no integration needed):
   **Settings** tab, and auto plug-in on the **Schedule** tab; the add-on
   reads them through Home Assistant's API.
 
-## Web GUI
+## Web page
 
 Open the add-on from the sidebar (or **Open Web UI**). It updates live and
-follows your Home Assistant theme.
+follows your Home Assistant theme. Settings save as soon as you change them.
 
+- **Header:** a health dot left of the title (green / amber / red) that
+  opens Diagnostics › Health.
 - **Overview:** state, power, current, SoC and energy; the current session;
   **smart charging** (the charge slots your supplier plans, found
   automatically from the Octopus Energy, EDF Energy or E.ON Next integration, also
@@ -282,13 +287,6 @@ follows your Home Assistant theme.
   sensors (keep them recorded): 10-second detail for 24 hours, then
   5-minute points while HA keeps them (10 days by default, `purge_keep_days`)
   and hourly beyond that.
-- **Charge now** (**Settings** tab, its own card): click how long to plug in
-  for (1 to 8 hours). It plugs in straight away and adjusts the schedule
-  the same way auto plug-in does (see [Auto plug-in](#auto-plug-in)): a
-  one-off slot you can change on the Schedule tab, the ready time set to
-  its end, and it unplugs then.
-- **Header:** a health dot left of the title (green / amber / red) that
-  opens Diagnostics › Health.
 - **Sessions:** energy and time spent charging per day for the last 14
   days (click a day to show only its sessions), and the last 20 charging
   sessions (energy, duration, peak power, what ended them; transaction ID
@@ -298,17 +296,25 @@ follows your Home Assistant theme.
   and the last 20 plug-ins that never got a session: when, for how long, who
   plugged in, and whether auto re-plug gave up on it or it was unplugged
   first.
-- **Schedule:** the plug-in schedule (see below), with a week view of when
-  it has the car plugged in; Force schedule on supplier; auto plug-in and
-  auto re-plug.
-- **Settings:** Charge now; controls for Plugged In, max current and
-  continuing a session after a restart; the
-  simulated car's start delay and ramp-up; and your power, SoC and car
-  plugged in sensors, with their live values.
+- **Schedule:** the plug-in schedule (see below), with the last 3 days and
+  the next 7 of when it has the car plugged in; Force schedule on supplier;
+  auto plug-in and auto re-plug.
+- **Settings:**
+  - **Charge now** (its own card): click how long to plug in for (1, 2, 3,
+    4, 6 or 8 hours). It plugs in straight away and adjusts the schedule
+    the same way auto plug-in does (see [Auto plug-in](#auto-plug-in)): a
+    one-off slot you can change on the Schedule tab, the ready time set to
+    its end, and it unplugs then.
+  - Controls for Plugged In, max current and **Continue session after a
+    restart**; the simulated car's start delay and ramp-up; and your power,
+    SoC and car plugged in sensors, with their live values.
 - **Diagnostics**, in two parts:
   - **Health:** version, uptime, reconnects and the last drop's reason,
     heartbeat and clock offset, the Home Assistant link and the add-on's
-    Home Assistant entities, and any held messages; then **Supplier** (below).
+    Home Assistant entities, and any held messages. At the bottom,
+    **Supplier**: what your supplier has set: charging limits, charging
+    profiles drawn as a timeline, the local authorisation list and every
+    configuration key.
   - **Debug:** tools for testing and bug reports:
     - Test values: a power override (reported instead of the simulation)
       and a test SoC.
@@ -318,7 +324,7 @@ follows your Home Assistant theme.
     - **Drop the connection** for a number of seconds (charging carries on
       and transaction messages are held, as on a real dropout), or
       **restart the add-on** (through the Supervisor; a session carries on
-      after it with Continue session after a restart on).
+      after it with **Continue session after a restart** on).
     - **Scheduling guards** (off by default): override them to let the
       schedule, auto plug-in and Charge now plug in for more than Octopus's
       6 hours a day while Force schedule on supplier is on.
@@ -328,11 +334,8 @@ follows your Home Assistant theme.
       full JSON on click and a Copy button for sharing.
     - **Diagnostics bundle:** one JSON file with the state, schedule,
       sessions, supplier's plan and settings, health, recent messages, log
-      lines and options (password and most of the charge point ID hidden).
+      lines and options (password and most of the chargepoint ID hidden).
     - **Clear data:** the session history or the message log.
-  - **Supplier** (at the bottom of Health): what your supplier has set: charging limits, charging
-    profiles drawn as a timeline, the local authorisation list and every
-    configuration key.
 
 Times on the page are 24-hour. Longer explanations are behind **More**
 links.

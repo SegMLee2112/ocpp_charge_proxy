@@ -1,7 +1,7 @@
 """Settings made on the web page that used to be add-on options: the log
 level (Diagnostics › Debug) and continuing a session after a restart
 (Settings › Controls). Saved in settings.json in the data folder. The max
-current is saved separately (src/persistence.py, current.json)."""
+current is saved separately (src/persistence.py, current_setting.json)."""
 from __future__ import annotations
 
 import logging

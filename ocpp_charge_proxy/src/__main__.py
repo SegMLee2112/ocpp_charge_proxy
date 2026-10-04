@@ -105,7 +105,7 @@ async def run() -> None:
         else:
             logger.warning(
                 "initial_energy_wh=%d ignored: stored energy register is already "
-                "%d Wh and the meter must never go backwards. Set the option to 0.",
+                "%d Wh and the meter must never go backwards.",
                 config.initial_energy_wh, persistence.load_energy_register_wh(),
             )
 
@@ -155,7 +155,7 @@ async def run() -> None:
         from ocpp.v16.enums import ChargePointStatus as CPS
         if cp is None:
             return
-        # Set unplugged state immediately so the integration sees it
+        # Unplugged straight away, so the page and Home Assistant see it
         cp.set_plugged_in(False, source)
         shared_state.state = CPS.available
         if cp._transaction_id is not None:
@@ -203,10 +203,10 @@ async def run() -> None:
     health = Health()
     history = PowerHistory()  # the chart's last hour; older comes from HA's history
     remove_old_history_files(data_dir)
-    automation = Automation(data_dir)  # auto re-plug settings: Settings tab
+    automation = Automation(data_dir)  # the schedule and auto re-plug: Schedule tab
     automation.publish(shared_state)
-    # Your HA sensors (power, SoC, car plugged in, auto plug-in: Settings
-    # tab) and the add-on's own HA entities (Plugged In helper, Power, Energy,
+    # Your HA sensors (power, SoC, car plugged in: Settings tab; auto
+    # plug-in: Schedule tab) and the add-on's own HA entities (Plugged In helper, Power, Energy,
     # Current)
     ha_link = HaLink(
         data_dir, shared_state,
@@ -378,7 +378,6 @@ async def run() -> None:
                 try:
                     await _run_connection(
                         cp, config, persistence, stop_task,
-                        do_plug, do_unplug,
                     )
                 finally:
                     cp.detach()
@@ -424,7 +423,7 @@ async def run() -> None:
         except Exception:
             logger.debug("Couldn't mark the sensors unavailable", exc_info=True)
         await _cancel_all(charger_tasks)
-        cp.message_log.save()  # keep the Messages tab across the restart
+        cp.message_log.save()  # keep the messages (Diagnostics › Debug) across the restart
         await runner.cleanup()
         logger.info("OCPP Charge Proxy stopped")
 
@@ -433,7 +432,7 @@ class _BootCancelled(Exception):
     """Shutdown requested while waiting for BootNotification."""
 
 
-async def _run_connection(cp, config, persistence, stop_task, do_plug, do_unplug) -> None:
+async def _run_connection(cp, config, persistence, stop_task) -> None:
     """Boot and run one websocket connection until it ends or shutdown."""
     # Start message loop first so incoming messages are handled
     start_task = asyncio.create_task(cp.start())

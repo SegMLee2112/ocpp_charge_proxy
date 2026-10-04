@@ -35,11 +35,7 @@ from ocpp.v16.enums import (
 from src.charger_sim import VALID_CURRENT_SETTINGS, ChargerReading, ChargerSimulator
 from src.charging_profile import ChargingProfileScheduler, normalise_profile
 from src.gui_data import MessageLog, SessionLog
-from src.meter_values import (
-    build_charging_meter_values,
-    build_idle_meter_values,
-    build_meter_values,
-)
+from src.meter_values import build_meter_values
 from src.persistence import Persistence
 from src.shared_state import SharedState
 from src.traffic import TrafficRecorder
@@ -123,7 +119,6 @@ class ChargePoint(BaseChargePoint):
         shared_state: SharedState | None = None,
         start_delay_s: float = 0.0,
         ramp_up_s: float = 0.0,
-        current_amps_option: Optional[int] = None,
         resume_on_restart: bool = False,
     ):
         super().__init__(id, connection)
@@ -136,7 +131,7 @@ class ChargePoint(BaseChargePoint):
         self.state = ChargePointStatus.available
         self._persistence = persistence
         self._power_override: Optional[float] = None  # kW, set via API
-        self._soc: Optional[float] = None  # % from the integration's SoC entity
+        self._soc: Optional[float] = None  # % from your SoC sensor (Settings tab), or the test value
         self._shared_state = shared_state or SharedState()
         self._energy_register_wh: int = persistence.load_energy_register_wh()
         self._shared_state.energy_kwh = self.energy_register_kwh  # never serve 0 before first reading
@@ -194,7 +189,7 @@ class ChargePoint(BaseChargePoint):
             "GetConfigurationMaxKeys": ("50", True),
         }
         # Start delay / ramp-up: set on the web page (saved), else the
-        # values passed in (the add-on options of earlier versions)
+        # values passed in (__main__'s defaults)
         saved_ramp = persistence.load_ramp_setting()
         if isinstance(saved_ramp, dict):
             try:
@@ -210,11 +205,10 @@ class ChargePoint(BaseChargePoint):
         self._shared_state.start_delay_s = self._charger_sim.start_delay_s
         self._shared_state.ramp_up_s = self._charger_sim.ramp_up_s
         # Current: the HA setting is the charger's maximum (like a real
-        # Wallbox's max-current setting). The provider's chargingALimitConn1
+        # Wallbox's max-current setting). The supplier's chargingALimitConn1
         # can lower it but never raise it; the charger uses the lower of the two.
         self._max_current_amps: int = self._charger_sim.current_amps
         self._server_limit_amps: Optional[float] = None
-        self._current_amps_option = current_amps_option  # add-on option it was saved against
         self._apply_current()
 
         # --- Offline message queue ---
@@ -348,7 +342,7 @@ class ChargePoint(BaseChargePoint):
                 "messages until reconnected",
             )
 
-    # --- Last command received / sent (for the HA sensors) -------------
+    # --- Every OCPP frame: message log and last command (Overview) -----
 
     async def route_message(self, raw_msg):
         """Every message from the server passes through here."""
@@ -610,7 +604,7 @@ class ChargePoint(BaseChargePoint):
             reason = Reason.reboot  # stopped on purpose, but too long ago (or unplugged) to continue
             logger.info("Not continuing transaction %s after the restart (%s): stopping it", tx_id,
                         "the car was unplugged" if not self._plugged_in
-                        else "the option is off" if not self.resume_on_restart
+                        else "Continue session after a restart is off" if not self.resume_on_restart
                         else f"stopped more than {RESUME_MAX_S // 60} min ago")
         if not already_stopped:
             # Last known meter reading and time = the moment power was lost
@@ -684,7 +678,7 @@ class ChargePoint(BaseChargePoint):
     # --- Charging current -------------------------------------------------
 
     def _effective_amps(self) -> int:
-        """Lower of the HA max and the provider limit, as a supported setting."""
+        """Lower of the max current and the supplier's limit, as a supported setting."""
         limit = float(self._max_current_amps)
         if self._server_limit_amps is not None:
             limit = min(limit, self._server_limit_amps)
@@ -717,7 +711,7 @@ class ChargePoint(BaseChargePoint):
             raise ValueError(f"Invalid current setting {amps}A. Valid: {VALID_CURRENT_SETTINGS}")
         self._max_current_amps = amps
         self._persistence.save_current_setting({
-            "amps": amps, "option": self._current_amps_option,
+            "amps": amps,
         })
         self._apply_current()
         if self._charger_sim.current_amps < amps:
@@ -742,7 +736,7 @@ class ChargePoint(BaseChargePoint):
         # alone here; see set_power_override.
 
     def set_power_override(self, power_kw: Optional[float]) -> None:
-        """Real power from the integration's power entity (kW), or None for the simulation."""
+        """Real power from your power sensor (kW), or None for the simulation."""
         self._power_override = power_kw
         self._shared_state.power_source = "simulated" if power_kw is None else "entity"
         self._shared_state.power_entity_value = power_kw
@@ -912,7 +906,7 @@ class ChargePoint(BaseChargePoint):
     # --- SoC and car full ------------------------------------------------
 
     def set_soc(self, soc: Optional[float]) -> None:
-        """Car's state of charge (%) from the integration, or None if unknown/unset."""
+        """Car's state of charge (%) from your SoC sensor or the test value, or None if unknown/unset."""
         if soc is not None:
             soc = max(0.0, min(100.0, float(soc)))
         self._soc = soc
@@ -1085,9 +1079,10 @@ class ChargePoint(BaseChargePoint):
     def refresh_live_power(self) -> None:
         """Update the live power figures for the API between meter readings.
 
-        Called on every /api/state poll so Home Assistant sees the start
-        delay, ramp-up, profile pauses and current changes within one poll,
-        not once per MeterValueSampleInterval. Energy is still only counted
+        Called by the chart sampler and on every /api/state poll, so the
+        page and Home Assistant see the start delay, ramp-up, profile pauses
+        and current changes straight away, not once per
+        MeterValueSampleInterval. Energy is still only counted
         by _take_reading, so this never changes the energy register.
         """
         if self.state != ChargePointStatus.charging or not self._charger_sim.is_charging:
@@ -1359,7 +1354,7 @@ class ChargePoint(BaseChargePoint):
             self._profile_scheduler.set_profile(charging_profile)
         self._tx_profile = normalise_profile(charging_profile) if charging_profile else None
 
-        self.set_plugged_in(True, "provider")
+        self.set_plugged_in(True, "supplier")
         self._pending_id_tag = id_tag
         asyncio.create_task(self._do_start_transaction())
         return call_result.RemoteStartTransactionPayload(
@@ -1493,7 +1488,7 @@ class ChargePoint(BaseChargePoint):
             except ValueError:
                 logger.warning("Invalid MeterValueSampleInterval: %s, ignoring", value)
         elif key == "chargingALimitConn1":
-            # The provider's limit: can only lower the current below the HA max
+            # The supplier's limit: can only lower the current below the HA max
             try:
                 limit = float(value)
                 if limit < 0:
@@ -1661,7 +1656,7 @@ class ChargePoint(BaseChargePoint):
                 announce=True,
             ))
 
-        self.set_plugged_in(False, "provider")
+        self.set_plugged_in(False, "supplier")
         self.state = ChargePointStatus.available
         self._shared_state.state = self.state
 
@@ -1687,7 +1682,7 @@ class ChargePoint(BaseChargePoint):
         else:
             self.state = ChargePointStatus.available
             self._shared_state.state = self.state
-            self.set_plugged_in(False, "provider")
+            self.set_plugged_in(False, "supplier")
             self._zero_power_state()
             await self.send_status()
 

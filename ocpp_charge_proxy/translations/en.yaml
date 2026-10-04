@@ -33,4 +33,5 @@ configuration:
     description: >-
       Seed the energy meter with this value in watt-hours. Useful when
       migrating from an existing charger. Set to 0 for a fresh install.
-      This value is applied once on startup and then cleared.
+      Only applied if higher than the stored meter reading (the meter never
+      goes backwards), once on startup, and then cleared.

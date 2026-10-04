@@ -1,6 +1,6 @@
 """Set your supplier's ready-by time from the plug-in schedule.
 
-When the schedule plugs in (and the option is on, Automation tab), the
+When the schedule plugs in (and Force schedule on supplier is on, Schedule tab), the
 add-on sets the smart charging "target time" of your supplier's integration
 to the schedule's next unplug, so the car is charged by the time it's
 "unplugged". Done once per scheduled plug-in, never at other times.

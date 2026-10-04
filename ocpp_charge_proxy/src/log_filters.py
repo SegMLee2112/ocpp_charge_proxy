@@ -7,7 +7,7 @@ import logging
 import re
 
 # OCPP actions whose send/receive lines are routine noise at INFO (shown with
-# log_level: debug). MeterValues only counts when it's a periodic reading;
+# the Debug log level, Diagnostics › Debug). MeterValues only counts when it's a periodic reading;
 # see _routine_meter_values.
 DEBUG_ONLY_ACTIONS = frozenset({"Heartbeat", "MeterValues"})
 
@@ -37,8 +37,8 @@ class DemoteRoutineMessages(logging.Filter):
 
     The library logs every frame at INFO ("send [...]" / "receive message
     [...]"). This catches those calls and the server's reply to them (matched
-    by message id) and re-labels them DEBUG: they're dropped unless log_level
-    is debug. Every other message is untouched.
+    by message id) and re-labels them DEBUG: they're dropped unless the log
+    level is Debug. Every other message is untouched.
     """
 
     def __init__(self, actions=DEBUG_ONLY_ACTIONS) -> None:

@@ -86,8 +86,7 @@ Home Assistant entities.
 cd ocpp_charge_proxy
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
-pip install pytest pytest-asyncio pytest-aiohttp
+pip install -r requirements-dev.txt
 
 # Run tests
 python -m pytest tests/ -v

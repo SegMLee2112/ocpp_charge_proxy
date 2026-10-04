@@ -125,7 +125,7 @@ class Persistence:
         self._write(_TRANSACTION_FILE, "transaction", transaction)
 
     def load_current_setting(self) -> dict | None:
-        """HA max current: {"amps": N, "option": add-on current_amps it was set under}."""
+        """The max current (web page or Home Assistant): {"amps": N}."""
         setting = self._read(_CURRENT_FILE, "current", None)
         return setting if isinstance(setting, dict) and "amps" in setting else None
 

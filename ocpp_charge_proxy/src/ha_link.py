@@ -1,9 +1,10 @@
 """Reads your Home Assistant sensors directly and acts on them.
 
-Set up on the web page's Settings tab (saved in /data/sensors.json):
+Set up on the web page: the sensors on the Settings tab, auto plug-in on
+the Schedule tab (saved in /data/sensors.json):
 
 - power_entity:  real power (W or kW) reported instead of the simulation
-- soc_entity:    the car's SoC, reported to the provider (and car full / taper)
+- soc_entity:    the car's SoC, reported to the supplier (and car full / taper)
 - plug_entity:   a car-connected binary sensor: off -> on switches Plugged In on
 - auto_plug:     switch Plugged In on when the watched SoC drops below
                  auto_plug_soc; it watches auto_plug_entity if set, else
@@ -39,8 +40,6 @@ RECONNECT_DELAYS = (2, 5, 10, 20, 30, 60)
 DISPATCH_SEARCH_S = 600  # look for a supplier's dispatching sensor again this often
 ENTITY_LIST_TTL_S = 30
 _UNKNOWN_STATES = ("unavailable", "unknown", "none", "")
-SETTING_KEYS = ("power_entity", "soc_entity", "plug_entity", "auto_plug", "auto_plug_entity", "auto_plug_soc",
-                "auto_plug_ready", "auto_plug_hours")
 DEFAULT_AUTO_PLUG_HOURS = 3.0
 
 
@@ -153,7 +152,7 @@ class HaLink:
         self.ready_entity: Optional[str] = None  # its ready (target) time entity, if any
         self.ready_times: Optional[list[str]] = None  # the times that accepts
         self._dispatch_searched = 0.0
-        self.dispatch_searched_at: Optional[float] = None  # wall clock, for the Health tab
+        self.dispatch_searched_at: Optional[float] = None  # wall clock, for Diagnostics › Health
         self._call = None  # websocket request function while connected
         self._reset_logic()
         self._load()
@@ -607,7 +606,7 @@ class HaLink:
         return out
 
     def smart_charging_health(self) -> dict:
-        """For the Health tab: which supplier integration was found, and when it was looked for."""
+        """For Diagnostics › Health: which supplier integration was found, and when it was looked for."""
         info = self.smart_charging()
         return {
             "found": bool(info.get("found")),

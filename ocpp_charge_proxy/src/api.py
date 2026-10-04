@@ -4,7 +4,6 @@ import asyncio
 import json
 import logging
 import time
-import os
 from pathlib import Path
 from typing import Callable, Awaitable
 
@@ -65,7 +64,7 @@ def create_api_app(
     app.router.add_post("/api/soc", handle_soc)
     app.router.add_post("/api/ramp", handle_ramp)
     app.router.add_get("/api/events", handle_events)
-    # Web GUI only
+    # The web page's tabs
     app.router.add_get("/api/messages", handle_messages)
     app.router.add_get("/api/sessions", handle_sessions)
     app.router.add_get("/api/history", handle_history)
@@ -154,7 +153,7 @@ async def handle_current(request: web.Request) -> web.Response:
     try:
         body = await request.json()
         amps = int(body["amps"])
-    except (ValueError, KeyError, Exception):
+    except Exception:
         return web.json_response(
             {"status": "error", "message": "Invalid request. Send JSON: {\"amps\": N}"},
             status=400,
@@ -230,7 +229,7 @@ async def handle_ramp(request: web.Request) -> web.Response:
 # --- Push updates (Server-Sent Events) -------------------------------------
 
 # Fields that change on every live-power refresh: pushed at most every
-# EVENTS_LIVE_INTERVAL seconds, so HA's recorder isn't flooded. Any other
+# EVENTS_LIVE_INTERVAL seconds, so the page isn't flooded. Any other
 # change (state, plug, connection, energy, commands...) is pushed at once.
 _LIVE_FIELDS = {
     "power_kw", "voltage", "current_a", "frequency_hz", "power_offered_kw",
@@ -464,7 +463,7 @@ async def handle_get_sensors(request: web.Request) -> web.Response:
 
 async def handle_set_sensors(request: web.Request) -> web.Response:
     """Any of power_entity, soc_entity, plug_entity, auto_plug, auto_plug_entity,
-    auto_plug_soc."""
+    auto_plug_soc, auto_plug_ready, auto_plug_hours (only those sent change)."""
     link = request.app["ha_link"]
     if link is None:
         return _gui_unavailable()

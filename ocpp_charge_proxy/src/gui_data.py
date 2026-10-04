@@ -370,30 +370,6 @@ class SessionLog:
 # --- Power history for the chart ---------------------------------------------
 
 
-def _write_json(path: str, data) -> None:
-    """Atomic write with a .bak of the previous version."""
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, default=str)
-        f.flush()
-        os.fsync(f.fileno())
-    if os.path.exists(path):
-        os.replace(path, path + ".bak")
-    os.replace(tmp, path)
-
-
-def _read_json(path: str):
-    for p in (path, path + ".bak"):
-        try:
-            with open(p, encoding="utf-8") as f:
-                return json.load(f)
-        except FileNotFoundError:
-            continue
-        except Exception:
-            logger.warning("%s is unreadable", p)
-    return None
-
-
 class PowerHistory:
     """The last RECENT_MINUTES of chart samples, every HISTORY_SAMPLE_S seconds.
 

@@ -77,7 +77,6 @@
     box-shadow: 0 1px 2px rgba(0,0,0,0.12), 0 0 0 1px var(--divider);
     min-width: 0;
   }
-  .card.wide { grid-column: 1 / -1; }
   @media (min-width: 760px) { .span2 { grid-column: span 2; } }
   .card h2 { font-size: 16px; font-weight: 500; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .card h2 .seg, .card h2 label { font-size: 13px; font-weight: 400; }
@@ -105,7 +104,6 @@
   .row + .row { margin-top: 14px; }
   .row .grow { flex: 1; min-width: 120px; }
   .row[hidden] { display: none; }
-  .plan-slots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
   button.btn {
     font: inherit; font-weight: 500; border-radius: 8px; padding: 6px 14px; cursor: pointer;
     border: 1px solid var(--divider); background: var(--card); color: var(--primary);
@@ -113,7 +111,7 @@
   button.btn.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
   button.btn:disabled { opacity: .5; cursor: default; }
   button.small { padding: 2px 10px; font-size: 12px; }
-  input[type="number"], input[type="search"], select {
+  input[type="number"], input[type="search"], input[type="date"], select {
     font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--divider);
     border-radius: 8px; padding: 6px 10px; min-width: 0;
   }
@@ -122,9 +120,6 @@
   .seg button { font: inherit; border: 0; background: none; color: var(--text); padding: 6px 11px; cursor: pointer; }
   .seg button + button { border-left: 1px solid var(--divider); }
   .seg button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
-  .savebar { position: sticky; bottom: 12px; z-index: 4; display: flex; align-items: center; gap: 10px;
-    background: var(--card); border-radius: var(--radius); padding: 10px 14px; box-shadow: 0 4px 14px rgba(0,0,0,.25), 0 0 0 1px var(--divider); }
-  .savebar[hidden] { display: none; }
   details.more { display: inline; }
   details.more > summary { display: inline; cursor: pointer; color: var(--primary); list-style: none; white-space: nowrap; }
   details.more > summary::-webkit-details-marker { display: none; }
@@ -135,10 +130,8 @@
   .subnav button { font: inherit; font-size: 13px; border: 1px solid var(--divider); background: none; color: var(--text2);
     padding: 5px 12px; border-radius: 16px; cursor: pointer; }
   .subnav button[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
-  .daybars .d { cursor: pointer; }
   .daybars .d.sel .b { outline: 2px solid var(--text); outline-offset: 1px; }
   .daybars .d.dim { opacity: .45; }
-  .savebar .grow { flex: 1; }
   .section-title { font-size: 13px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 -4px; }
   .picker { display: block; width: 100%; min-width: 0; }
   .picker select, .picker input { width: 100%; max-width: 100%; }
@@ -157,7 +150,6 @@
   .combo-list li.sel { font-weight: 600; }
   .combo-list li.empty { color: var(--text2); cursor: default; }
   .seg.days button { padding: 6px 9px; min-width: 30px; }
-  input[type="time"] { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--divider); border-radius: 8px; padding: 5px 8px; }
   .switch { position: relative; width: 44px; height: 24px; flex: none; }
   .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; cursor: pointer; z-index: 1; }
   .switch span { position: absolute; inset: 0; background: var(--divider); border-radius: 999px; transition: background .15s; }
@@ -189,7 +181,7 @@
   .legend i { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
   .legend i.dash { border-top-style: dashed; }
   .legend b.band { display: inline-block; width: 12px; height: 10px; border-radius: 2px; opacity: .35; vertical-align: middle; margin-right: 5px; }
-  /* Messages */
+  /* Sessions */
   tr.no-session td { color: var(--text2); }
   #s-rows tr.srow { cursor: pointer; }
   #s-rows tr.srow:hover td { background: var(--hover); }
@@ -197,19 +189,17 @@
   .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 24px; }
   .spark { width: 100%; height: 60px; display: block; }
   .week { display: grid; grid-template-columns: 52px 1fr; gap: 6px 8px; align-items: center; }
-  .week .track .seg { cursor: pointer; }
   .week .track .seg.skip { opacity: 1; background: repeating-linear-gradient(135deg, var(--divider) 0 6px, transparent 6px 12px) !important;
     outline: 1px dashed var(--text2); outline-offset: -1px; }
   .week .track .seg.picked { box-shadow: 0 0 0 2px var(--text); }
-  .slot-pop { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px;
+  .slot-pop { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 10px;
     border-radius: 8px; background: var(--hover); }
-  .once { font-size: 12px; color: var(--text2); }
   .week .dl { font-size: 12px; color: var(--text2); }
   .week .dl.today { color: var(--primary); font-weight: 500; }
-  .week .track { position: relative; height: 18px; background: var(--hover); border-radius: 4px; overflow: hidden; }
-  .week .track .seg { position: absolute; top: 0; bottom: 0; background: var(--primary); opacity: .8; }
+  .week .track { position: relative; height: 18px; background: var(--hover); border-radius: 4px; overflow: hidden;
+    touch-action: pan-y; cursor: copy; }
+  .week .track .seg { position: absolute; top: 0; bottom: 0; background: var(--primary); opacity: .8; cursor: pointer; }
   .week .track .seg.off { opacity: .35; }
-  .week .track { touch-action: pan-y; cursor: copy; }
   .week .track .seg.ghost { opacity: .45; pointer-events: none; }
   .week .track.past { cursor: default; }
   .week .track.past .seg { opacity: .45; cursor: default; }
@@ -220,11 +210,9 @@
   tr.srow.flash > td { animation: flash 2s ease-out; }
   @keyframes flash { from { background: color-mix(in srgb, var(--ok) 25%, transparent); } to { background: transparent; } }
   .week .sep { grid-column: 1 / -1; border-top: 1px dashed var(--divider); margin: 2px 0; }
-  .week .track .seg.once { background-image: linear-gradient(90deg, transparent 0 calc(100% - 3px), rgba(255,255,255,.55) calc(100% - 3px)); }
   .week .tick { position: absolute; top: -3px; bottom: -3px; width: 12px; margin-left: -6px; cursor: pointer;
     background: linear-gradient(var(--text2), var(--text2)) center / 3px 100% no-repeat; }
   .week .tick.off { opacity: .35; }
-  .slot-pop { padding: 8px 10px; }
   .slot-pop .ed { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; width: 100%; }
   .slot-pop .ed .acts { display: flex; gap: 6px; margin-left: auto; }
   .slot-pop .ed .seg button { padding: 3px 8px; }
@@ -232,18 +220,14 @@
   .slot-pop #w-err { flex-basis: 100%; margin: 0; }
   .slot-pop #w-err:empty { display: none; }
   .week .slot-pop.top { margin-bottom: 4px; }
-  #tab-debug select { font: inherit; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--divider); background: var(--card); color: var(--text); }
-  .logs { max-height: 340px; overflow: auto; margin: 12px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--hover);
-    font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .slot-pop select { font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--divider); background: var(--card); color: var(--text); }
+  .slot-pop select, .slot-pop input[type="date"] { padding: 4px 6px; }
   .week .track .seg.linked { box-shadow: inset 0 0 0 2px var(--text2); }
   .week .sup { position: absolute; top: 0; bottom: 0; box-sizing: border-box; border: 2px solid; border-radius: 4px;
     pointer-events: none; }
-  .sched input.bad { border-color: var(--err); color: var(--err); }
   .week .now { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--err); }
   .week .axis { grid-column: 2; display: flex; justify-content: space-between; font-size: 10px; color: var(--text2); }
   .daybars { display: flex; align-items: flex-end; gap: 6px; height: 150px; padding-top: 18px; }
-  .daybars .d { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; min-width: 0; }
+  .daybars .d { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; min-width: 0; cursor: pointer; }
   .daybars .bw { flex: 1; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; min-height: 0; }
   .daybars .b { width: 100%; max-width: 36px; background: var(--primary); border-radius: 4px 4px 0 0; min-height: 1px; position: relative; }
   .daybars .b.zero { background: var(--divider); }
@@ -395,8 +379,6 @@
     </div>
   </section>
 
-  <!-- ============ Messages ============ -->
-
   <!-- ============ Schedule (tab id "automation") ============ -->
   <section id="tab-automation" class="stack" hidden>
     <div class="card">
@@ -463,7 +445,7 @@
           <div class="grow">Charge for<div class="note" style="margin:0">Hours from plugging in (30-minute steps)</div></div>
           <span class="ctl"><input type="number" id="sim-auto-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours"> hours</span>
         </div>
-        <div class="note" id="sim-auto-cap" hidden style="margin:0">Up to 6 hours: Octopus's daily smart charging limit, while Force schedule on <span class="supn" data-f="supplier">supplier</span> is on. Longer is shortened to 6.</div>
+        <div class="note" id="sim-auto-cap" hidden style="margin:0">Up to 6 hours: Octopus's daily smart charging limit, while Force schedule on <span class="supn" data-f="supplier">supplier</span> is on.</div>
         <div id="sim-auto-last" class="sub" style="margin-top:8px"></div>
         <dl class="kv" id="sim-monitor" style="margin-top:14px"></dl>
       </div>
@@ -544,13 +526,8 @@
     <label class="live" style="cursor:pointer"><input type="checkbox" id="sim-all"> Show all sensors in the lists (here and on the Schedule tab)</label>
   </section>
 
-  <div class="savebar" id="set-bar" hidden>
-      <span>Unsaved changes</span><span class="grow"></span>
-      <button class="btn small" id="set-discard">Discard</button>
-      <button class="btn small primary" id="set-save">Save</button>
-    </div>
 
-  <!-- ============ Health ============ -->
+  <!-- ============ Diagnostics › Debug ============ -->
   <section id="tab-debug" class="stack" hidden>
     <div class="card">
       <h2>Test values</h2>
@@ -616,7 +593,7 @@
     <div class="card">
       <h2>Diagnostics bundle</h2>
       <div class="row" style="margin-top:0">
-        <div class="grow"><div class="note" style="margin:0">One file to attach to a bug report. <details class="more"><summary>More</summary><div>The add-on's state, schedule, sessions, your supplier's plan and settings, health, recent OCPP messages and log lines, and the add-on's options with the password and most of the charge point ID hidden.</div></details></div></div>
+        <div class="grow"><div class="note" style="margin:0">One file to attach to a bug report. <details class="more"><summary>More</summary><div>The add-on's state, schedule, sessions, your supplier's plan and settings, health, recent OCPP messages and log lines, and the add-on's options with the password and most of the chargepoint ID hidden.</div></details></div></div>
         <button class="btn small primary" id="d-bundle">Download</button>
       </div>
     </div>
@@ -801,7 +778,7 @@ function showTab(name) {
   $('diag-nav').hidden = !diag;
   $('diag-nav').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.sub === name));
   document.querySelectorAll('main > section').forEach((s) => s.hidden = s.id !== 'tab-' + name);
-  try { history.replaceState(null, '', '#' + name); } catch (e) {}
+  try { history.replaceState(null, '', '#' + (name === 'automation' ? 'schedule' : name)); } catch (e) {}
   refreshTab(true);
 }
 $('tabs').addEventListener('click', (e) => { if (e.target.dataset.tab) showTab(e.target.dataset.tab); });
@@ -907,7 +884,7 @@ function renderState(s) {
   if (s.unplug_pending) chips.push(`<span class="chip warn" title="Giving ${sup('your supplier')} time to stop the session first">Unplugging by ${new Date(s.unplug_pending).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'})}</span>`);
   const pc = s.plan_check;
   drawSmartCheck(pc);
-  if (pc && pc.status === 'error') chips.push(`<span class="chip err" title="${esc(pc.problems.join('\n'))}">${sup('Supplier')} plan doesn't match the schedule</span>`);
+  if (pc && pc.status === 'error') chips.push(`<span class="chip err" title="${esc(pc.problems.join('\n'))}">${sup('Supplier')}'s plan doesn't match the schedule</span>`);
   if (activeTab === 'automation') drawPlanCheck(pc);
   if (rp.status === 'waiting' && rp.next_replug_at) chips.push(`<span class="chip warn">Re-plug ${hm(rp.next_replug_at)} if no session</span>`);
   if (rp.status === 'replugging') chips.push('<span class="chip warn">Re-plugging…</span>');
@@ -938,7 +915,7 @@ function renderState(s) {
     ? 'Your power sensor is set: it replaces this on its next change'
     : 'Report this power instead of the simulation';
 
-  if (document.activeElement !== $('c-delay') && document.activeElement !== $('c-ramp') && !rampDirty) {
+  if (document.activeElement !== $('c-delay') && document.activeElement !== $('c-ramp')) {
     if (s.start_delay_s != null) $('c-delay').value = s.start_delay_s;
     if (s.ramp_up_s != null) $('c-ramp').value = s.ramp_up_s;
   }
@@ -976,11 +953,19 @@ $('c-plug').addEventListener('change', async (e) => {
 function confirmInline(input) {
   if (confirmInline.armed && Date.now() - confirmInline.armed < 4000) { confirmInline.armed = 0; return true; }
   confirmInline.armed = Date.now(); input.checked = true;
-  toast('This ends the charging session — switch off again to confirm');
+  toast('This ends the charging session: switch off again to confirm');
   return false;
 }
-let rampDirty = false;
-['c-delay', 'c-ramp'].forEach((id) => $(id).addEventListener('input', () => { rampDirty = true; updateSaveBar(); }));
+['c-delay', 'c-ramp'].forEach((id) => $(id).addEventListener('change', async () => {
+  const delay = parseFloat($('c-delay').value), ramp = parseFloat($('c-ramp').value);
+  if (!(delay >= 0 && delay <= 60) || !(ramp >= 0 && ramp <= 60)) {
+    toast('Start delay and ramp-up: 0–60 seconds');
+    if (state) { $('c-delay').value = state.start_delay_s; $('c-ramp').value = state.ramp_up_s; }
+    return;
+  }
+  if (await post('ramp', {start_delay_s: delay, ramp_up_s: ramp})) toast('Start delay and ramp-up saved');
+  pollState();
+}));
 $('c-power-set').onclick = async () => {
   const v = parseFloat($('c-power').value);
   if (isNaN(v) || v < 0) { toast('Enter a power in kW'); return; }
@@ -1020,8 +1005,8 @@ function drawSessionCard() {
       ['Started', dateTime(c.start)],
       ['Average', avg === null ? '—' : num(avg, 2) + ' kW'],
       ['Peak', num(c.peak_power_kw, 2) + ' kW'],
-      ['Transaction', '#' + esc(c.transaction_id)],
-      ['idTag', `<code>${esc(c.id_tag)}</code>`],
+      ['Transaction ID', '#' + esc(c.transaction_id)],
+      ['ID tag', `<code>${esc(c.id_tag)}</code>`],
     ])}</dl>`;
 }
 
@@ -1504,7 +1489,7 @@ function sessionDetail(s) {
       : ['Meter stop', s.meter_stop_wh != null ? Number(s.meter_stop_wh).toLocaleString() + ' Wh' : '—'],
     ['Energy so far', s.current ? num(s.energy_kwh, 2) + ' kWh' : null],
     ['Average', s.duration_s > 0 && s.energy_kwh != null ? num(s.energy_kwh / (s.duration_s / 3600), 2) + ' kW' : '—'],
-    s.current ? ['Peak', num(s.peak_power_kw, 2) + ' kW'] : ['Stop reason', esc(s.reason || '—')],
+    s.current ? ['Peak', num(s.peak_power_kw, 2) + ' kW'] : ['Ended by', esc(s.reason ? reasonText(s.reason) : '—')],
     ['Transaction ID', esc(s.transaction_id ?? '—')],
     ['ID tag', `<code>${esc(s.id_tag || '—')}</code>`],
   ].filter((r) => r[1] !== null))}</dl><div>${start ? sparkline(start, stop) : ''}</div></div>`;
@@ -1517,26 +1502,26 @@ function hmDur(sec) {
   return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${m % 60 ? ' ' + (m % 60) + 'm' : ''}`;
 }
 function drawDayBars(days) {
-  const time = dayMode === 'time';
+  const byTime = dayMode === 'time';
   $('d-mode').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === dayMode));
-  const val = (d) => time ? (d.charging_s || 0) / 3600 : d.kwh;
-  const max = Math.max(time ? 1 : 0.5, ...days.map(val));
+  const val = (d) => byTime ? (d.charging_s || 0) / 3600 : d.kwh;
+  const max = Math.max(byTime ? 1 : 0.5, ...days.map(val));
   const today = new Date().toLocaleDateString('en-CA');  // local YYYY-MM-DD
   const totalS = days.reduce((a, d) => a + (d.charging_s || 0), 0);
-  $('d-total').textContent = time ? `${hmDur(totalS)} charging in ${days.length} days`
+  $('d-total').textContent = byTime ? `${hmDur(totalS)} charging in ${days.length} days`
     : `${num(days.reduce((a, d) => a + d.kwh, 0), 1)} kWh in ${days.length} days`;
   $('d-bars').innerHTML = days.map((d) => {
     const dt = new Date(d.date + 'T12:00:00'), v = val(d);
     const label = days.length > 10 ? dt.toLocaleDateString([], {day: 'numeric'}) : dt.toLocaleDateString([], {weekday: 'short'});
-    const est = time && d.charging_estimated;
-    const top = !v ? '' : time ? (d.charging_s < 3600 ? hmDur(d.charging_s) : num(v, v < 10 ? 1 : 0) + 'h') : num(v, v < 10 ? 1 : 0);
+    const est = byTime && d.charging_estimated;
+    const top = !v ? '' : byTime ? (d.charging_s < 3600 ? hmDur(d.charging_s) : num(v, v < 10 ? 1 : 0) + 'h') : num(v, v < 10 ? 1 : 0);
     const title = `${dt.toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})}: ${num(d.kwh, 2)} kWh · ${hmDur(d.charging_s || 0)} charging${d.charging_estimated ? ' (estimated from session length)' : ''}`;
     return `<div class="d ${d.date === today ? 'today' : ''} ${sessDay === d.date ? 'sel' : sessDay ? 'dim' : ''}" data-date="${d.date}" title="${title} · click to show its sessions">
       <div class="bw"><div class="v">${top}</div>
       <div class="b ${v ? '' : 'zero'} ${est ? 'est' : ''}" style="height:${Math.max(1, v / max * 85)}%"></div></div>
       <div class="l">${label}</div></div>`;
   }).join('');
-  const anyEst = time && days.some((d) => d.charging_estimated && d.charging_s);
+  const anyEst = byTime && days.some((d) => d.charging_estimated && d.charging_s);
   $('d-note').hidden = !anyEst;
   $('d-note').textContent = anyEst ? 'Faded bars are estimated from session lengths (days before 2.3.0, when the add-on started recording its state in Home Assistant), so they include any paused time.' : '';
 }
@@ -1561,7 +1546,7 @@ function reasonText(r) {
     Local: 'Local', HardReset: 'Hard reset', SoftReset: 'Soft reset', UnlockCommand: 'Unlock command', DeAuthorized: 'Deauthorised'})[r] || r || '—';
 }
 
-// ---------- Messages ----------
+// ---------- Diagnostics › Debug › Logs: OCPP messages ----------
 const msgs = {list: [], lastSeq: 0};
 async function refreshMessages() {
   if ($('m-pause').checked) return;
@@ -1613,7 +1598,7 @@ $('m-copy').onclick = async () => {
   }
 };
 
-// ---------- Provider ----------
+// ---------- Diagnostics › Health › Supplier ----------
 let providerData = null;
 async function refreshProvider() {
   try { providerData = await api('provider'); } catch (e) { return; }
@@ -1661,38 +1646,26 @@ function drawConfig() {
 $('p-only-server').addEventListener('change', drawConfig);
 
 // ---------- Simulation (your HA sensors) ----------
-const sim = {data: null, entities: [], edit: null, dirty: false, entitiesAt: 0};
+const sim = {data: null, entities: [], edit: null, entitiesAt: 0};
 async function refreshSimulation(force) {
   try { sim.data = await api('sensors'); } catch (e) { return; }
   if (force || !sim.entities.length || Date.now() - sim.entitiesAt > 60000) {
     try { sim.entities = (await api('sensors/entities')).entities; sim.entitiesAt = Date.now(); } catch (e) { sim.entities = []; }
   }
-  if (!sim.dirty || force) { sim.edit = {...sim.data.settings}; simSetDirty(false); drawPickers(); }
+  sim.edit = {...sim.data.settings};
+  const typing = document.activeElement && document.activeElement.closest('.picker');
+  if (force || !typing) drawPickers();
   drawSimulation();
 }
-function simSetDirty(v) { sim.dirty = v; updateSaveBar(); }
-// Settings tab: one save bar for the sensors, start-up and re-plug settings
-let rpDirty = false;
-function updateSaveBar() { $('set-bar').hidden = !(sim.dirty || rampDirty || rpDirty); }
-async function saveSettings() {
-  const delay = parseFloat($('c-delay').value), ramp = parseFloat($('c-ramp').value);
-  const after = parseInt($('a-rp-after').value, 10), tries = parseInt($('a-rp-tries').value, 10);
-  const n = parseInt(sim.edit.auto_plug_soc, 10);
-  if (rampDirty && (!(delay >= 0 && delay <= 60) || !(ramp >= 0 && ramp <= 60))) { toast('Start delay and ramp-up: 0–60 seconds'); return; }
-  if (rpDirty && (!(after >= 1 && after <= 240) || !(tries >= 0 && tries <= 20))) { toast('Re-plug: 1–240 minutes and 0–20 tries'); return; }
-  if (sim.dirty && !(n >= 1 && n <= 99)) { toast('Plug in below must be 1–99%'); return; }
-  if (sim.dirty && sim.edit.auto_plug_ready && octopusCapped() && parseFloat(sim.edit.auto_plug_hours) > 6) { toast(`Charge for: up to 6 hours with Octopus while Force schedule on ${sup('supplier')} is on`); return; }
-  let ok = true;
-  if (rampDirty) { if (await post('ramp', {start_delay_s: delay, ramp_up_s: ramp})) rampDirty = false; else ok = false; }
-  if (rpDirty) { if (await post('automation/replug', {enabled: $('a-rp-on').checked, after_min: after, attempts: tries})) rpDirty = false; else ok = false; }
-  if (sim.dirty) { if (await post('sensors', {...sim.edit, auto_plug_soc: n})) sim.dirty = false; else ok = false; }
-  updateSaveBar();
-  if (ok) { toast('Settings saved'); document.activeElement && document.activeElement.blur(); refreshSimulation(true); refreshAutomation(false); pollState(); }
-}
-function discardSettings() {
-  rampDirty = rpDirty = false; sim.dirty = false;
-  if (state) { $('c-delay').value = state.start_delay_s; $('c-ramp').value = state.ramp_up_s; }
-  updateSaveBar(); refreshSimulation(true); refreshAutomation(false);
+// Settings save as soon as they change: switches and sensors on click,
+// numbers when you leave the field or press Enter
+async function saveSensors(patch, msg) {
+  try {
+    await api('sensors', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(patch)});
+    toast(msg);
+  } catch (e) { toast('Failed: ' + e.message); }
+  await refreshSimulation(true);
+  pollState();
 }
 function drawPickers() {
   const all = $('sim-all').checked;
@@ -1721,7 +1694,7 @@ function drawPickers() {
     span.innerHTML = `<div class="combo"><input type="text" data-combo="${key}" role="combobox" aria-autocomplete="list"
       aria-expanded="false" aria-controls="cl-${key}" aria-label="${key}" placeholder="Type to search…" autocomplete="off" spellcheck="false">
       <ul class="combo-list" id="cl-${key}" role="listbox" hidden></ul></div>`
-      + (!all && !list.length ? '<div class="note">No matching sensors. Tick "Show all sensors" below.</div>' : '');
+      + (!all && !list.length ? '<div class="note">No matching sensors. Tick "Show all sensors in the lists" at the bottom of the Settings tab.</div>' : '');
     setupCombo(span.querySelector('.combo'), key, opts);
   });
   $('sim-auto').checked = !!sim.edit.auto_plug;
@@ -1733,7 +1706,7 @@ function drawPickers() {
 function drawAutoPlugLast(d) {
   const el = $('sim-auto-last'); if (!el) return;
   const a = d && d.schedule && d.schedule.auto_plug_last;
-  if (!a || a.source === 'charge_now') { el.innerHTML = ''; return; }  // Charge now's shows on the Overview
+  if (!a || a.source === 'charge_now') { el.innerHTML = ''; return; }  // Charge now's shows on its own card
   const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
   el.innerHTML = `Last: plugged in ${dateTime(a.at)} until ${t(a.end)}${a.notes && a.notes.length ? ` (${a.notes.map(esc).join('; ')})` : ''}`;
 }
@@ -1762,7 +1735,7 @@ function setupCombo(box, key, opts) {
     setActive(shown.length ? Math.max(0, shown.findIndex((o) => o.value === sel)) : -1);
   };
   const choose = (o) => {
-    if ((sim.edit[key] || '') !== o.value) { sim.edit[key] = o.value; simSetDirty(true); }
+    if ((sim.edit[key] || '') !== o.value) { sim.edit[key] = o.value; saveSensors({[key]: o.value}, o.value ? 'Sensor saved' : 'Sensor removed'); }
     close(); showValue(); input.blur();
   };
   input.addEventListener('focus', () => { input.value = ''; draw(''); });
@@ -1795,10 +1768,6 @@ function entityState(ent) {
 }
 function drawSimulation() {
   const d = sim.data; if (!d) return;
-  if ($('sim-link')) $('sim-link').innerHTML = `<div class="row"><b>Home Assistant</b>${
-    !d.available ? '<span class="chip err">Not available</span><span class="muted">' + esc(d.error || '') + '</span>'
-    : d.connected ? '<span class="chip ok">Connected</span><span class="muted">Following your sensors live</span>'
-    : '<span class="chip warn">Connecting…</span><span class="muted">' + esc(d.error || '') + '</span>'}</div>`;
   const e = d.ha_entities || {};
   const sensorList = (e.sensors || []).map((id) => `<code>${esc(id)}</code>`).join('<br>');
   $('sim-entities').innerHTML = (e.integration_conflict && e.integration_conflict.length
@@ -1829,26 +1798,31 @@ function drawSimulation() {
       : `<span class="chip">Waiting</span> <span class="muted">re-arms once the SoC is ${m.threshold}% or more</span>`],
   ]);
 }
-$('tab-settings').addEventListener('change', (ev) => {
+// The typed-in sensor boxes (shown when the list of sensors can't be read), on any tab
+document.querySelector('main').addEventListener('change', (ev) => {
   const key = ev.target.dataset.key;
-  if (key) { sim.edit[key] = ev.target.value.trim(); simSetDirty(true); }
+  if (key && ev.target.closest('.picker')) saveSensors({[key]: ev.target.value.trim()}, 'Sensor saved');
 });
-$('tab-settings').addEventListener('input', (ev) => {
-  if (ev.target.dataset.key && ev.target.tagName === 'INPUT') { sim.edit[ev.target.dataset.key] = ev.target.value.trim(); simSetDirty(true); }
-});
-$('sim-auto').addEventListener('change', (e) => { sim.edit.auto_plug = e.target.checked; simSetDirty(true); });
+$('sim-auto').addEventListener('change', (e) => saveSensors({auto_plug: e.target.checked}, e.target.checked ? 'Auto plug-in on' : 'Auto plug-in off'));
 $('sim-auto-ready').addEventListener('change', (e) => {
-  sim.edit.auto_plug_ready = e.target.checked; $('sim-auto-hours-row').hidden = !e.target.checked; simSetDirty(true);
+  $('sim-auto-hours-row').hidden = !e.target.checked;
+  saveSensors({auto_plug_ready: e.target.checked}, e.target.checked ? 'The schedule is adjusted for auto plug-in' : 'The schedule is left alone for auto plug-in');
 });
-$('sim-auto-hours').addEventListener('input', (e) => { sim.edit.auto_plug_hours = e.target.value; simSetDirty(true); });
-$('sim-auto-soc').addEventListener('input', (e) => { sim.edit.auto_plug_soc = e.target.value; simSetDirty(true); });
+$('sim-auto-hours').addEventListener('change', (e) => {
+  const h = parseFloat(e.target.value), max = octopusCapped() ? 6 : 12;
+  if (!(h >= 0.5 && h <= max) || h * 2 !== Math.round(h * 2)) { toast(`Charge for: 0.5–${max} hours, in half hours`); refreshSimulation(true); return; }
+  saveSensors({auto_plug_hours: h}, `Charge for ${h} hours`);
+});
+$('sim-auto-soc').addEventListener('change', (e) => {
+  const n = parseInt(e.target.value, 10);
+  if (!(n >= 1 && n <= 99)) { toast('Plug in below: 1–99%'); refreshSimulation(true); return; }
+  saveSensors({auto_plug_soc: n}, `Plugs in below ${n}%`);
+});
 $('sim-all').addEventListener('change', drawPickers);
-$('set-save').onclick = saveSettings;
-$('set-discard').onclick = discardSettings;
 
 // ---------- Automation ----------
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const auto = {data: null, entries: [], dirty: false};
+const auto = {data: null, entries: []};
 function whenText(iso) {
   if (!iso) return '';
   const d = new Date(iso), now = new Date();
@@ -1869,21 +1843,20 @@ async function refreshAutomation(force) {
     } catch (e) { /* history line only */ }
   }
   auto.data = d;
-  if (!auto.dirty || force) { auto.entries = JSON.parse(JSON.stringify(d.schedule.entries)); setDirty(false); drawEntries(); }
+  auto.entries = JSON.parse(JSON.stringify(d.schedule.entries));
   $('a-sched-on').checked = d.schedule.enabled;
   $('a-ready-on').checked = !!d.schedule.ready_time;
-  if (!smart.data) refreshSmart(true).then(() => { drawReadyStatus(auto.data); if (!auto.dirty) drawEntries(); else drawWeek(); });
+  if (!smart.data) refreshSmart(true).then(() => { drawReadyStatus(auto.data); drawWeek(); });
   else refreshSmart(false);  // the supplier's slots on the week view
   drawReadyStatus(d);
   const n = d.schedule.next;
   $('a-next').innerHTML = !d.schedule.enabled ? 'The schedule is off.' :
     n ? `Next: <b>${n.action === 'plug' ? 'plug in' : 'unplug'}</b> ${esc(whenText(n.time))}` : 'Nothing scheduled.';
   if (d.schedule.last_run) $('a-next').innerHTML += ` · last: ${d.schedule.last_run.action === 'plug' ? 'plugged in' : 'unplugged'} ${ago(d.schedule.last_run.timestamp)}${d.schedule.last_run.startup ? ' (when the add-on started)' : ''}`;
-  $('a-tz').innerHTML = `Times are in ${esc(d.timezone)} (now ${d.now ? d.now.slice(11, 16) : '—'}). <details class="more"><summary>More</summary><div>A time missed while the add-on is stopped isn't caught up later. Unplugging during a session ends it.</div></details>`;
-  if (!rpDirty) {
-    $('a-rp-after').value = d.replug.after_min; $('a-rp-tries').value = d.replug.attempts;
-    $('a-rp-on').checked = d.replug.enabled;
-  }
+  $('a-tz').innerHTML = `Times are in ${esc(d.timezone)} (now ${d.now ? d.now.slice(11, 16) : '—'}).`;
+  if (document.activeElement !== $('a-rp-after')) $('a-rp-after').value = d.replug.after_min;
+  if (document.activeElement !== $('a-rp-tries')) $('a-rp-tries').value = d.replug.attempts;
+  $('a-rp-on').checked = d.replug.enabled;
   drawReplugStatus(d.replug);
   applyOctopusCap();
   drawForceErr();
@@ -1922,7 +1895,7 @@ function drawPlanCheck(pc) {
 }
 $('a-wait').addEventListener('change', async (e) => {
   const v = parseInt(e.target.value, 10);
-  if (!(v >= 0 && v <= 600)) { toast('Wait must be 0 to 600 seconds'); refreshAutomation(false); return; }
+  if (!(v >= 0 && v <= 600)) { toast('Wait: 0–600 seconds'); refreshAutomation(false); return; }
   if (await post('automation/schedule', {unplug_wait_s: v})) toast(v ? `Waits up to ${v} s for ${sup('your supplier')} at unplug` : 'Unplugs straight away');
   refreshAutomation(false);
 });
@@ -1931,7 +1904,7 @@ $('a-ready-on').addEventListener('change', async (e) => {
   try {
     await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ready_time: on})});
     week.forceErr = null;
-    toast(on ? 'Ready time: set from the schedule' : 'Ready time: left alone');
+    toast(`Force schedule on ${supName() || 'supplier'}: ${on ? 'on' : 'off'}`);
     await refreshAutomation(false);
   } catch (err) {
     e.target.checked = !on;
@@ -1974,8 +1947,6 @@ function drawReplugStatus(r) {
   }[r.status] || '';
   $('a-rp-status').innerHTML = html + (r.last_replug ? `<div class="sub">Last re-plug ${dateTime(r.last_replug)}</div>` : '');
 }
-function setDirty(v) { auto.dirty = false; }  // edits are saved straight away
-function drawEntries() { drawWeek(); }
 const OCTOPUS_CAP_MIN = 360;
 const DAY_MIN = 1440, WEEK_MIN = 7 * 1440;
 const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
@@ -2014,12 +1985,12 @@ function weekPlan(entries = auto.entries, skipList = null, forceCap = false) {
   }
   events.sort((a, b) => a.t - b.t || (a.plug === b.plug ? 0 : a.plug ? -1 : 1));
   const segs = [];
-  let state = null, start = null;
+  let inSlot = null, start = null;
   for (const ev of events) {
-    if (ev.plug && state !== true) { state = true; start = ev.t; }
-    else if (!ev.plug) { if (state === true) segs.push([start, ev.t]); state = false; }
+    if (ev.plug && inSlot !== true) { inSlot = true; start = ev.t; }
+    else if (!ev.plug) { if (inSlot === true) segs.push([start, ev.t]); inSlot = false; }
   }
-  if (state === true) segs.push([start, 9 * DAY_MIN]);
+  if (inSlot === true) segs.push([start, 9 * DAY_MIN]);
   const nowMin = (Date.now() - today.getTime()) / 60000;
   let worst = null;
   const bad = [];
@@ -2087,7 +2058,7 @@ function deriveSlots(entries) {
   return {slots, orphans, usage};
 }
 
-// Each slot's runs from yesterday to a week on: [{a, b, i, date, udate, skipped}] (minutes from today 00:00)
+// Each slot's runs from a week ago to a week on: [{a, b, i, date, udate, skipped}] (minutes from today 00:00)
 function occurrences(model) {
   const skips = new Set(((auto.data && auto.data.schedule.skips) || []).map((k) => k.entry_id + '|' + k.date));
   const out = [];
@@ -2104,7 +2075,7 @@ function occurrences(model) {
   return out;
 }
 
-const week = {model: null, occ: [], edit: null, day0: null};
+const week = {model: null, occ: [], edit: null};
 
 function drawWeek() {
   const on = auto.data ? auto.data.schedule.enabled : false;
@@ -2120,8 +2091,8 @@ function drawWeek() {
   const plan = weekPlan(undefined, null, !!week.forceErr);  // while turning Force on failed, show what's over
   const model = deriveSlots(auto.entries || []);
   const occ = occurrences(model);
-  week.model = model; week.occ = occ; week.day0 = today0();
-  const day0 = week.day0;
+  week.model = model; week.occ = occ;
+  const day0 = today0();
   const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
   const dayLabel = (d) => { const t = new Date(day0); t.setDate(day0.getDate() + d); return t.toLocaleDateString([], {weekday: 'short', day: 'numeric'}); };
   const ed = week.edit;
@@ -2145,7 +2116,7 @@ function drawWeek() {
       const {x0, x1} = span(o.a, o.b);
       const red = !o.skipped && plan.bad.some(([x, y]) => x < o.b && y > o.a);
       const picked = ed && ed.mode === 'slot' && ed.k === k;
-      const who = s.source === 'charge_now' ? ' (Charge now)' : s.source === 'auto_plug' ? ' (auto plug-in)' : s.kind === 'once' ? ' (once)' : '';
+      const who = s.source === 'charge_now' ? ' (Charge now)' : s.source === 'auto_plug' ? ' (Auto plug-in)' : s.kind === 'once' ? ' (One-off)' : '';
       const got = ses.filter((z) => z.a < o.b && z.b > o.a);
       const title = `${dayLabel(d)} ${hhmm(Math.max(o.a, lo) - lo)}–${hhmm(Math.min(o.b, hi) - lo)}${who}`
         + (o.skipped ? ' (skipped)' : !s.enabled ? ' (off)' : red ? ' (over Octopus\'s 6 hours a day)' : '')
@@ -2156,8 +2127,8 @@ function drawWeek() {
     }).join('');
     const ticks = model.orphans.map((o, j) => [o, j]).filter(([o]) => o.date ? dayIndex(o.date) === d : o.days.includes(wdOf(isoAt(d))))
       .map(([o, j]) => `<div class="tick ${!on || !o.u.enabled ? 'off' : ''}" data-orphan="${j}" data-row="${d}" style="left:${tmin(o.u.time) / 14.4}%"
-        title="${dayLabel(d)} ${o.u.time}: unplug${o.date ? ' (once)' : ''}"></div>`).join('');
-    const sup = (sc ? sc.periods || [] : []).map((p) => [(new Date(p.start) - day0) / 60000, (new Date(p.end) - day0) / 60000])
+        title="${dayLabel(d)} ${o.u.time}: unplug${o.date ? ' (One-off)' : ''}"></div>`).join('');
+    const planned = (sc ? sc.periods || [] : []).map((p) => [(new Date(p.start) - day0) / 60000, (new Date(p.end) - day0) / 60000])
       .filter(([a, b]) => b > lo && a < hi).map(([a, b]) => {
         const {x0, x1} = span(a, b);
         return `<div class="sup" style="border-color:${supColor};left:${x0}%;width:${x1 - x0}%" title="Planned by ${esc(sc.provider)}: ${hhmm(Math.max(a, lo) - lo)}–${hhmm(Math.min(b, hi) - lo)}"></div>`;
@@ -2168,7 +2139,7 @@ function drawWeek() {
     }).join('');
     if (d === -3 && ed && ed.top) html += '<div class="slot-pop top" id="w-pop"></div>';
     if (d === 0) html += '<div class="sep"></div>';
-    html += `<div class="dl ${d === 0 ? 'today' : d < 0 ? 'past' : ''}">${d === 0 ? 'Today' : dayLabel(d)}</div><div class="track ${d < 0 ? 'past' : ''}" data-row="${d}">${bars}${ticks}${sup}${charged}${d === 0 ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
+    html += `<div class="dl ${d === 0 ? 'today' : d < 0 ? 'past' : ''}">${d === 0 ? 'Today' : dayLabel(d)}</div><div class="track ${d < 0 ? 'past' : ''}" data-row="${d}">${bars}${ticks}${planned}${charged}${d === 0 ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
     if (ed && !ed.top && ed.row === d) html += '<div class="slot-pop" id="w-pop"></div>';
   }
   html += '<div></div><div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';
@@ -2227,7 +2198,7 @@ function drawEditor() {
     ${f.repeat === 'weekly'
       ? `<div class="seg days" role="group" aria-label="Days">${DAYS.map((d, n) => `<button data-day="${n}" aria-pressed="${f.days.includes(n)}" title="${d}">${d.slice(0, 2)}</button>`).join('')}</div>`
       : `<input type="date" data-f="date" value="${esc(f.date)}" aria-label="Date">`}`;
-  const canSkip = s && o && o.udate !== undefined && new Date(`${o.date}T${s.start}`) > new Date();
+  const canSkip = s && o && new Date(`${o.date}T${s.start}`) > new Date();
   pop.innerHTML = `<div class="ed">
     <b>${title}${ed.top ? (ed.row ? ' · tomorrow' : ' · today') : ''}</b>${times}${repeat}
     <label class="switch" title="On"><input type="checkbox" data-f="enabled" ${f.enabled ? 'checked' : ''} aria-label="On"><span></span></label>
@@ -2400,9 +2371,22 @@ $('a-sched-on').addEventListener('change', async (e) => {
   if (await post('automation/schedule', {enabled: e.target.checked})) { toast(e.target.checked ? 'Schedule on' : 'Schedule off'); refreshAutomation(true); }
   else e.target.checked = !e.target.checked;
 });
-['a-rp-on', 'a-rp-after', 'a-rp-tries'].forEach((id) => $(id).addEventListener('input', () => { rpDirty = true; updateSaveBar(); }));
-$('a-rp-on').addEventListener('change', () => { rpDirty = true; updateSaveBar(); });
-window.addEventListener('beforeunload', (e) => { if (auto.dirty || sim.dirty || rampDirty || rpDirty) { e.preventDefault(); e.returnValue = ''; } });
+// Auto re-plug saves straight away, like the rest of the tab
+async function saveReplug(patch, msg) {
+  if (await post('automation/replug', patch)) toast(msg);
+  refreshAutomation(false);
+}
+$('a-rp-on').addEventListener('change', (e) => saveReplug({enabled: e.target.checked}, e.target.checked ? 'Auto re-plug on' : 'Auto re-plug off'));
+$('a-rp-after').addEventListener('change', (e) => {
+  const v = parseInt(e.target.value, 10);
+  if (!(v >= 1 && v <= 240)) { toast('Re-plug after: 1–240 minutes'); refreshAutomation(false); return; }
+  saveReplug({after_min: v}, `Re-plugs after ${v} min`);
+});
+$('a-rp-tries').addEventListener('change', (e) => {
+  const v = parseInt(e.target.value, 10);
+  if (!(v >= 0 && v <= 20)) { toast('Tries: 0–20'); refreshAutomation(false); return; }
+  saveReplug({attempts: v}, `Up to ${v} tr${v === 1 ? 'y' : 'ies'}`);
+});
 
 // ---------- Health ----------
 async function refreshHealth() {
@@ -2480,7 +2464,7 @@ $('d-send').addEventListener('click', async () => {
 });
 $('d-drop').addEventListener('click', async () => {
   const s = Number($('d-drop-s').value);
-  if (!(s >= 0 && s <= 600)) { toast('Seconds: 0–600'); return; }
+  if (!(s >= 0 && s <= 600)) { toast('Drop for: 0–600 seconds'); return; }
   if (await post('debug/drop', {seconds: s})) toast(`Connection dropped: reconnecting in ${Math.max(5, Math.round(s))} s`);
 });
 // Continue session after a restart (Settings › Controls)
@@ -2508,10 +2492,10 @@ function confirmClick(btn, run) {
 }
 confirmClick($('d-restart'), async () => { if (await post('debug/restart')) toast('Restarting the add-on: the page reconnects when it\'s back'); });
 confirmClick($('d-clear-sessions'), async () => { if (await post('debug/clear', {what: 'sessions'})) { sessionsData = null; toast('Session history cleared'); } });
-confirmClick($('d-clear-messages'), async () => { if (await post('debug/clear', {what: 'messages'})) { msgs.list = []; toast('Message log cleared'); } });
+confirmClick($('d-clear-messages'), async () => { if (await post('debug/clear', {what: 'messages'})) { msgs.list = []; drawMessages(); toast('Message log cleared'); } });
 $('d-level').addEventListener('click', async (e) => {
   const level = e.target.dataset.level; if (!level) return;
-  if (await post('debug/log_level', {level})) { toast(`Log level: ${level}`); refreshDebug(); }
+  if (await post('debug/log_level', {level})) { toast(`Log level: ${level[0].toUpperCase() + level.slice(1)}`); refreshDebug(); }
 });
 $('d-guards').addEventListener('change', async (e) => {
   const on = e.target.checked;
@@ -2545,7 +2529,7 @@ function applyOctopusCap() {
   $('sim-auto-hours').max = capped ? 6 : 12;
   $('c-charge-cap').hidden = !capped; $('sim-auto-cap').hidden = !capped;
 }
-// ---------- Charge now (Settings > Controls): plug in for a set time ----------
+// ---------- Charge now (Settings tab): plug in for a set time ----------
 // Added to the schedule as a one-off, so it can be changed on the Schedule tab
 const CHARGE_HOURS = [1, 2, 3, 4, 6, 8];
 CHARGE_HOURS.forEach((h) => { const b = document.createElement('button'); b.textContent = h + ' h'; b.dataset.hours = h; $('c-charge').appendChild(b); });

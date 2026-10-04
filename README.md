@@ -37,7 +37,7 @@ Wallbox Pulsar Plus.
 
 It's a single add-on: it runs the OCPP client, has its own web page in the
 Home Assistant sidebar, and creates its own Home Assistant entities (Plugged
-In, Power, Energy and Current). No integration or HACS needed.
+In, Power, Energy, Current, Status and Current limit). No integration or HACS needed.
 
 ## Features
 
@@ -85,8 +85,9 @@ In, Power, Energy and Current). No integration or HACS needed.
 
 ### Works with your car in Home Assistant
 
-Set these up on the add-on's **Settings** tab. The add-on follows your
-sensors live through Home Assistant's API.
+Set the sensors up on the add-on's **Settings** tab, and auto plug-in on the
+**Schedule** tab. The add-on follows your sensors live through Home
+Assistant's API.
 
 - **Power sensor (optional).** Report real power (e.g. from a smart plug or
   your actual charger) to your supplier instead of the simulation.
@@ -103,19 +104,19 @@ sensors live through Home Assistant's API.
 - **Home Assistant entities, no integration needed.** The add-on creates a
   **Plugged In** helper (`input_boolean.ocpp_charge_proxy_plugged_in`): turn
   it on or off to plug in or unplug, and it follows the add-on's own Plugged
-  In. It also keeps **Power**, **Energy** (for the Energy dashboard) and
-  **Current** sensors up to date. The sensors show as unavailable while the
+  In. It also keeps **Power**, **Energy** (for the Energy dashboard),
+  **Current**, **Status** and **Current limit** sensors up to date. The sensors show as unavailable while the
   add-on is stopped.
 - **Plug-in schedule.** Switch Plugged In on or off at set times and days,
-  as many times a day as you like, from the add-on's web page (Automation
+  as many times a day as you like, from the add-on's web page (Schedule
   tab).
 - **Auto re-plug.** If your supplier hasn't started a session 10 minutes
   after plugging in, the add-on unplugs for 30 seconds and plugs back in, up
   to 3 times. On/off, minutes and tries are on the Schedule tab.
 
-### Diagnostics
+### Web page
 
-- A **web GUI** in the Home Assistant sidebar (the add-on's Web UI), live
+- A **web page** in the Home Assistant sidebar (the add-on's Web UI), live
   over push updates and styled to match your HA theme, light or dark:
   - **Header:** a health dot left of the title, green when healthy and amber/red
     when not (hover for the issues), linking to Diagnostics › Health.
@@ -131,11 +132,11 @@ sensors live through Home Assistant's API.
     and plug-ins that never got a session with the reason, kept across
     restarts.
   - **Schedule:** the plug-in schedule (below), with one-off times and a
-    view of the next 7 days where you click or drag to add a slot and click
-    one to change, delete or skip it;
-    auto plug-in and auto re-plug.
-  - **Settings:** Charge now; controls for Plugged In, max current and
-    continuing a session after a restart; the
+    view of the last 3 days and the next 7 where you click or drag to add a
+    slot and click one to change, delete or skip it; Force schedule on
+    supplier; auto plug-in and auto re-plug.
+  - **Settings:** **Charge now**; controls for Plugged In, max current and
+    **Continue session after a restart**; the
     simulated car's start delay and ramp-up; and your power, SoC and car
     plugged in sensors, with live values.
   - **Diagnostics:** **Health** (version, uptime, reconnects and the last
@@ -143,14 +144,16 @@ sensors live through Home Assistant's API.
     the add-on's entities, held messages, and at the bottom what your
     supplier has set: charging limits, charging profiles as a timeline, the
     local authorisation list and every configuration key) and **Debug**
-    (test values, send a message, drop the connection or restart, override
-    the 6-hour scheduling guard, the log level and the last 300 OCPP
+    (test values, send a message, drop the connection or restart,
+    **Scheduling guards** (override the 6-hour limit), the log level and the last 300 OCPP
     messages both ways with a filter, full JSON on click and Copy, a
     diagnostics bundle to download, and clearing the session history or
     message log).
 - **Quieter logs.** OCPP messages are logged at `info`, except Heartbeats
   (every 10s with Octopus) and periodic meter readings (every 60s), which only
-  show at `debug`. Clock-aligned readings (every 15 min) stay at `info`.
+  show at `debug`. Clock-aligned readings (every 15 min) stay at `info` during a
+  session (outside one they're `debug` too). Set the level in Diagnostics ›
+  Debug.
 
 ## Step 1: Install the Add-on
 
@@ -165,14 +168,16 @@ sensors live through Home Assistant's API.
 3. Configure your OCPP credentials (server hostname, chargepoint ID, password)
 4. Start the add-on
 
-See the [add-on documentation][docs] for all add-on options, including the
-starting current and seeding the energy register when migrating from a real
-charger. Everything else is set on the add-on's web page (Settings tab).
+See the [add-on documentation][docs] for all add-on options, including
+seeding the energy register when migrating from a real charger. Everything
+else (max current, sensors, schedule, log level) is set on the add-on's web
+page.
 
 ## Step 2: Pick your sensors (optional)
 
 On the add-on's web page (sidebar), open the **Settings** tab to pick your
-power, SoC and car plugged in sensors and set up auto plug-in.
+power, SoC and car plugged in sensors and, on the **Schedule** tab, set up
+auto plug-in.
 
 ### Upgrading from 1.x (with the integration)
 
@@ -185,8 +190,8 @@ power, SoC and car plugged in sensors and set up auto plug-in.
    `input_boolean.ocpp_charge_proxy_plugged_in`. The charger state and other
    details are now on the add-on's web page
 
-Until the integration is removed, the add-on leaves the sensors alone (its
-Health tab says so).
+Until the integration is removed, the add-on leaves the sensors alone
+(Diagnostics › Health says so).
 
 ### Sensor and auto plug-in options
 
@@ -212,8 +217,8 @@ The add-on creates these in Home Assistant:
 | `sensor.ocpp_charge_proxy_power` | Sensor | Live power draw (kW) |
 | `sensor.ocpp_charge_proxy_energy` | Sensor | Cumulative energy (kWh, Energy dashboard compatible) |
 | `sensor.ocpp_charge_proxy_current` | Sensor | Current draw (A) |
-| `sensor.ocpp_charge_proxy_status` | Sensor | OCPP state (Available, Preparing, Charging...) |
-| `sensor.ocpp_charge_proxy_current_limit` | Sensor | Current the charger uses (A), with your max and the supplier's limit as attributes |
+| `sensor.ocpp_charge_proxy_status` | Sensor | OCPP state (Available, Preparing, Charging...), or Scheduled / Waiting for supplier while plugged in with a supplier slot planned / running |
+| `sensor.ocpp_charge_proxy_current_limit` | Sensor | Current the charger uses (A), with your max (`max_amps`) and the supplier's limit (`provider_limit_amps`) as attributes |
 
 The sensors are updated by the add-on rather than an integration, so they
 can't be renamed in the UI and aren't grouped under a device, and they show as
@@ -227,8 +232,8 @@ heartbeat, commands and sensor details are on the add-on's web page.
 1. Start the add-on and verify it connects (its web page in the sidebar
    shows the charger state and the OCPP connection)
 2. Turn on **Plugged In** (the helper, or on the add-on's web page) to
-   simulate connecting a car (or let the car
-   connected sensor or auto plug-in do it)
+   simulate connecting a car (or let the **Car
+   plugged in** sensor or auto plug-in do it)
 3. Set a departure time and charge amount in your supplier's app
 4. Your supplier will schedule charging and send start/stop commands
 5. Create automations based on the **Power** sensor to control your actual
@@ -275,9 +280,8 @@ Tests run in CI on every push. To run them locally:
 
 ```bash
 cd ocpp_charge_proxy
-pip install -r requirements.txt pytest pytest-asyncio pytest-aiohttp
+pip install -r requirements-dev.txt
 python -m pytest tests/ -v
-
 ```
 
 ## Documentation
