@@ -2049,7 +2049,8 @@ function weekPlan(entries = auto.entries, skipList = null, forceCap = false) {
       events.push({t: d * DAY_MIN + tmin(e.time), plug: e.action === 'plug'});
     });
   }
-  events.sort((a, b) => a.t - b.t || (a.plug === b.plug ? 0 : a.plug ? -1 : 1));
+  // an unplug at the same minute as a plug comes first: back-to-back slots are one stretch
+  events.sort((a, b) => a.t - b.t || (a.plug === b.plug ? 0 : a.plug ? 1 : -1));
   const segs = [];
   let inSlot = null, start = null;
   for (const ev of events) {

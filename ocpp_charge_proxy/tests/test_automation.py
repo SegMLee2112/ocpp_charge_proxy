@@ -1019,3 +1019,30 @@ def test_daily_limit_over_any_rolling_period():
         raise AssertionError("should have refused")
     except ValueError as err:
         assert "the 72 hours from" in str(err) and "in any 72 hours" in str(err)
+
+
+def test_back_to_back_slots_are_one_stretch():
+    thu = "2026-10-08"
+    first = [{"time": "06:00", "action": "plug", "date": thu}, {"time": "12:00", "action": "unplug", "date": thu}]
+    second = [{"time": "12:00", "action": "plug", "date": thu}, {"time": "23:00", "action": "unplug", "date": thu}]
+    a, clock = _automation(start=datetime.datetime(2026, 10, 5, 14, 0, tzinfo=TZ))  # Monday
+    a.set_schedule(enabled=True, entries=first + second)
+    # plugged in throughout (it used to unplug at 12:00 and stay unplugged)
+    assert [(x.strftime("%H:%M"), y.strftime("%H:%M")) for x, y in a.windows()] == [("06:00", "12:00"), ("12:00", "23:00")]
+    assert a.in_plug_window(datetime.datetime(2026, 10, 8, 15, 0, tzinfo=TZ)) is not None
+    # The ready time set at 06:00 is for 23:00, not the 12:00 where the slots meet
+    assert a.next_unplug(datetime.datetime(2026, 10, 8, 6, 0, tzinfo=TZ)).strftime("%H:%M") == "23:00"
+    # At 12:00 it stays plugged in: only the plug-in runs (it sets the ready time again)
+    clock.dt = datetime.datetime(2026, 10, 8, 11, 59, tzinfo=TZ)
+    a.due()
+    clock.dt = datetime.datetime(2026, 10, 8, 12, 0, 30, tzinfo=TZ)
+    assert [e["action"] for e in a.due()] == ["plug"]
+    # Octopus, resetting at 12:00: 12:00-23:00 is 11 hours in the day from 12:00
+    b, clock_b = _automation(start=datetime.datetime(2026, 10, 5, 14, 0, tzinfo=TZ))
+    b.limit_reset = "12:00"
+    b.set_schedule(enabled=True, ready_time=True, entries=first, daily_cap_min=360)
+    try:
+        b.set_schedule(entries=b.entries + second, daily_cap_min=360, provider="Octopus Energy")
+        raise AssertionError("should have refused")
+    except ValueError as err:
+        assert "11h 00m" in str(err) and "Thu 12:00" in str(err)

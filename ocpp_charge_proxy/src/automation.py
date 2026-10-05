@@ -564,8 +564,9 @@ class Automation:
                 continue
             for occ in self._occurrences(entry, start, days):
                 out.append((occ, entry, {"entry_id": entry["id"], "date": occ.date().isoformat()} in skips))
-        # an unplug at the same minute as a plug comes after it
-        out.sort(key=lambda x: (x[0], x[1]["action"] == "unplug"))
+        # an unplug at the same minute as a plug comes before it: back-to-back
+        # slots (06:00-12:00 and 12:00-23:00) are one stretch, plugged in throughout
+        out.sort(key=lambda x: (x[0], x[1]["action"] == "plug"))
         return out
 
     def _active_entries(self) -> list:
@@ -971,11 +972,18 @@ class Automation:
         start = prev.date() - datetime.timedelta(days=1)
         span = (now.date() - start).days + 1
         due = []
-        for occ, entry, skipped in self.timeline(start, span):
+        timeline = self.timeline(start, span)
+        plugs_at = {occ for occ, e, skipped in timeline if e["action"] == "plug" and not skipped}
+        for occ, entry, skipped in timeline:
             if prev < occ <= now and (now - occ).total_seconds() <= CATCH_UP_S:
                 if skipped:
                     logger.info("Schedule: %s at %s skipped",
                                 "plug-in" if entry["action"] == "plug" else "unplug", entry["time"])
+                elif entry["action"] == "unplug" and occ in plugs_at:
+                    # One slot ends as the next starts: stays plugged in (the
+                    # plug-in still sets the supplier's ready time for the next)
+                    logger.info("Schedule: the slot ending at %s runs straight into the next, staying plugged in",
+                                entry["time"])
                 else:
                     due.append(entry)
         if prev.date() != now.date() and self._prune():  # tidy up once a day
@@ -999,9 +1007,12 @@ class Automation:
         return last[0] if last and last[1]["action"] == "plug" else None
 
     def next_unplug(self, after: datetime.datetime) -> Optional[datetime.datetime]:
-        """The schedule's next unplug after `after` (within a week)."""
-        for occ, entry, skipped in self.timeline(after.date(), 8):
-            if occ > after and entry["action"] == "unplug" and not skipped:
+        """The schedule's next unplug after `after` (within a week); one at
+        the same time as a plug-in (back-to-back slots) doesn't count."""
+        timeline = self.timeline(after.date(), 8)
+        plugs_at = {occ for occ, e, skipped in timeline if e["action"] == "plug" and not skipped}
+        for occ, entry, skipped in timeline:
+            if occ > after and entry["action"] == "unplug" and not skipped and occ not in plugs_at:
                 return occ
         return None
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.33.1 — Back-to-back slots
+
+- **Fix:** two slots that meet (e.g. 06:00–12:00 and 12:00–23:00) are now
+  one plugged-in stretch. Before, the unplug at 12:00 won over the
+  plug-in at 12:00, so the car was unplugged at 12:00 and stayed unplugged,
+  and the second slot wasn't counted towards the daily limit (so 11 hours
+  after 12:00 got through). It now stays plugged in at 12:00, the ready
+  time set at 06:00 is for 23:00, and the daily limit counts both slots.
+
 ## 2.33.0 — Car plugged in on Automations
 
 - **Change:** the Car plugged in card (its sensor, Add a charge to the
