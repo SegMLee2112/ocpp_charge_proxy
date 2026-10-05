@@ -112,9 +112,23 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
             out["daily_limit_h"] = hours
     if "limit_reset" in raw:
         value = str(raw["limit_reset"] or "").strip()
-        if value and value not in ("rolling", "48h") and value not in ALL_DAY_TIMES:
-            raise ValueError("limit_reset must be empty (automatic), rolling, 48h, or a time on the hour or half hour, e.g. 12:00")
+        if value == "48h":  # 2.31.0
+            value, out["limit_hours"] = "rolling", 48
+        if value and value != "rolling" and value not in ALL_DAY_TIMES:
+            raise ValueError("limit_reset must be empty (automatic), rolling, or a time on the hour or half hour, e.g. 12:00")
         out["limit_reset"] = value
+    if "limit_hours" in raw:
+        value = raw["limit_hours"]
+        if value in (None, ""):
+            out["limit_hours"] = None
+        else:
+            try:
+                hours = float(value)
+            except (TypeError, ValueError):
+                raise ValueError("limit_hours must be a number of hours") from None
+            if hours != int(hours) or not 1 <= hours <= 168:
+                raise ValueError("The reset frequency must be 1 to 168 whole hours")
+            out["limit_hours"] = int(hours)
     for key in ("ready_from", "ready_to"):
         if key in raw:
             value = str(raw[key] or "").strip()
@@ -134,7 +148,8 @@ def default_settings() -> dict:
         "plug_ready": False, "plug_hours": DEFAULT_AUTO_PLUG_HOURS,
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
-        "limit_reset": "",  # "": automatic, "rolling": any 24 hours, "48h": any 48 hours, "HH:MM": resets every day then
+        "limit_reset": "",  # "": automatic, "rolling": any limit_hours hours, "HH:MM": resets every day then
+        "limit_hours": None,  # the rolling period, hours (None: 24)
     }
 
 
@@ -668,12 +683,17 @@ class HaLink:
 
     def limit_reset(self, provider: Optional[str]) -> Optional[str]:
         """When your supplier's daily limit resets: "HH:MM" every day, None for
-        any 24 hours (rolling), or "48h" for any 48 hours. Set on the Settings
-        tab, else Octopus's 12:00 (rolling for the others)."""
+        any 24 hours (rolling), or "Nh" for any N hours (the reset frequency).
+        Set on the Settings tab, else Octopus's 12:00 (rolling for the others)."""
         value = self.settings.get("limit_reset") or ""
+        if value == "48h":  # saved by 2.31.0
+            value = "rolling"
         if not value:
-            return DEFAULT_LIMIT_RESETS.get(provider or "")
-        return None if value == "rolling" else value
+            value = DEFAULT_LIMIT_RESETS.get(provider or "") or "rolling"
+        if value != "rolling":
+            return value
+        hours = self.settings.get("limit_hours") or (48 if self.settings.get("limit_reset") == "48h" else 24)
+        return None if hours == 24 else f"{hours}h"
 
     def smart_charging(self) -> dict:
         """Your supplier's planned charge slots, if its integration is installed."""
@@ -689,7 +709,8 @@ class HaLink:
             info["limit_min"] = self.daily_limit_min(info.get("provider"))
             info["limit_reset"] = self.limit_reset(info.get("provider"))
             info["chosen"] = {k: self.settings.get(k) for k in
-                              ("supplier_entity", "ready_entity", "daily_limit_h", "limit_reset", "ready_from", "ready_to")}
+                              ("supplier_entity", "ready_entity", "daily_limit_h", "limit_reset", "limit_hours",
+                               "ready_from", "ready_to")}
         return info
 
     async def set_ready_time(self, unplug) -> dict:

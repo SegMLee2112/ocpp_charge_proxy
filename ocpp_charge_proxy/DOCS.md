@@ -355,9 +355,12 @@ follows your Home Assistant theme. Settings save as soon as you change them.
     others; 0: no limit). Used for the schedule, auto plug-in and Charge now
     while Force schedule on supplier is on. **Resets** says when it starts
     again: every day at a set time (automatic for Octopus Energy: 12:00, so
-    6 hours before midday and another 6 from midday are fine), rolling 24
-    hours (automatic for the others: no more than the limit in any 24
-    hours), or rolling 48 hours (no more than the limit in any 48 hours). With a reset time, "any 24 hours" below means each day from
+    6 hours before midday and another 6 from midday are fine), or rolling
+    (automatic for the others): no more than the limit in any period of the
+    **Reset frequency** (24 hours unless changed, 1–168 hours). If a change
+    means the schedule no longer fits, the card offers to clear the
+    schedule's charging slots (no-charging times stay), put the setting
+    back, or keep both and shorten the slots yourself. With a reset time, "any 24 hours" below means each day from
     that time, and a charge across it can be longer: 08:00 for 12 hours is
     08:00–18:00 (4 hours before 12:00, then 6 after).
   Each shows what's in use, and whether it was found or picked.

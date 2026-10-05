@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.32.0 — Reset frequency
+
+- **Feature:** Settings › Your supplier › Daily limit has a **Reset
+  frequency**: the rolling period the limit counts over, in hours (1–168,
+  24 unless changed). It's shown when Resets is Rolling.
+- **Change:** Rolling 24 hours and Rolling 48 hours are now one
+  **Rolling** option; a saved Rolling 48 hours becomes Rolling with a
+  48-hour reset frequency.
+- **Feature:** changing the daily limit, when it resets or the reset
+  frequency so the schedule no longer fits offers to clear the schedule's
+  charging slots, put the setting back, or keep both.
+- **Docs:** the reset frequency.
+
 ## 2.31.0 — Rolling 48 hours
 
 - **Feature:** the daily limit's **Resets** setting has **Rolling 48

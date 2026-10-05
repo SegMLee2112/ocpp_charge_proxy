@@ -232,17 +232,27 @@ def _hours(minutes: int) -> str:
     return f"{minutes / 60:g}"
 
 
-ROLLING_48 = "48h"  # limit_reset: no more than the limit in any 48 hours
+def _rolling_hours(reset: Optional[str]) -> Optional[int]:
+    """limit_reset "48h": no more than the limit in any 48 hours (rolling)."""
+    if reset and reset.endswith("h") and reset[:-1].isdigit():
+        return int(reset[:-1])
+    return None
 
 
 def limit_length(reset: Optional[str]) -> datetime.timedelta:
-    """How long the daily limit is counted over: 48 hours for "48h", else 24."""
-    return datetime.timedelta(days=2 if reset == ROLLING_48 else 1)
+    """How long the daily limit is counted over: N hours for "Nh", else 24."""
+    return datetime.timedelta(hours=_rolling_hours(reset) or 24)
 
 
 def _fixed(reset: Optional[str]) -> Optional[str]:
     """The reset time ("HH:MM") if the limit resets at a set time every day."""
-    return reset if reset and reset != ROLLING_48 else None
+    return reset if reset and _rolling_hours(reset) is None else None
+
+
+def limit_period_text(reset: Optional[str]) -> str:
+    """"a day" / "in any 48 hours", for messages."""
+    hours = _rolling_hours(reset)
+    return f"in any {hours} hours" if hours and hours != 24 else "a day"
 
 
 def window_minutes(windows, start, length: datetime.timedelta = datetime.timedelta(days=1)) -> int:
@@ -265,13 +275,14 @@ def period_start(t: datetime.datetime, reset: str) -> datetime.datetime:
 def limit_starts(windows, after, until, reset: Optional[str] = None) -> list:
     """Where the 24 hours a daily limit is checked over start. reset None
     (rolling): any 24 hours, i.e. from each stretch's start between `after`
-    and `until`; "48h": the same over 48 hours (looking a day further back).
+    and `until`; "Nh": the same over N hours (looking back N hours from a
+    day after `after`, i.e. from now).
     reset "HH:MM": the limit resets then every day, so each limit day a
     stretch is in, from after `after` (i.e. not over yet when `after` is a
     day ago) to `until`."""
     if not _fixed(reset):
-        if reset == ROLLING_48:
-            after -= datetime.timedelta(days=1)
+        if reset:
+            after += datetime.timedelta(days=1) - limit_length(reset)
         return sorted({a for a, _ in windows if after <= a <= until})
     out = set()
     for a, b in windows:
@@ -296,7 +307,7 @@ def longest_day(windows, after, until, reset: Optional[str] = None):
 def limit_day_text(start: datetime.datetime, reset: Optional[str]) -> str:
     """"the 24 hours from Sat 18:00" / "the day from Sat 12:00 (the limit resets at 12:00)"."""
     if not _fixed(reset):
-        return f"the {48 if reset == ROLLING_48 else 24} hours from {start.strftime('%a %H:%M')}"
+        return f"the {_rolling_hours(reset) or 24} hours from {start.strftime('%a %H:%M')}"
     return f"the day from {start.strftime('%a %H:%M')} (the limit resets at {reset})"
 
 
@@ -330,8 +341,8 @@ class Automation:
         self.unplug_wait_s = GRACEFUL_UNPLUG_S
         self.blocks: list[dict] = []  # no-charging times: nothing is scheduled in them
         self.override_guards = False  # Diagnostics › Debug: no daily limit (Octopus: 6 hours)
-        # When the daily limit resets: None = any 24 hours (rolling), "48h" =
-        # any 48 hours, "HH:MM" = every day then (Octopus: 12:00). From the
+        # When the daily limit resets: None = any 24 hours (rolling), "Nh" =
+        # any N hours, "HH:MM" = every day then (Octopus: 12:00). From the
         # Settings tab, not saved here.
         self.limit_reset: Optional[str] = None
         self.plan_check: Optional[dict] = None  # the supplier's plan vs the schedule, while plugged in
@@ -619,7 +630,7 @@ class Automation:
             total, start = worst
             raise ValueError(
                 f"{provider} schedules at most {_hours(cap_min)} hours of smart charging "
-                f"{'in any 48 hours' if self.limit_reset == ROLLING_48 else 'a day'}, but the schedule "
+                f"{limit_period_text(self.limit_reset)}, but the schedule "
                 f"plugs in for {total // 60}h {total % 60:02d}m in {limit_day_text(start, self.limit_reset)}: shorten it"
             )
 

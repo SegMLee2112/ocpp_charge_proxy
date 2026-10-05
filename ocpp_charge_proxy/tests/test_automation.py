@@ -998,3 +998,24 @@ def test_daily_limit_over_any_48_hours():
     c, clock_c = _automation(start=_at(8))
     c.limit_reset = "48h"
     assert c.plan_auto_plug(720, cap_min=360)["ready_for"].startswith("2026-10-03T14:00")  # 6 h, then it stops
+
+
+def test_daily_limit_over_any_rolling_period():
+    # A 12-hour rolling period: 18-22 Saturday and 08-11 Sunday are 14 h apart, fine
+    two = [{"time": "18:00", "action": "plug", "days": [5]}, {"time": "22:00", "action": "unplug", "days": [5]},
+           {"time": "08:00", "action": "plug", "days": [6]}, {"time": "11:00", "action": "unplug", "days": [6]}]
+    a, clock = _automation(start=_at(1))
+    a.limit_reset = "12h"
+    a.set_schedule(entries=two, ready_time=True, daily_cap_min=360)
+    a.limit_reset = None  # any 24 hours: 7 h
+    try:
+        a.check_daily_cap(a.entries, 360, "Octopus Energy")
+        raise AssertionError("should have refused")
+    except ValueError as err:
+        assert "7h 00m" in str(err) and "24 hours" in str(err)
+    a.limit_reset = "72h"
+    try:
+        a.check_daily_cap(a.entries, 360, "Octopus Energy")
+        raise AssertionError("should have refused")
+    except ValueError as err:
+        assert "the 72 hours from" in str(err) and "in any 72 hours" in str(err)

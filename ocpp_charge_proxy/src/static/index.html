@@ -563,9 +563,14 @@
           <span class="ctl"><input type="number" id="sup-limit" min="0" max="24" step="0.5" placeholder="Auto" aria-label="Daily limit in hours"> h</span>
         </div>
         <div class="row" style="flex-wrap:nowrap">
-          <div class="grow" style="min-width:0">Resets<div class="note" style="margin:0"><span id="sup-reset-note"></span>. <details class="more"><summary>More</summary><div>Every day at a set time: the hours count from then, so e.g. with 12:00 you can have 6 hours in the morning and another 6 from 12:00 (Octopus Energy). Rolling 24 (or 48) hours: no more than the limit in any 24 (or 48) hours.</div></details></div></div>
+          <div class="grow" style="min-width:0">Resets<div class="note" style="margin:0"><span id="sup-reset-note"></span>. <details class="more"><summary>More</summary><div>Every day at a set time: the hours count from then, so e.g. with 12:00 you can have 6 hours in the morning and another 6 from 12:00 (Octopus Energy). Rolling: no more than the limit in any period of the reset frequency (24 hours unless changed).</div></details></div></div>
           <span class="ctl"><select id="sup-reset" style="max-width:160px" aria-label="When the daily limit resets"></select></span>
         </div>
+        <div class="row" id="sup-hours-row">
+          <div class="grow">Reset frequency<div class="note" style="margin:0" id="sup-hours-note"></div></div>
+          <span class="ctl"><input type="number" id="sup-hours" min="1" max="168" step="1" placeholder="24" aria-label="Rolling period in hours"> h</span>
+        </div>
+        <div id="sup-clash" class="note" style="margin:12px 0 0" hidden></div>
       </div>
     </div>
     <label class="live" style="cursor:pointer"><input type="checkbox" id="sim-all"> Show all sensors in the lists (here and on the Automations tab)</label>
@@ -2254,7 +2259,7 @@ function drawWeek() {
   if (plan.over) {
     const w = plan.worst;
     $('w-warn').innerHTML = `<span class="chip err">Over ${capMin() / 60} hours</span> Plugged in for ${dur(w.total * 60)} in the ${limitReset() ? 'day' : `${limitHours()} hours`} from ${dayLabel(Math.floor(w.start / DAY_MIN))} ${hhmm(((w.start % DAY_MIN) + DAY_MIN) % DAY_MIN)}${limitReset() ? ` (the limit resets at ${limitReset()})` : ''}. `
-      + `${sup('Your supplier')} schedules at most ${capMin() / 60} hours of smart charging in ${limitHours() === 48 ? 'any 48 hours' : 'a day'}: shorten the slots marked in red.`;
+      + `${sup('Your supplier')} schedules at most ${capMin() / 60} hours of smart charging in ${limitHours() !== 24 ? `any ${limitHours()} hours` : 'a day'}: shorten the slots marked in red.`;
   }
 }
 
@@ -2579,8 +2584,10 @@ const limitText = () => `${sup('your supplier')}'s ${capMin() / 60} hours`;
 // When the daily limit resets: "HH:MM" every day (Octopus: 12:00), or null: any
 // 24 hours (rolling). "48h": any 48 hours, counted like any 24 hours.
 const rawReset = () => (smart.data && smart.data.found && smart.data.limit_reset) || null;
-const limitReset = () => { const v = rawReset(); return v === '48h' ? null : v; };
-const limitHours = () => rawReset() === '48h' ? 48 : 24;
+// "36h": rolling, over any 36 hours (the reset frequency)
+const rollingHours = (v) => { const m = /^(\d+)h$/.exec(v || ''); return m ? Number(m[1]) : null; };
+const limitReset = () => { const v = rawReset(); return rollingHours(v) ? null : v; };
+const limitHours = () => rollingHours(rawReset()) || 24;
 const limitDay = () => limitReset() ? `in a day (from ${limitReset()})` : `in ${limitHours()} hours`;
 // It applies while the schedule sets the supplier's ready time, unless the
 // scheduling guards are overridden (Diagnostics › Debug)
@@ -2673,7 +2680,7 @@ function applyDailyLimit() {
   const rs = limitReset();
   const text = !on ? '' : rs
     ? `With ${sup('your supplier')}'s daily limit, only ${h} hours are scheduled in each day from ${rs} (while Force schedule on ${sup('supplier')} is on); a charge that reaches it stops then.`
-    : `With ${sup('your supplier')}'s daily limit, only ${h} hours are scheduled${limitHours() === 48 ? ' in a rolling 48 hours' : ''} (while Force schedule on ${sup('supplier')} is on); a longer charge stops then.`;
+    : `With ${sup('your supplier')}'s daily limit, only ${h} hours are scheduled${limitHours() !== 24 ? ` in a rolling ${limitHours()} hours` : ''} (while Force schedule on ${sup('supplier')} is on); a longer charge stops then.`;
   ['c-charge-cap', 'sim-auto-cap', 'plug-cap'].forEach((id) => { $(id).innerHTML = text; $(id).hidden = !on; });
 }
 // ---------- Charge now (Automations tab): plug in for a set time ----------
@@ -2719,14 +2726,15 @@ $('c-charge').addEventListener('click', (e) => { const h = Number(e.target.datas
 // ---------- Settings › Your supplier: override what's found automatically ----------
 const HALF_HOURS = Array.from({length: 48}, (_, k) => `${String(Math.floor(k / 2)).padStart(2, '0')}:${k % 2 ? '30' : '00'}`);
 ['sup-from', 'sup-to'].forEach((id) => { $(id).innerHTML = '<option value="">Auto</option>' + HALF_HOURS.map((t) => `<option>${t}</option>`).join(''); });
-$('sup-reset').innerHTML = '<option value="">Auto</option><option value="rolling">Rolling 24 hours</option><option value="48h">Rolling 48 hours</option>'
+$('sup-reset').innerHTML = '<option value="">Auto</option><option value="rolling">Rolling</option>'
   + HALF_HOURS.map((t) => `<option value="${t}">Every day at ${t}</option>`).join('');
 function drawSupplierSettings() {
   const e = sim.edit || {}, d = smart.data || {};
   if (document.activeElement !== $('sup-from')) $('sup-from').value = e.ready_from || '';
   if (document.activeElement !== $('sup-to')) $('sup-to').value = e.ready_to || '';
   if (document.activeElement !== $('sup-limit')) $('sup-limit').value = e.daily_limit_h ?? '';
-  if (document.activeElement !== $('sup-reset')) $('sup-reset').value = e.limit_reset || '';
+  if (document.activeElement !== $('sup-reset')) $('sup-reset').value = e.limit_reset === '48h' ? 'rolling' : e.limit_reset || '';
+  if (document.activeElement !== $('sup-hours')) $('sup-hours').value = e.limit_hours ?? '';
   const ent = (id) => id ? `<code>${esc(id)}</code>` : '<span class="muted">None found</span>';
   const times = d.ready_times || [];
   $('sup-found').innerHTML = kv([
@@ -2740,11 +2748,47 @@ function drawSupplierSettings() {
   const lim = d.found ? d.limit_min : null;
   $('sup-limit-note').innerHTML = (e.daily_limit_h == null ? 'Automatic: ' : 'Set: ') + (lim ? `${lim / 60} hours` : 'no limit');
   const rs = d.found ? d.limit_reset : null;
-  $('sup-reset-note').innerHTML = (e.limit_reset ? 'Set: ' : 'Automatic: ') + (!d.found ? '—' : rs === '48h' ? 'rolling 48 hours' : rs ? `every day at ${rs}` : 'rolling 24 hours');
+  const rh = rollingHours(rs);
+  $('sup-reset-note').innerHTML = (e.limit_reset ? 'Set: ' : 'Automatic: ') + (!d.found ? '—' : rs && !rh ? `every day at ${rs}` : `rolling ${rh || 24} hours`);
+  // The reset frequency: the rolling period (not used with a reset time)
+  $('sup-hours-row').hidden = !!(d.found && rs && !rh);
+  $('sup-hours-note').innerHTML = (e.limit_hours ? 'Set: ' : 'Automatic: ') + `the limit counts over any ${rh || 24} hours`;
 }
 async function saveSupplier(patch, msg) {
+  const before = clone((sim.edit) || {});
   await saveSensors(patch, msg);
-  setTimeout(async () => { await refreshSmart(true); drawSupplierSettings(); applyDailyLimit(); }, 1500);  // found again with it
+  setTimeout(async () => {  // found again with it
+    await refreshSmart(true); drawSupplierSettings(); applyDailyLimit();
+    if (['daily_limit_h', 'limit_reset', 'limit_hours'].some((k) => k in patch)) checkLimitClash(patch, before);
+  }, 1500);
+}
+// A new daily limit (or when it resets) the schedule doesn't fit: say so, and
+// offer to clear the schedule's charging slots or put the setting back
+async function checkLimitClash(patch, before) {
+  const box = $('sup-clash');
+  await refreshAutomation(true);
+  const plan = limitApplies() ? weekPlan(auto.entries, null, true) : null;
+  if (!plan || !plan.over) { box.hidden = true; return; }
+  const w = plan.worst;
+  box.innerHTML = `<span class="chip err">Over ${capMin() / 60} hours</span> With this, the schedule plugs in for ${dur(w.total * 60)} ${limitDay()}, `
+    + `over the limit: changes to it will be refused until it's shortened. Clear its charging slots (no-charging times stay)?`
+    + '<div class="row" style="margin-top:8px"><button class="btn small primary" id="sup-clash-clear">Clear the schedule</button>'
+    + '<button class="btn small" id="sup-clash-undo">Put the setting back</button><button class="btn small" id="sup-clash-keep">Keep both</button></div>';
+  box.hidden = false;
+  $('sup-clash-clear').onclick = async () => {
+    try {
+      // Only the charging slots: no-charging times stay
+      auto.data = await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({entries: []})});
+      toast('Schedule cleared'); box.hidden = true; await refreshAutomation(true);
+    } catch (e) { toast('Failed: ' + e.message); }
+  };
+  $('sup-clash-undo').onclick = async () => {
+    box.hidden = true;
+    const back = {};
+    Object.keys(patch).forEach((k) => { back[k] = before[k] ?? (k === 'limit_reset' ? '' : null); });
+    await saveSupplier(back, 'Setting put back');
+  };
+  $('sup-clash-keep').onclick = () => { box.hidden = true; };
 }
 $('sup-from').addEventListener('change', (e) => saveSupplier({ready_from: e.target.value, ready_to: e.target.value ? ($('sup-to').value || '23:30') : ''},
   e.target.value ? 'Ready times saved' : 'Ready times: automatic'));
@@ -2752,8 +2796,12 @@ $('sup-to').addEventListener('change', (e) => saveSupplier({ready_to: e.target.v
   e.target.value ? 'Ready times saved' : 'Ready times: automatic'));
 $('sup-reset').addEventListener('change', (e) => {
   const v = e.target.value;
-  saveSupplier({limit_reset: v}, !v ? 'Daily limit resets: automatic' : v === 'rolling' ? 'Daily limit: rolling 24 hours'
-    : v === '48h' ? 'Daily limit: rolling 48 hours' : `Daily limit resets at ${v}`);
+  saveSupplier({limit_reset: v}, !v ? 'Daily limit resets: automatic' : v === 'rolling' ? 'Daily limit: rolling' : `Daily limit resets at ${v}`);
+});
+$('sup-hours').addEventListener('change', (e) => {
+  const v = e.target.value.trim(), h = Number(v);
+  if (v !== '' && !(Number.isInteger(h) && h >= 1 && h <= 168)) { toast('Reset frequency: 1–168 whole hours (empty: 24)'); drawSupplierSettings(); return; }
+  saveSupplier({limit_hours: v === '' ? null : h}, v === '' ? 'Reset frequency: 24 hours' : `Reset frequency: ${h} hours`);
 });
 $('sup-limit').addEventListener('change', (e) => {
   const v = e.target.value.trim(), h = Number(v);
