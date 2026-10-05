@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.29.2 — Schedule drawing put back
+
+- **Change:** undoes the 2.29.1 drawing change. Skipped slots and
+  no-charging times look as they did in 2.29.0 again.
+
 ## 2.29.1 — Schedule drawn on top
 
 - **Fix:** skipped slots keep their own colour with the skip stripes over it,
