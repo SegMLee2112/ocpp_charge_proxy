@@ -589,7 +589,8 @@ class Automation:
             for occ in self._occurrences(entry, start, days):
                 out.append((occ, entry, {"entry_id": entry["id"], "date": occ.date().isoformat()} in skips))
         # an unplug at the same minute as a plug comes before it: back-to-back
-        # slots (06:00-12:00 and 12:00-23:00) are one stretch, plugged in throughout
+        # slots (06:00-12:00 and 12:00-18:00) unplug and plug straight back in,
+        # so the supplier sees two charges, each with its own ready time
         out.sort(key=lambda x: (x[0], x[1]["action"] == "plug"))
         return out
 
@@ -1059,10 +1060,11 @@ class Automation:
                     logger.info("Schedule: %s at %s skipped",
                                 "plug-in" if entry["action"] == "plug" else "unplug", entry["time"])
                 elif entry["action"] == "unplug" and occ in plugs_at:
-                    # One slot ends as the next starts: stays plugged in (the
-                    # plug-in still sets the supplier's ready time for the next)
-                    logger.info("Schedule: the slot ending at %s runs straight into the next, staying plugged in",
-                                entry["time"])
+                    # One slot ends as the next starts: unplug straight away (no
+                    # waiting for the supplier) and plug back in for the next, so
+                    # it's two charges, each with its own ready time (e.g. Octopus:
+                    # 6 hours before a 12:00 reset and 6 after)
+                    due.append(dict(entry, back_to_back=True))
                 else:
                     due.append(entry)
         if prev.date() != now.date() and self._prune():  # tidy up once a day
@@ -1086,12 +1088,10 @@ class Automation:
         return last[0] if last and last[1]["action"] == "plug" else None
 
     def next_unplug(self, after: datetime.datetime) -> Optional[datetime.datetime]:
-        """The schedule's next unplug after `after` (within a week); one at
-        the same time as a plug-in (back-to-back slots) doesn't count."""
-        timeline = self.timeline(after.date(), 8)
-        plugs_at = {occ for occ, e, skipped in timeline if e["action"] == "plug" and not skipped}
-        for occ, entry, skipped in timeline:
-            if occ > after and entry["action"] == "unplug" and not skipped and occ not in plugs_at:
+        """The schedule's next unplug after `after` (within a week). Back-to-back
+        slots each have their own: they unplug and plug back in where they meet."""
+        for occ, entry, skipped in self.timeline(after.date(), 8):
+            if occ > after and entry["action"] == "unplug" and not skipped:
                 return occ
         return None
 
@@ -1342,7 +1342,15 @@ async def automation_loop(
                     "entry_id": entry["id"], "action": entry["action"],
                     "timestamp": _iso_from_epoch(automation._clock()),
                 }
-                if entry["action"] == "plug":
+                if entry.get("back_to_back"):
+                    # Where two slots meet: a fresh charge for the next one
+                    automation.unplug_at = None
+                    off = automation.replug.get("off_s", REPLUG_WAIT_S)
+                    logger.info("Schedule: one slot ends and the next starts at %s: unplugging, "
+                                "plugging back in after %d s", entry["time"], off)
+                    await unplug(source="schedule")
+                    await asyncio.sleep(off)
+                elif entry["action"] == "plug":
                     automation.unplug_at = None  # a waiting unplug is overtaken
                     logger.info("Schedule: plugging in at %s", entry["time"])
                     await plug(source="schedule")

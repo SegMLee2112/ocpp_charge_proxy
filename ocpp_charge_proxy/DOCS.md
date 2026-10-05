@@ -195,6 +195,11 @@ hatched in blue-grey.
   Automations tab; a mismatch also as a red chip on the Overview, and in the
   log. The supplier's planned slots are outlined in its colour on the
   Automations tab (whether or not this is on).
+- **Back-to-back slots** (one ends as the next starts, e.g. 06:00–12:00 and
+  12:00–18:00): at 12:00 it unplugs straight away (without waiting for your
+  supplier) and plugs back in after the re-plug **Unplugged for** time, so
+  each slot is its own charge with its own ready time (12:00, then 18:00).
+  With Octopus resetting its limit at 12:00, that's 6 hours each side.
 - **Auto re-plug** (**Automations** tab): Octopus sometimes doesn't start a session after you plug
   in. When Plugged In has been on for the set minutes (default 10) with no
   session and the add-on is connected, it unplugs, waits the set

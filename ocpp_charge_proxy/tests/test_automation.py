@@ -1027,16 +1027,18 @@ def test_back_to_back_slots_are_one_stretch():
     second = [{"time": "12:00", "action": "plug", "date": thu}, {"time": "23:00", "action": "unplug", "date": thu}]
     a, clock = _automation(start=datetime.datetime(2026, 10, 5, 14, 0, tzinfo=TZ))  # Monday
     a.set_schedule(enabled=True, entries=first + second)
-    # plugged in throughout (it used to unplug at 12:00 and stay unplugged)
+    # plugged in for both (it used to unplug at 12:00 and stay unplugged)
     assert [(x.strftime("%H:%M"), y.strftime("%H:%M")) for x, y in a.windows()] == [("06:00", "12:00"), ("12:00", "23:00")]
     assert a.in_plug_window(datetime.datetime(2026, 10, 8, 15, 0, tzinfo=TZ)) is not None
-    # The ready time set at 06:00 is for 23:00, not the 12:00 where the slots meet
-    assert a.next_unplug(datetime.datetime(2026, 10, 8, 6, 0, tzinfo=TZ)).strftime("%H:%M") == "23:00"
-    # At 12:00 it stays plugged in: only the plug-in runs (it sets the ready time again)
+    # Each slot has its own ready time: 12:00 for the first, 23:00 for the second
+    assert a.next_unplug(datetime.datetime(2026, 10, 8, 6, 0, tzinfo=TZ)).strftime("%H:%M") == "12:00"
+    assert a.next_unplug(datetime.datetime(2026, 10, 8, 12, 1, tzinfo=TZ)).strftime("%H:%M") == "23:00"
+    # At 12:00 it unplugs (straight away) and plugs back in: two charges
     clock.dt = datetime.datetime(2026, 10, 8, 11, 59, tzinfo=TZ)
     a.due()
     clock.dt = datetime.datetime(2026, 10, 8, 12, 0, 30, tzinfo=TZ)
-    assert [e["action"] for e in a.due()] == ["plug"]
+    due = a.due()
+    assert [(e["action"], bool(e.get("back_to_back"))) for e in due] == [("unplug", True), ("plug", False)]
     # Octopus, resetting at 12:00: 12:00-23:00 is 11 hours in the day from 12:00
     b, clock_b = _automation(start=datetime.datetime(2026, 10, 5, 14, 0, tzinfo=TZ))
     b.limit_reset = "12:00"
@@ -1204,3 +1206,55 @@ def test_replug_unplugged_for_is_a_setting():
     finally:
         mod.asyncio.sleep = real
     assert waits == [60]
+
+
+def test_back_to_back_slots_replug_at_the_join():
+    """06:00-12:00 then 12:00-18:00 (Octopus resets at 12:00): at 12:00 it
+    unplugs straight away (even mid-session with Force schedule on) and plugs
+    back in after the re-plug time, then sets the ready time to 18:00."""
+    from src.shared_state import SharedState
+    thu = "2026-10-08"
+    a, clock = _automation(start=datetime.datetime(2026, 10, 8, 11, 59, 50, tzinfo=TZ))
+    a.set_schedule(enabled=True, ready_time=True, entries=[
+        {"time": "06:00", "action": "plug", "date": thu}, {"time": "12:00", "action": "unplug", "date": thu},
+        {"time": "12:00", "action": "plug", "date": thu}, {"time": "18:00", "action": "unplug", "date": thu}])
+    a.set_replug(off_s=5)
+    state = SharedState(plugged_in=True)
+    state.transaction_id = 7  # a session is going
+    calls, asked, slept = [], [], []
+
+    async def plug(source=None):
+        calls.append("plug")
+        state.plugged_in = True
+
+    async def unplug(source=None):
+        calls.append("unplug")
+        state.plugged_in = False
+
+    async def set_ready(unplug_at):
+        asked.append(unplug_at.strftime("%H:%M"))
+        return {"ready": unplug_at.strftime("%H:%M")}
+
+    import src.automation as mod
+    real_sleep = mod.asyncio.sleep
+
+    async def fake_sleep(s):
+        if s == 5:
+            slept.append(s)
+        await real_sleep(0)
+
+    async def ticks():
+        task = asyncio.ensure_future(automation_loop(a, state, plug, unplug, tick_s=0.01, set_ready_time=set_ready))
+        await real_sleep(0.03)
+        clock.dt = datetime.datetime(2026, 10, 8, 12, 0, 10, tzinfo=TZ)
+        await real_sleep(0.05)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    mod.asyncio.sleep = fake_sleep
+    try:
+        _run(ticks())
+    finally:
+        mod.asyncio.sleep = real_sleep
+    assert calls == ["unplug", "plug"] and slept == [5]
+    assert asked and asked[-1] == "18:00"

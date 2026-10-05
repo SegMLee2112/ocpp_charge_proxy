@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.37.0 — Back-to-back slots are two charges
+
+- **Change:** where two slots meet (e.g. 06:00–12:00 and 12:00–18:00), it
+  now unplugs at 12:00 straight away and plugs back in after the re-plug
+  Unplugged for time (default 30 s), instead of staying plugged in. Each
+  slot gets its own ready time (12:00, then 18:00), so Octopus sees two
+  charges and can give 6 hours either side of its 12:00 reset, rather than
+  one 12-hour charge it would only give 6 hours of.
+- **Docs:** back-to-back slots.
+
 ## 2.36.0 — Tidier wording, supply voltage, re-plug time
 
 - **Feature:** Settings › Your Home Assistant sensors has a **Voltage**
