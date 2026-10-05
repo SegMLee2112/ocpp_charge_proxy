@@ -489,6 +489,15 @@ class Automation:
         guards_off = self.override_guards if override_guards is None else bool(override_guards)
         if guards_off:
             daily_cap_min = None
+        if daily_cap_min and (self.ready_time if ready_time is None else bool(ready_time)):
+            # A slot across the limit's reset time (Octopus: 12:00) that's longer
+            # than the limit is split there: two charges, each with its own ready time
+            splits = self._reset_splits(new_entries, new_skips, daily_cap_min)
+            if splits:
+                new_entries = new_entries + splits
+                logger.info("Schedule: split %s at %s, where %s's daily limit resets",
+                            "a slot" if len(splits) == 2 else "slots", ", ".join(sorted({e["time"] for e in splits})),
+                            provider)
         checking = (entries is not None or bool(ready_time)
                     or (override_guards is not None and not override_guards and self.override_guards))
         if checking and (self.ready_time if ready_time is None else bool(ready_time)):
@@ -659,6 +668,40 @@ class Automation:
         return longest_day(self.windows(entries, now, skips, open_ended=True), now - datetime.timedelta(days=1),
                            now + datetime.timedelta(days=self._horizon_days(entries) - 1), self.limit_reset,
                            self._localize)
+
+    def _reset_splits(self, entries: list, skips: list, cap_min: int, one_off: bool = False,
+                      until: Optional[datetime.datetime] = None) -> list:
+        """Entries that split each coming slot longer than `cap_min` where the
+        daily limit resets (it unplugs and plugs straight back in there: see
+        due()), so the supplier sees a charge either side. Weekly for weekly
+        slots, one-offs otherwise (or with `one_off`). Only with a reset time."""
+        fixed, loc = _fixed(self.limit_reset), self._localize
+        if not fixed or not cap_min:
+            return []
+        now = self._now()
+        weekly: dict = {}
+        out = []
+        for s in self._stretches(now.date() - datetime.timedelta(days=1), self._horizon_days(entries) + 1,
+                                 entries, skips):
+            if s["end"] <= now or (until is not None and s["start"] > until):
+                continue
+            if (s["end"] - s["start"]).total_seconds() / 60 <= cap_min:
+                continue
+            r = limit_end(period_start(s["start"], fixed, loc), fixed, loc)
+            while r < s["end"]:
+                if r > now:
+                    src = s["plug"].get("source")
+                    if not one_off and not s["plug"].get("date") and not s["unplug"].get("date"):
+                        weekly.setdefault(r.strftime("%H:%M"), set()).add(r.weekday())
+                    else:
+                        for action in ("unplug", "plug"):
+                            out.append(validate_entry({"time": r.strftime("%H:%M"), "date": r.date().isoformat(),
+                                                       "action": action, **({"source": src} if src else {})}))
+                r = limit_end(r, fixed, loc)
+        for t, days in sorted(weekly.items()):
+            for action in ("unplug", "plug"):
+                out.append(validate_entry({"time": t, "days": sorted(days), "action": action}))
+        return out
 
     def _makes_worse(self, cap_min: int, old: tuple, new: tuple) -> bool:
         """(entries, skips) before and after a change: does any 24 hours (or
@@ -956,6 +999,10 @@ class Automation:
                     cuts[i] = best[0]
                     after, left_over, near = best[1], best[2], best[3]
         added, skips, combined, slot_end, moved = build(cuts)
+        # Longer than the limit across its reset time (e.g. 08:00-18:00 with
+        # Octopus's 12:00): split there, a fresh charge with its own ready time
+        splits = self._reset_splits(active + added, skips, cap_min, one_off=True, until=slot_end) if cap_min else []
+        added += splits
         changed = {"skips": [k for k in skips if k not in self.skips],
                    "added": [e["id"] for e in added if e["id"] not in {x["id"] for x in seg_entries + [unplug]}]}
         if changed["skips"] or changed["added"]:
@@ -965,6 +1012,9 @@ class Automation:
             notes.append(moved)
         if combined:
             notes.append(f"joined with the scheduled slot until {slot_end.strftime('%H:%M')}")
+        if splits:
+            notes.append("a fresh charge from " + ", ".join(sorted({e["time"] for e in splits}))
+                         + f" ({provider}'s daily limit resets then)")
         plan = {
             "at": _iso_local(now), "minutes": minutes, "ready_for": _iso_local(end),
             "end": _iso_local(slot_end), "combined": combined, "moved": moved, "notes": notes,

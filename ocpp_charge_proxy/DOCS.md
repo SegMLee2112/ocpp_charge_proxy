@@ -200,6 +200,11 @@ hatched in blue-grey.
   supplier) and plugs back in after the re-plug **Unplugged for** time, so
   each slot is its own charge with its own ready time (12:00, then 18:00).
   With Octopus resetting its limit at 12:00, that's 6 hours each side.
+  With Force schedule on supplier on and a reset time, a slot longer than
+  the daily limit across the reset time (e.g. 08:00–18:00) is split there
+  when it's saved, into two slots that work this way; so is a charge from
+  auto plug-in, the car plugged in sensor or Charge now (including one
+  joined with a scheduled slot).
 - **Auto re-plug** (**Automations** tab): Octopus sometimes doesn't start a session after you plug
   in. When Plugged In has been on for the set minutes (default 10) with no
   session and the add-on is connected, it unplugs, waits the set

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.38.0 — Long slots split at the reset time
+
+- **Feature:** with Force schedule on supplier on and a daily limit that
+  resets at a set time (Octopus: 12:00), a slot longer than the limit
+  across that time is split there: 08:00–18:00 becomes 08:00–12:00 and
+  12:00–18:00, which unplug and plug straight back in at 12:00, each with
+  its own ready time. Slots are split when saved (weekly ones for every day
+  they run); charges from auto plug-in, the car plugged in sensor and
+  Charge now are split too, including when joined with a scheduled slot.
+  Deleting the charge takes the split with it.
+- **Docs:** splitting at the reset time.
+
 ## 2.37.0 — Back-to-back slots are two charges
 
 - **Change:** where two slots meet (e.g. 06:00–12:00 and 12:00–18:00), it

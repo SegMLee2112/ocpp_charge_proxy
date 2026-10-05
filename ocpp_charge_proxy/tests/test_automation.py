@@ -1258,3 +1258,63 @@ def test_back_to_back_slots_replug_at_the_join():
         mod.asyncio.sleep = real_sleep
     assert calls == ["unplug", "plug"] and slept == [5]
     assert asked and asked[-1] == "18:00"
+
+
+def _pairs(a, day):
+    return sorted((x.strftime("%H:%M"), y.strftime("%H:%M")) for x, y in a.windows() if x.date() == day)
+
+
+def test_charge_across_the_reset_is_split_there():
+    a, clock = _automation(start=_at(8))  # Saturday 08:00
+    a.limit_reset = "12:00"
+    out = a.plan_auto_plug(720, cap_min=360)  # 08-12 and 12-18
+    day = clock.now().date()
+    assert _pairs(a, day) == [("08:00", "12:00"), ("12:00", "18:00")]
+    assert any("fresh charge from 12:00" in n for n in out["notes"])
+    assert a.next_unplug(clock.now()).strftime("%H:%M") == "12:00"  # the first ready time
+    # Deleting the charge takes the split with it
+    a.set_schedule(entries=[])
+    assert a.entries == []
+    # Not with a rolling limit, nor a charge within the limit
+    b, clock_b = _automation(start=_at(8))
+    b.plan_auto_plug(720, cap_min=360)
+    assert _pairs(b, day) == [("08:00", "14:00")]
+    c, clock_c = _automation(start=_at(10))
+    c.limit_reset = "12:00"
+    c.plan_auto_plug(180, cap_min=360)  # 10-13: 3 h
+    assert _pairs(c, day) == [("10:00", "13:00")]
+
+
+def test_charge_joining_a_slot_across_the_reset_is_split():
+    a, clock = _sat_slots(("12:00", "18:00"), start=_at(8))
+    a.limit_reset = "12:00"
+    out = a.plan_auto_plug(240, cap_min=360)  # 08-12 meets 12-18: 10 h as one
+    assert out["combined"]
+    assert _pairs(a, clock.now().date()) == [("08:00", "12:00"), ("12:00", "18:00")]
+    assert a.next_unplug(clock.now()).strftime("%H:%M") == "12:00"
+
+
+def test_saved_slots_across_the_reset_are_split():
+    a, clock = _automation(start=datetime.datetime(2026, 10, 5, 7, 0, tzinfo=TZ))  # Monday 07:00
+    a.limit_reset = "12:00"
+    a.set_schedule(enabled=True, ready_time=True, daily_cap_min=360, entries=[
+        {"time": "09:00", "action": "plug", "days": [1, 3]}, {"time": "17:00", "action": "unplug", "days": [1, 3]},
+        {"time": "08:00", "action": "plug", "date": "2026-10-10"}, {"time": "18:00", "action": "unplug", "date": "2026-10-10"},
+        {"time": "13:00", "action": "plug", "days": [0]}, {"time": "15:00", "action": "unplug", "days": [0]}])
+    assert not any(e["time"] == "12:00" and 0 in e["days"] for e in a.entries)  # 13-15 isn't across 12:00
+    weekly = sorted((e["time"], e["action"], tuple(e["days"])) for e in a.entries if not e.get("date"))
+    assert ("12:00", "plug", (1, 3)) in weekly and ("12:00", "unplug", (1, 3)) in weekly
+    once = sorted((e["time"], e["action"], e["date"]) for e in a.entries if e.get("date"))
+    assert once == [("08:00", "plug", "2026-10-10"), ("12:00", "plug", "2026-10-10"),
+                    ("12:00", "unplug", "2026-10-10"), ("18:00", "unplug", "2026-10-10")]
+    tue = datetime.date(2026, 10, 6)
+    assert _pairs(a, tue) == [("09:00", "12:00"), ("12:00", "17:00")]
+    n = len(a.entries)
+    a.set_schedule(entries=a.entries, daily_cap_min=360)  # saving again adds nothing
+    assert len(a.entries) == n
+    # Force schedule off: left as it is
+    b, clock_b = _automation(start=datetime.datetime(2026, 10, 5, 7, 0, tzinfo=TZ))
+    b.limit_reset = "12:00"
+    b.set_schedule(enabled=True, entries=[{"time": "09:00", "action": "plug", "days": [1]},
+                                          {"time": "17:00", "action": "unplug", "days": [1]}], daily_cap_min=360)
+    assert len(b.entries) == 2
