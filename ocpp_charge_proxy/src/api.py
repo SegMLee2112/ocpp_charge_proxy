@@ -422,6 +422,7 @@ async def handle_schedule(request: web.Request) -> web.Response:
             daily_cap_min=sc.get("limit_min"),
             unplug_wait_s=b.get("unplug_wait_s"),
             override_guards=b.get("override_guards"),
+            blocks=b.get("blocks"),
         ),
     )
 

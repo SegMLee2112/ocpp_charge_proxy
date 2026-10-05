@@ -72,20 +72,29 @@ Leave it unset (or clear it) and no SoC is reported and car-full never
 triggers. If the sensor becomes unavailable, SoC reporting pauses until it
 comes back.
 
-### Auto plug-in
+### Auto plug-in, the car plugged in sensor and Charge now
 
 **Auto plug-in** (Automations tab) switches Plugged In on once when the SoC
 drops below the level you set. With **Automatically adjust schedule to fit
 auto plug-in** on, it also adds the charge to the schedule as a one-off,
-for the hours you choose (**Charge for**, 0.5 to 12):
+for the hours you choose (**Charge for**, 0.5 to 12). The **Car plugged in**
+sensor (Settings tab) can do the same when it plugs in: turn on **Add a
+charge to the schedule** and set its own **Charge for**. **Charge now**
+works the same way. In each case:
 
 - The slot runs from plugging in to the first ready time your supplier
   accepts at least that long away (rounded up to the half hour; with EDF,
   the next time between 04:00 and 11:00). It unplugs then, after the
   supplier stops the session or the unplug wait (60 s by default).
-- Octopus Energy, with Force schedule on supplier on: the charge is at
-  most 6 hours (longer is shortened, and the 8 h Charge now button is
-  hidden). If it puts more than 6 hours in any 24 (counting the previous
+- **No-charging times** (below) are left out: it unplugs at the start of
+  one and plugs back in at its end, and the charge still ends when it would
+  have. If it happens during one, it isn't plugged in then, only at its end
+  if the charge would still be running. For example, 12 hours from 21:30
+  with 23:30–05:30 blocked: 21:30–23:30, then 05:30–09:30.
+- Octopus Energy, with Force schedule on supplier on: only the daily limit
+  (6 hours) is scheduled, the earliest first, so up to 12 hours can be
+  chosen but a longer charge stops after 6 plugged-in hours (e.g. 12 hours
+  from 16:30 with 23:30–05:30 blocked: 16:30–22:30). If it puts more than 6 hours in any 24 (counting the previous
   24 hours too), the next scheduled slot starts later, by whole half hours,
   just enough to get back to 6 (or is skipped, if that's not enough), for
   that day only. For example, 4 hours scheduled 23:30–03:30 and a 3-hour
@@ -95,9 +104,21 @@ for the hours you choose (**Charge for**, 0.5 to 12):
   ending at the schedule's unplug.
 - The supplier's ready time is set to the end of the slot (E.ON Next has
   none to set).
+- Deleting the charge's slot puts back what it changed: a slot it trimmed
+  or joined goes back to how it was.
 
-The entries show on the Automations tab as orange **Auto plug-in** slots, and
-run even with the schedule off.
+The entries show on the Automations tab as orange **Auto plug-in**, pink
+**Charge now** or brown **Car plugged in** slots, and run even with the
+schedule off. A slot that was trimmed keeps its own colour.
+
+### No-charging times
+
+On the Automations tab, **No-charging times** are times nothing is
+scheduled in, on the days you pick, e.g. your off-peak hours (23:30–05:30)
+when the car may well charge anyway. Slots can't be added in them (and one
+can't be added over existing slots), and auto plug-in, the car plugged in
+sensor and Charge now are planned around them (above). They're shown
+hatched on the schedule.
 
 ### Schedule, auto re-plug and start-up
 

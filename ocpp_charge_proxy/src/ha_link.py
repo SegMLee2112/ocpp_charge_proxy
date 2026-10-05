@@ -69,6 +69,16 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         out["auto_plug_soc"] = soc
     if "auto_plug_ready" in raw:
         out["auto_plug_ready"] = bool(raw["auto_plug_ready"])
+    if "plug_ready" in raw:  # the car plugged in sensor adds a charge to the schedule
+        out["plug_ready"] = bool(raw["plug_ready"])
+    if "plug_hours" in raw:
+        try:
+            hours = float(raw["plug_hours"])
+        except (TypeError, ValueError):
+            raise ValueError("plug_hours must be a number") from None
+        if not 0.5 <= hours <= 12 or hours * 2 != int(hours * 2):
+            raise ValueError("plug_hours must be 0.5 to 12, in half hours")
+        out["plug_hours"] = hours
     if "auto_plug_hours" in raw:
         try:
             hours = float(raw["auto_plug_hours"])
@@ -116,6 +126,7 @@ def default_settings() -> dict:
         "power_entity": "", "soc_entity": "", "plug_entity": "",
         "auto_plug": False, "auto_plug_entity": "", "auto_plug_soc": DEFAULT_AUTO_PLUG_SOC,
         "auto_plug_ready": False, "auto_plug_hours": DEFAULT_AUTO_PLUG_HOURS,
+        "plug_ready": False, "plug_hours": DEFAULT_AUTO_PLUG_HOURS,
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
     }
@@ -167,8 +178,9 @@ class HaLink:
         self._set_soc = set_soc
         self._plug = plug
         self._unplug = unplug
-        # Called with the hours to charge after an auto plug-in, if its
-        # "set my supplier's ready time" option is on (set by __main__)
+        # Called (hours, source, plug source) instead of plugging in, for auto
+        # plug-in or the car plugged in sensor with "adjust the schedule" on:
+        # it plugs in and plans the charge (set by __main__)
         self.on_auto_plug = None
         self._session = None
         # The add-on's own HA entities (src/ha_entities.py)
@@ -295,20 +307,33 @@ class HaLink:
         plugged_in = bool(self._shared.plugged_in)
         if entity_id and entity_id == s["plug_entity"]:
             if self.car_connected.should_plug(state.get("state") if state else None, plugged_in):
-                logger.info("%s turned on: switching Plugged In on", entity_id)
-                await self._safe_plug("car plugged in sensor")
-                plugged_in = True
+                if s.get("plug_ready") and self.on_auto_plug is not None:
+                    logger.info("%s turned on: adding a %g-hour charge to the schedule", entity_id,
+                                s.get("plug_hours") or DEFAULT_AUTO_PLUG_HOURS)
+                    try:
+                        await self.on_auto_plug(s.get("plug_hours") or DEFAULT_AUTO_PLUG_HOURS, "car_plugged",
+                                                "car plugged in sensor")
+                    except Exception as err:
+                        logger.warning("Car plugged in charge not planned (%s): plugging in", err)
+                        await self._safe_plug("car plugged in sensor")
+                else:
+                    logger.info("%s turned on: switching Plugged In on", entity_id)
+                    await self._safe_plug("car plugged in sensor")
+                plugged_in = bool(self._shared.plugged_in)
         if entity_id and self.auto_plug.enabled and entity_id == self.monitor_entity:
             soc = soc_value(state)
             if self.auto_plug.should_plug(soc, plugged_in):
                 logger.info("Car SoC %.0f%% dropped below %d%%: switching Plugged In on", soc, s["auto_plug_soc"])
-                if not await self._safe_plug("auto plug-in (low SoC)"):
-                    self.auto_plug.armed = True  # try again on the next reading
-                elif s.get("auto_plug_ready") and self.on_auto_plug is not None:
+                if s.get("auto_plug_ready") and self.on_auto_plug is not None:
                     try:
-                        await self.on_auto_plug(s.get("auto_plug_hours") or DEFAULT_AUTO_PLUG_HOURS)
+                        await self.on_auto_plug(s.get("auto_plug_hours") or DEFAULT_AUTO_PLUG_HOURS, "auto_plug",
+                                                "auto plug-in (low SoC)")
                     except Exception as err:
-                        logger.warning("Auto plug-in charge not planned: %s", err)
+                        logger.warning("Auto plug-in charge not planned (%s): plugging in", err)
+                        if not await self._safe_plug("auto plug-in (low SoC)"):
+                            self.auto_plug.armed = True
+                elif not await self._safe_plug("auto plug-in (low SoC)"):
+                    self.auto_plug.armed = True  # try again on the next reading
 
     async def _safe_plug(self, source: str) -> bool:
         try:

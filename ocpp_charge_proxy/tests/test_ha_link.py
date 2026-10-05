@@ -170,3 +170,16 @@ def test_supplier_daily_limit_and_ready_times(tmp_path):
     assert link._ready_entity_id(states, "binary_sensor.octopus_energy_x_intelligent_dispatching") == octopus["entity_id"]
     _run(link.update_settings({"ready_entity": "select.mine_target_time"}))
     assert link._ready_entity_id(states, "binary_sensor.octopus_energy_x_intelligent_dispatching") == "select.mine_target_time"
+
+
+def test_car_plugged_in_sensor_can_add_a_charge():
+    link, fake = _link(plug_entity="binary_sensor.cable", plug_ready=True, plug_hours=8)
+    calls = []
+
+    async def planned(hours, source, plug_source):
+        calls.append((hours, source, plug_source))
+
+    link.on_auto_plug = planned
+    _run(link.handle_entities_event(_added(**{"binary_sensor.cable": "off"})))
+    _run(link.handle_entities_event(_changed("binary_sensor.cable", "on")))
+    assert calls == [(8, "car_plugged", "car plugged in sensor")] and fake.plugs == 0  # it plugs in, not us

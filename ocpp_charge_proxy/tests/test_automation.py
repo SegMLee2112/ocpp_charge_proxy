@@ -861,3 +861,73 @@ def test_override_guards_lifts_the_six_hours():
     assert a.override_guards
     a.set_schedule(entries=six, override_guards=False, daily_cap_min=360)
     assert not a.override_guards
+
+
+NIGHT = {"start": "23:30", "end": "05:30", "days": list(range(7))}
+
+
+def _blocked(start, entries=()):
+    a, clock = _automation(start=start)
+    a.set_schedule(enabled=True, entries=list(entries), blocks=[NIGHT])
+    return a, clock
+
+
+def _spans(out):
+    return [(x["start"][11:16], x["end"][11:16]) for x in out["segments"]]
+
+
+def test_slots_cant_overlap_a_no_charging_time():
+    a, clock = _blocked(_at(12))
+    for slot in (("22:00", "00:00"), ("05:00", "07:00")):
+        try:
+            a.set_schedule(entries=[{"time": slot[0], "action": "plug"}, {"time": slot[1], "action": "unplug"}])
+            raise AssertionError("should have refused %s" % (slot,))
+        except ValueError as err:
+            assert "no-charging time" in str(err)
+    a.set_schedule(entries=[{"time": "05:30", "action": "plug"}, {"time": "07:00", "action": "unplug"}])  # just after: fine
+    try:
+        a.set_schedule(blocks=[{"start": "05:00", "end": "06:00", "days": list(range(7))}])  # over that slot
+        raise AssertionError("should have refused")
+    except ValueError:
+        pass
+    assert a.blocks[0]["start"] == "23:30"
+
+
+def test_a_charge_is_cut_around_a_no_charging_time():
+    a, clock = _blocked(_at(18))
+    out = a.plan_auto_plug(12 * 60)  # 18:00 for 12 h, no limit: 18:00-23:30, then 05:30-06:00
+    assert _spans(out) == [("18:00", "23:30"), ("05:30", "06:00")] and out["plug_now"]
+    day = clock.now().date()
+    wins = [(x.strftime("%a %H:%M"), y.strftime("%a %H:%M")) for x, y in a.windows() if x.date() >= day]
+    assert wins[:2] == [("Sat 18:00", "Sat 23:30"), ("Sun 05:30", "Sun 06:00")]
+
+
+def test_only_the_daily_limit_is_scheduled():
+    a, clock = _blocked(_at(18))
+    out = a.plan_auto_plug(12 * 60, cap_min=360)  # 5.5 h before the night, 0.5 h after it
+    assert _spans(out) == [("18:00", "23:30"), ("05:30", "06:00")] and out["minutes"] == 360
+    b, _ = _blocked(_at(12))
+    out = b.plan_auto_plug(12 * 60, cap_min=360)  # all 6 before the night
+    assert _spans(out) == [("12:00", "18:00")] and "shortened to 6 hours" in out["notes"][0]
+
+
+def test_a_charge_during_a_no_charging_time_waits_for_its_end():
+    a, clock = _blocked(datetime.datetime(2026, 10, 3, 1, 0, tzinfo=TZ))
+    out = a.plan_auto_plug(6 * 60)  # 01:00 for 6 h would end 07:00: 05:30-07:00, same end
+    assert not out["plug_now"] and _spans(out) == [("05:30", "07:00")]
+    b, _ = _blocked(datetime.datetime(2026, 10, 3, 1, 0, tzinfo=TZ))
+    out = b.plan_auto_plug(3 * 60)  # would end at 04:00, inside it: nothing
+    assert out["nothing"] and not out["plug_now"] and b.entries == []
+    assert b.blocked() is not None
+
+
+def test_deleting_a_charge_puts_back_the_slot_it_trimmed():
+    a, clock = _sat_slots(("18:00", "22:00"))
+    a.plan_auto_plug(180, cap_min=360, source="charge_now")  # tonight's slot now starts at 19:00
+    later = next(e for e in a.entries if e["time"] == "19:00")
+    assert later.get("source") is None  # still a plain slot, not a Charge now one
+    assert _today_windows(a, clock) == [("12:00", "15:00"), ("19:00", "22:00")]
+    charge = [e for e in a.entries if e.get("source") == "charge_now"]
+    a.set_schedule(entries=[e for e in a.entries if e not in charge], daily_cap_min=360)
+    assert _today_windows(a, clock) == [("18:00", "22:00")] and a.skips == []
+    assert not any(e["time"] == "19:00" for e in a.entries)

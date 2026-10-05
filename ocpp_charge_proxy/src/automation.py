@@ -77,7 +77,10 @@ CATCH_UP_S = 300  # a scheduled time is still run if noticed within this
 ACTIONS = ("plug", "unplug")
 AUTO_SOURCE = "auto_plug"  # entries added by an auto plug-in charge
 CHARGE_NOW_SOURCE = "charge_now"  # ... or by the Charge now button
-AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE)
+CAR_PLUGGED_SOURCE = "car_plugged"  # ... or by the car plugged in sensor
+AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE)
+SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
+                CAR_PLUGGED_SOURCE: "Car plugged in charge"}
 ONE_OFF_KEEP = datetime.timedelta(days=14)  # one-off times (and skips) are kept this long after they ran
 
 
@@ -131,6 +134,41 @@ def _parse_date(value) -> datetime.date:
         raise ValueError(f"Date must be YYYY-MM-DD, got {value!r}") from None
 
 
+def validate_block(raw: dict) -> dict:
+    """A no-charging time: {id, start "HH:MM", end "HH:MM", days [0=Mon..6=Sun]};
+    overnight when end <= start (it starts on the days given)."""
+    if not isinstance(raw, dict):
+        raise ValueError("Each no-charging time must be an object")
+    h1, m1 = _parse_hhmm(raw.get("start"))
+    h2, m2 = _parse_hhmm(raw.get("end"))
+    if (h1, m1) == (h2, m2):
+        raise ValueError("A no-charging time must start and end at different times")
+    days = raw.get("days", list(range(7)))
+    if not isinstance(days, list) or not days or any(
+        not isinstance(d, int) or isinstance(d, bool) or not 0 <= d <= 6 for d in days
+    ):
+        raise ValueError("Days must be a non-empty list of 0 (Mon) to 6 (Sun)")
+    return {"id": str(raw.get("id") or uuid.uuid4().hex[:8]), "start": f"{h1:02d}:{m1:02d}",
+            "end": f"{h2:02d}:{m2:02d}", "days": sorted(set(days))}
+
+
+def minus(windows: list, cuts: list) -> list:
+    """`windows` [(a, b)] with the `cuts` [(a, b)] taken out."""
+    out = list(windows)
+    for ca, cb in cuts:
+        nxt = []
+        for a, b in out:
+            if cb <= a or ca >= b:
+                nxt.append((a, b))
+                continue
+            if a < ca:
+                nxt.append((a, ca))
+            if cb < b:
+                nxt.append((cb, b))
+        out = nxt
+    return out
+
+
 def validate_entry(raw: dict) -> dict:
     """A schedule entry: {id, time "HH:MM", days [0=Mon..6=Sun], action, enabled},
     or a one-off: the same with "date": "YYYY-MM-DD" (days is then that day)."""
@@ -152,6 +190,13 @@ def validate_entry(raw: dict) -> dict:
         }
         if raw.get("source") in AUTO_SOURCES:
             out["source"] = raw["source"]
+        trims = raw.get("trims")
+        if isinstance(trims, dict):  # what this charge changed in the schedule (put back if it's deleted)
+            out["trims"] = {
+                "skips": [{"entry_id": str(k["entry_id"]), "date": str(k["date"])} for k in trims.get("skips") or []
+                          if isinstance(k, dict) and k.get("entry_id") and k.get("date")],
+                "added": [str(i) for i in trims.get("added") or [] if isinstance(i, (str, int))],
+            }
         return out
     days = raw.get("days", list(range(7)))
     if not isinstance(days, list) or not days or any(
@@ -235,6 +280,7 @@ class Automation:
         self.ready_status: Optional[dict] = None  # the last time it was set (or why not)
         self.auto_plug_last: Optional[dict] = None  # the last auto plug-in charge planned
         self.unplug_wait_s = GRACEFUL_UNPLUG_S
+        self.blocks: list[dict] = []  # no-charging times: nothing is scheduled in them
         self.override_guards = False  # Diagnostics › Debug: no daily limit (Octopus: 6 hours)
         self.plan_check: Optional[dict] = None  # the supplier's plan vs the schedule, while plugged in
         self._plan_problems: tuple = ()
@@ -273,6 +319,13 @@ class Automation:
         self.schedule_enabled = bool(schedule.get("enabled", False))
         self.ready_time = bool(schedule.get("ready_time", False))
         self.override_guards = bool(schedule.get("override_guards", False))
+        blocks = []
+        for raw in schedule.get("blocks") or []:
+            try:
+                blocks.append(validate_block(raw))
+            except ValueError:
+                logger.warning("Ignoring invalid no-charging time %r", raw)
+        self.blocks = blocks
         try:
             self.unplug_wait_s = self._valid_wait(schedule.get("unplug_wait_s", GRACEFUL_UNPLUG_S))
         except ValueError:
@@ -304,7 +357,7 @@ class Automation:
                     "schedule": {"enabled": self.schedule_enabled, "entries": self.entries,
                                  "ready_time": self.ready_time, "skips": self.skips,
                                  "unplug_wait_s": self.unplug_wait_s,
-                                 "override_guards": self.override_guards},
+                                 "override_guards": self.override_guards, "blocks": self.blocks},
                     "replug": self.replug,
                 }, f, indent=1)
                 f.flush()
@@ -320,7 +373,8 @@ class Automation:
     def set_schedule(self, enabled: Optional[bool] = None, entries: Optional[list] = None,
                      ready_time: Optional[bool] = None, ready_times: Optional[list] = None,
                      provider: str = "your supplier", daily_cap_min: Optional[int] = None,
-                     unplug_wait_s=None, override_guards: Optional[bool] = None) -> None:
+                     unplug_wait_s=None, override_guards: Optional[bool] = None,
+                     blocks: Optional[list] = None) -> None:
         """override_guards: with it on, daily_cap_min isn't applied (turning it
         back off checks the schedule, as turning on the ready time does).
         ready_times: the times your supplier accepts as a ready time (None:
@@ -336,6 +390,16 @@ class Automation:
             if len(entries) > 50:
                 raise ValueError("At most 50 schedule entries")
             new_entries = [validate_entry(e) for e in entries]
+        new_skips = list(self.skips)
+        if entries is not None:
+            # A charge (auto plug-in, Charge now...) that's deleted puts back the
+            # slot it trimmed or joined: its replacement plug-in goes, the skips go
+            kept = {e["id"] for e in new_entries}
+            for gone in (e for e in self.entries if e.get("trims") and e["id"] not in kept):
+                added = set(gone["trims"].get("added") or [])
+                new_entries = [e for e in new_entries if e["id"] not in added]
+                new_skips = [k for k in new_skips if k not in (gone["trims"].get("skips") or [])]
+                logger.info("Schedule: a charge was deleted, putting back what it changed")
         guards_off = self.override_guards if override_guards is None else bool(override_guards)
         if guards_off:
             daily_cap_min = None
@@ -350,12 +414,20 @@ class Automation:
                 # changed, as long as it doesn't get worse.
                 only_times = entries is not None and not ready_time and override_guards is None
                 worst_now = self._longest_day(self.entries) if only_times else None
-                worst_new = self._longest_day(new_entries)
+                worst_new = self._longest_day(new_entries, new_skips)
                 if not (only_times and worst_new and worst_now and worst_new[0] <= worst_now[0]):
-                    self.check_daily_cap(new_entries, daily_cap_min, provider)
+                    self.check_daily_cap(new_entries, daily_cap_min, provider, new_skips)
+        new_blocks = self.blocks
+        if blocks is not None:
+            if not isinstance(blocks, list) or len(blocks) > 20:
+                raise ValueError("No-charging times must be a list (at most 20)")
+            new_blocks = [validate_block(b) for b in blocks]
+        if entries is not None or blocks is not None:
+            self.check_blocks(new_entries, new_blocks)
+        self.blocks = new_blocks
         self.entries = new_entries
         ids = {e["id"] for e in self.entries}
-        self.skips = [k for k in self.skips if k["entry_id"] in ids]
+        self.skips = [k for k in new_skips if k["entry_id"] in ids]
         self._prune()
         if enabled is not None:
             self.schedule_enabled = bool(enabled)
@@ -446,6 +518,40 @@ class Automation:
         now = now or self._now()
         tl = self.timeline(now.date() - datetime.timedelta(days=7), 16, entries, skips)
         return plugged_windows([(t, e["action"] == "plug") for t, e, skipped in tl if not skipped])
+
+    def block_windows(self, start: datetime.date, days: int, blocks: Optional[list] = None) -> list:
+        """The no-charging times from `start` for `days` days: [(a, b)]."""
+        out = []
+        for b in self.blocks if blocks is None else blocks:
+            h1, m1 = _parse_hhmm(b["start"])
+            h2, m2 = _parse_hhmm(b["end"])
+            for i in range(-1, days):
+                d = start + datetime.timedelta(days=i)
+                if d.weekday() not in b["days"]:
+                    continue
+                a = self._localize(datetime.datetime(d.year, d.month, d.day, h1, m1))
+                e = d + datetime.timedelta(days=1) if (h2, m2) <= (h1, m1) else d
+                out.append((a, self._localize(datetime.datetime(e.year, e.month, e.day, h2, m2))))
+        return sorted(out)
+
+    def check_blocks(self, entries: list, blocks: list) -> None:
+        """Nothing scheduled may plug in during a no-charging time (over the
+        coming week; auto plug-in and Charge now are planned around them)."""
+        now = self._now()
+        cuts = self.block_windows(now.date(), 9, blocks)
+        for a, b in self.windows(entries, now):
+            if b <= now:
+                continue
+            hit = next(((ca, cb) for ca, cb in cuts if ca < b and cb > a), None)
+            if hit:
+                raise ValueError(
+                    f"The {a.strftime('%a %H:%M')}–{b.strftime('%H:%M')} slot overlaps the no-charging time "
+                    f"{hit[0].strftime('%H:%M')}–{hit[1].strftime('%H:%M')}: change one of them")
+
+    def blocked(self, when: Optional[datetime.datetime] = None):
+        """The no-charging time `when` (now) is in: (start, end), or None."""
+        when = when or self._now()
+        return next(((a, b) for a, b in self.block_windows(when.date(), 1) if a <= when < b), None)
 
     def _longest_day(self, entries: list, skips: Optional[list] = None):
         now = self._now()
@@ -558,26 +664,56 @@ class Automation:
         (or would be) done, with "over": the most minutes in any 24 hours
         before and after the next slot is trimmed."""
         now = self._now().replace(second=0, microsecond=0)
-        shortened = None
-        if cap_min and minutes > cap_min:
-            # Octopus schedules at most 6 hours a day: the charge can't be longer
-            shortened = f"shortened to {_hours(cap_min)} hours, {provider}'s daily limit"
-            minutes = cap_min
         end = self.first_ready_at(now + datetime.timedelta(minutes=minutes), ready_times)
         if end is None:
             raise ValueError("No ready time your supplier accepts in the next 2 days")
-        if cap_min and end > now + datetime.timedelta(minutes=cap_min):
-            # rounding up to a ready time would go over: the last one within the limit
-            earlier = self.last_ready_by(now + datetime.timedelta(minutes=cap_min), ready_times)
-            if earlier is not None and earlier > now:
-                end = earlier
+        # Plugged in from now to then, but not in a no-charging time (off peak:
+        # the car may well charge then anyway): it unplugs at its start and plugs
+        # back in at its end, and still ends at the same time
+        cuts = self.block_windows(now.date() - datetime.timedelta(days=1), 4)
+        segments = minus([(now, end)], cuts)
+        blocked_notes = [f"not plugged in {ca.strftime('%H:%M')}–{cb.strftime('%H:%M')} (no-charging time)"
+                         for ca, cb in cuts if ca < end and cb > now]
+        shortened = None
+        if cap_min and sum((y - x).total_seconds() for x, y in segments) / 60 > cap_min:
+            # e.g. Octopus schedules at most 6 hours a day: the earliest that many are scheduled
+            keep, left = [], cap_min
+            for x, y in segments:
+                length = (y - x).total_seconds() / 60
+                if length <= left:
+                    keep.append((x, y))
+                    left -= length
+                    continue
+                if left > 0:
+                    cut = x + datetime.timedelta(minutes=left)
+                    earlier = self.last_ready_by(cut, ready_times)  # a ready time, if one fits
+                    keep.append((x, earlier if earlier is not None and earlier > x else cut))
+                break
+            segments = keep
+            shortened = f"shortened to {_hours(cap_min)} hours, {provider}'s daily limit"
+        if not segments:
+            plan = {"at": _iso_local(now), "minutes": 0, "ready_for": None, "end": None, "combined": False,
+                    "moved": None, "notes": blocked_notes or ["nothing to schedule"], "source": source,
+                    "cap_min": cap_min, "over": None, "plug_now": False, "segments": [], "nothing": True}
+            if not dry_run:
+                self.auto_plug_last = plan
+                logger.info("%s: nothing scheduled (%s)", SOURCE_NAMES.get(source, "Charge"), "; ".join(plan["notes"]))
+            return plan
+        end = segments[-1][1]
+        minutes = int(round(sum((y - x).total_seconds() for x, y in segments) / 60))
+        plug_now = segments[0][0] <= now
 
-        def one_off(t, action):
+        def one_off(t, action, src=source):
             return validate_entry({"time": t.strftime("%H:%M"), "date": t.date().isoformat(),
-                                   "action": action, "source": source})
+                                   "action": action, "source": src})
 
         active = self._active_entries()
-        plug, unplug = one_off(now, "plug"), one_off(end, "unplug")
+        seg_entries = []  # plug / unplug for each part but the last's unplug
+        for i, (x, y) in enumerate(segments):
+            seg_entries.append(one_off(x, "plug"))
+            if i < len(segments) - 1:
+                seg_entries.append(one_off(y, "unplug"))
+        unplug = one_off(end, "unplug")
         start_day = now.date() - datetime.timedelta(days=1)
         nxt0 = next((s for s in self._stretches(start_day, 9, active, self.skips) if s["end"] > now), None)
         can_trim = nxt0 is not None and nxt0["start"] > now
@@ -585,12 +721,12 @@ class Automation:
         def build(cut: int):
             """The entries and skips for the charge, with the next slot's first
             `cut` minutes taken off (all of it: skipped)."""
-            added, skips, nxt, note = [plug], list(self.skips), nxt0, None
+            added, skips, nxt, note = list(seg_entries), list(self.skips), nxt0, None
             if cut and can_trim:
                 new_start = nxt["start"] + datetime.timedelta(minutes=cut)
                 skips.append({"entry_id": nxt["plug"]["id"], "date": nxt["start"].date().isoformat()})
                 if new_start < nxt["end"]:
-                    later = one_off(new_start, "plug")
+                    later = one_off(new_start, "plug", nxt["plug"].get("source"))  # still that slot's own kind
                     added.append(later)
                     nxt = dict(nxt, start=new_start, plug=later)
                     note = f"the {nxt['end'].strftime('%H:%M')} slot now starts at {new_start.strftime('%H:%M')}"
@@ -612,9 +748,9 @@ class Automation:
                 slot_end = end
             # A scheduled unplug during the charge (e.g. an "unplug at 07:00
             # every day") would end it early: skipped this once
-            stop = nxt["start"] if combined else end
+            parts = segments[:-1] + [(segments[-1][0], nxt["start"] if combined else end)]
             for t, e, skipped in self.timeline(now.date() - datetime.timedelta(days=1), 4, active, skips):
-                if not skipped and e["action"] == "unplug" and now < t < stop:
+                if not skipped and e["action"] == "unplug" and any(x < t < y for x, y in parts):
                     skips.append({"entry_id": e["id"], "date": t.date().isoformat()})
             return added, skips, combined, slot_end, note
 
@@ -653,7 +789,11 @@ class Automation:
                     if n <= 0:
                         break
         added, skips, combined, slot_end, moved = build(cut)
-        notes = [shortened] if shortened else []
+        changed = {"skips": [k for k in skips if k not in self.skips],
+                   "added": [e["id"] for e in added if e["id"] not in {x["id"] for x in seg_entries + [unplug]}]}
+        if changed["skips"] or changed["added"]:
+            added[0] = dict(added[0], trims=changed)  # put back if this charge is deleted
+        notes = ([shortened] if shortened else []) + blocked_notes
         if moved:
             notes.append(moved)
         if combined:
@@ -666,6 +806,9 @@ class Automation:
             # far this charge takes it over the cap (beyond the schedule's own),
             # before and after the next slot is trimmed
             "over": {"before": before, "after": after, "added": added_over, "left": left_over} if cap_min else None,
+            # plugged in straight away (False: it starts after a no-charging time)
+            "plug_now": plug_now,
+            "segments": [{"start": _iso_local(x), "end": _iso_local(y)} for x, y in segments],
         }
         if dry_run:
             return plan
@@ -673,12 +816,12 @@ class Automation:
         self.skips = [dict(k) for i, k in enumerate(skips) if k not in skips[:i]]
         self._save()
         self.auto_plug_last = plan
-        logger.info("%s: plugged in until %s%s", "Charge now" if source == CHARGE_NOW_SOURCE else "Auto plug-in charge",
+        logger.info("%s: plugged in until %s%s", SOURCE_NAMES.get(source, "Charge"),
                     slot_end.strftime("%a %H:%M"),
                     f" ({'; '.join(notes)})" if notes else "")
         if cap_min and left_over > 0:
             logger.warning("%s: the schedule plugs in for %dh %02dm in 24 hours, over %s's %s hours",
-                           "Charge now" if source == CHARGE_NOW_SOURCE else "Auto plug-in charge",
+                           SOURCE_NAMES.get(source, "Charge"),
                            after // 60, after % 60, provider, _hours(cap_min))
         return plan
 
@@ -925,6 +1068,7 @@ class Automation:
                 "one_off_runs": self.one_off_runs(),
                 "unplug_wait_s": self.unplug_wait_s,
                 "override_guards": self.override_guards,
+                "blocks": self.blocks,
                 "plan_check": self.plan_check,
                 "skips": self.skips,
                 "upcoming": self.upcoming(),

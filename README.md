@@ -205,7 +205,7 @@ All optional. Choose "None" to stop using a sensor.
 |--------|--------------|
 | **Power sensor** | A sensor reporting power in W or kW. Its value is reported to your supplier instead of the simulated power (capped at what the charger could deliver at its current setting). |
 | **SoC sensor** | A sensor reporting the car's charge in %. Sent to your supplier in meter values while a car is plugged in, and enables car full and the charging taper. |
-| **Car plugged in sensor** | A binary sensor (e.g. your car's "charging cable connected"). When it changes from off to on, Plugged In is switched on. It never switches Plugged In off, so unplug with the switch or an automation as usual. Unavailable/unknown readings in between are ignored, and it doesn't plug in on the first reading after a restart. |
+| **Car plugged in sensor** | A binary sensor (e.g. your car's "charging cable connected"). When it changes from off to on, Plugged In is switched on (and with **Add a charge to the schedule** on, a charge for the hours you choose is added, as auto plug-in does). It never switches Plugged In off, so unplug with the switch or an automation as usual. Unavailable/unknown readings in between are ignored, and it doesn't plug in on the first reading after a restart. |
 | **Auto plug-in** | Switches Plugged In on once when the watched SoC drops below the threshold (1–99%, default 30%). Re-arms once the SoC is back at or above it. Doesn't trigger on the first reading after a restart, or if already plugged in. |
 | **SoC sensor to watch** | Watch this sensor for auto plug-in instead of the reporting SoC sensor. It's never reported to your supplier. |
 

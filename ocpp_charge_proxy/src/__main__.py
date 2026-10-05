@@ -253,20 +253,28 @@ async def run() -> None:
             automation.publish(shared_state)
         return plan
 
-    async def on_auto_plug(hours: float) -> None:
-        await plan_charge(hours)
+    async def charge(hours: float, source: str, plug_source: str, confirm: bool = True) -> dict:
+        """Plug in and add the charge to the schedule (auto plug-in, the car
+        plugged in sensor, Charge now). Not plugged in during a no-charging
+        time: it plugs in when that ends, if the charge still has time left.
+        Charge now asks first (confirm) if it would go over the daily limit."""
+        preview = await plan_charge(hours, source, dry_run=True)
+        over = preview.get("over")
+        if not confirm and over and over["added"] > 0:
+            return {"needs_confirm": True, "plan": preview}
+        if preview.get("plug_now"):
+            await do_plug(source=plug_source)
+        elif shared_state.plugged_in:
+            await do_unplug(source="no-charging time")
+        return {"plan": await plan_charge(hours, source)}
+
+    async def on_auto_plug(hours: float, source: str = AUTO_SOURCE, plug_source: str = "auto plug-in (low SoC)") -> None:
+        await charge(hours, source, plug_source)
 
     async def charge_now(hours: float, confirm: bool = False) -> dict:
-        """The Charge now button: plug in, and plan the charge as auto plug-in
-        does. If it would take any 24 hours over Octopus's 6 (Force schedule
-        on supplier on), nothing is done until it's confirmed: the page shows
-        what would happen first."""
-        preview = await plan_charge(hours, CHARGE_NOW_SOURCE, dry_run=True)
-        over = preview.get("over")
-        if over and over["added"] > 0 and not confirm:
-            return {"needs_confirm": True, "plan": preview}
-        await do_plug(source="charge now")
-        return {"plan": await plan_charge(hours, CHARGE_NOW_SOURCE)}
+        """The Charge now button: as auto plug-in, but asks first if it would
+        take any 24 hours over the daily limit (the page shows what'd happen)."""
+        return await charge(hours, CHARGE_NOW_SOURCE, "charge now", confirm)
 
     ha_link.on_auto_plug = on_auto_plug
 

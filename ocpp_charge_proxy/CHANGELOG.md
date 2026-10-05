@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.28.0 — No-charging times and the car plugged in charge
+
+- **Feature:** **No-charging times** (Automations tab), on the days you
+  pick, e.g. your off-peak 23:30–05:30. Nothing can be scheduled in them;
+  auto plug-in, the car plugged in sensor and Charge now unplug at their
+  start and plug back in at their end, still ending when they would have.
+  One that happens during a no-charging time plugs in at its end, if
+  there's time left. Shown hatched on the schedule
+- **Feature:** the **Car plugged in** sensor can add a charge to the
+  schedule when it plugs in (**Add a charge to the schedule**, with its own
+  **Charge for**), as auto plug-in does. Its slots are brown
+- **Change:** up to 12 hours can be chosen for auto plug-in, the car
+  plugged in sensor and Charge now (all its buttons show); with a daily
+  limit only that many hours are scheduled, the earliest first
+- **Fix:** a slot trimmed to make room for a charge took on the charge's
+  colour, so it looked like a second Charge now slot (and deleting it left
+  the real one, still red). It now keeps its own colour
+- **Fix:** deleting a charge's slot now puts back the slot it trimmed or
+  joined, and the schedule's colours are worked out again
+
 ## 2.27.0 — Past days as they happened
 
 - **Fix:** the Automations tab's last 3 days showed the schedule as it is
