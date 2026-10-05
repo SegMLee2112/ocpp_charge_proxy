@@ -1104,3 +1104,71 @@ def test_unskipping_into_a_no_charging_time_is_refused():
     except ValueError as err:
         assert "no-charging time" in str(err)
     assert keys[0] in a.skips
+
+
+def test_clock_change_nights_count_real_hours():
+    """Octopus counts the night the clocks go back as 25 hours: 23:30-05:30 is
+    7 hours then (5 when they go forward). Limit days are 12:00 to 12:00 by the clock."""
+    import os
+    import time as _time
+    from src.automation import Automation, ReplugOptions, limit_end, period_start
+    old = os.environ.get("TZ")
+    os.environ["TZ"] = "Europe/London"
+    _time.tzset()
+    try:
+        now = datetime.datetime(2026, 10, 23, 12, 0).astimezone()
+        a = Automation(None, ReplugOptions(), now=lambda: now, clock=_time.time)  # the add-on's own clock handling
+        night = [{"time": "23:30", "action": "plug", "date": "2026-10-24"},
+                 {"time": "05:30", "action": "unplug", "date": "2026-10-25"}]
+        a.set_schedule(enabled=True, ready_time=True, daily_cap_min=360)
+        for reset in (None, "12:00"):
+            a.limit_reset = reset
+            try:
+                a.set_schedule(entries=night, daily_cap_min=360)
+                raise AssertionError("should have refused")
+            except ValueError as err:
+                assert "7h 00m" in str(err)
+        # 23:30-04:30 is the 6 hours that night
+        a.set_schedule(entries=[dict(night[0]), dict(night[1], time="04:30")], daily_cap_min=360)
+        # The limit day from Sat 12:00 ends Sun 12:00 by the clock: 25 hours
+        sat = datetime.datetime(2026, 10, 24, 15, 0).astimezone()
+        start = period_start(sat, "12:00")
+        assert start.hour == 12 and start.day == 24
+        end = limit_end(start, "12:00")
+        assert end.hour == 12 and end.day == 25 and (end - start) == datetime.timedelta(hours=25)
+        # After the change: Sun 13:00 is in the day from Sun 12:00
+        sun = datetime.datetime(2026, 10, 25, 13, 0).astimezone()
+        assert period_start(sun, "12:00").day == 25
+    finally:
+        if old is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = old
+        _time.tzset()
+
+
+def test_auto_plug_trims_every_later_slot_it_needs_to():
+    # 14:00 + 6 h with 21:00-22:00 and 01:00-05:00 after it: both go (6 h in 24 already)
+    a = _fresh_cap()
+    a.set_schedule(entries=_slot("21:00", "22:00", days=[0]) + [{"time": "01:00", "action": "plug", "days": [1]},
+                   {"time": "05:00", "action": "unplug", "days": [1]}], daily_cap_min=360)
+    out = a.plan_auto_plug(360, cap_min=360)
+    assert out["over"]["left"] == 0 and out["over"]["after"] == 360
+    assert "21:00–22:00 slot is skipped" in out["moved"] and "01:00–05:00 slot is skipped" in out["moved"]
+    assert a._longest_day(a.entries)[0] == 360
+    # 14:00 + 3 h is 2 h over: the next slot first (21-22 skipped), then 01:00-05:00 starts at 02:00
+    b = _fresh_cap()
+    b.set_schedule(entries=_slot("21:00", "22:00", days=[0]) + [{"time": "01:00", "action": "plug", "days": [1]},
+                   {"time": "05:00", "action": "unplug", "days": [1]}], daily_cap_min=360)
+    out = b.plan_auto_plug(180, cap_min=360)
+    assert out["moved"] == "the 21:00–22:00 slot is skipped; the 05:00 slot now starts at 02:00"
+    assert out["over"] == {"before": 480, "after": 360, "added": 120, "left": 0}
+    # Deleting the charge puts both back
+    c = _fresh_cap()
+    c.set_schedule(entries=_slot("21:00", "22:00", days=[0]) + [{"time": "01:00", "action": "plug", "days": [1]},
+                   {"time": "05:00", "action": "unplug", "days": [1]}], daily_cap_min=360)
+    weekly = [e for e in c.entries if not e.get("date")]
+    c.plan_auto_plug(360, cap_min=360)
+    assert c.skips
+    c.set_schedule(entries=weekly)
+    assert c.skips == [] and all(not e.get("date") for e in c.entries)

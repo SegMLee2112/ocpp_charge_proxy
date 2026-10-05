@@ -96,10 +96,14 @@ works the same way. In each case:
   chosen but a longer charge stops after 6 plugged-in hours (e.g. 12 hours
   from 16:30 with 23:30–05:30 blocked: 16:30–22:30). If it puts more than 6 hours in any 24 (counting the previous
   24 hours too), the next scheduled slot starts later, by whole half hours,
-  just enough to get back to 6 (or is skipped, if that's not enough), for
-  that day only. For example, 4 hours scheduled 23:30–03:30 and a 3-hour
+  just enough to get back to 6; if skipping it isn't enough, the slot after
+  it is trimmed too, and so on, for that day only. For example, 4 hours scheduled 23:30–03:30 and a 3-hour
   auto plug-in at 18:00: that night's slot starts at 00:30. With it off
   there's no 6-hour limit, for auto plug-in, Charge now or the schedule.
+  Hours are real hours, as Octopus counts them: the night the clocks go
+  back, 23:30–05:30 is 7 hours (and 5 the night they go forward), so that
+  night's slot shows in red; skip it and add a one-off 23:30–04:30, or
+  leave it and Octopus schedules 6 of the 7.
 - If it meets or overlaps the next scheduled slot, they become one slot,
   ending at the schedule's unplug.
 - The supplier's ready time is set to the end of the slot (E.ON Next has

@@ -258,24 +258,42 @@ def limit_period_text(reset: Optional[str]) -> str:
     return f"in any {hours} hours" if hours and hours != 24 else "a day"
 
 
-def window_minutes(windows, start, length: datetime.timedelta = datetime.timedelta(days=1)) -> int:
-    """Plugged-in minutes in the 24 hours (or `length`) from `start`."""
-    end = start + length
+def window_minutes(windows, start, end=datetime.timedelta(days=1)) -> int:
+    """Plugged-in minutes (real ones: the night the clocks go back has an
+    extra hour) from `start` to `end` (or for `end`, a timedelta: 24 hours)."""
+    if isinstance(end, datetime.timedelta):
+        end = start + end
     return int(round(sum(max(0.0, (min(y, end) - max(x, start)).total_seconds()) for x, y in windows) / 60))
 
 
-def period_start(t: datetime.datetime, reset: str) -> datetime.datetime:
+def _system_localize(naive: datetime.datetime) -> datetime.datetime:
+    return naive.astimezone()
+
+
+def period_start(t: datetime.datetime, reset: str, localize=_system_localize) -> datetime.datetime:
     """The start of the limit day `t` is in, for a limit that resets every day
-    at `reset` ("HH:MM", e.g. Octopus: 12:00)."""
+    at `reset` ("HH:MM", e.g. Octopus: 12:00), by the clock."""
     h, m = _parse_hhmm(reset)
-    start = t.replace(hour=h, minute=m, second=0, microsecond=0)
-    if start > t:
-        d = (start - datetime.timedelta(days=1)).date()
-        start = start.replace(year=d.year, month=d.month, day=d.day)
+    wall = t.replace(tzinfo=None)  # local clock time
+    start = wall.replace(hour=h, minute=m, second=0, microsecond=0)
+    if start > wall:
+        start -= datetime.timedelta(days=1)
+    start = localize(start)
+    if start > t:  # the clocks changed in between
+        start = localize(start.replace(tzinfo=None) - datetime.timedelta(days=1))
     return start
 
 
-def limit_starts(windows, after, until, reset: Optional[str] = None) -> list:
+def limit_end(start: datetime.datetime, reset: Optional[str], localize=_system_localize) -> datetime.datetime:
+    """When the limit day (or rolling period) from `start` ends: the reset
+    time the next day by the clock (23 or 25 hours when the clocks change),
+    or 24 (N) hours on."""
+    if _fixed(reset):
+        return localize(start.replace(tzinfo=None) + datetime.timedelta(days=1))
+    return start + limit_length(reset)
+
+
+def limit_starts(windows, after, until, reset: Optional[str] = None, localize=_system_localize) -> list:
     """Where the 24 hours a daily limit is checked over start. reset None
     (rolling): any 24 hours, i.e. from each stretch's start between `after`
     and `until`; "Nh": the same over N hours (looking back N hours from a
@@ -291,18 +309,18 @@ def limit_starts(windows, after, until, reset: Optional[str] = None) -> list:
     out = set()
     for a, b in windows:
         for t in (a, b - datetime.timedelta(microseconds=1)):
-            s = period_start(t, reset)
+            s = period_start(t, reset, localize)
             if after < s <= until:
                 out.add(s)
     return sorted(out)
 
 
-def longest_day(windows, after, until, reset: Optional[str] = None):
+def longest_day(windows, after, until, reset: Optional[str] = None, localize=_system_localize):
     """The most plugged-in minutes in any 24 hours a daily limit is checked
     over (see limit_starts): (minutes, start), or None."""
     worst = None
-    for a in limit_starts(windows, after, until, reset):
-        total = window_minutes(windows, a, limit_length(reset))
+    for a in limit_starts(windows, after, until, reset, localize):
+        total = window_minutes(windows, a, limit_end(a, reset, localize))
         if worst is None or total > worst[0]:
             worst = (total, a)
     return worst
@@ -634,18 +652,19 @@ class Automation:
     def _longest_day(self, entries: list, skips: Optional[list] = None):
         now = self._now()
         return longest_day(self.windows(entries, now, skips, open_ended=True), now - datetime.timedelta(days=1),
-                           now + datetime.timedelta(days=self._horizon_days(entries) - 1), self.limit_reset)
+                           now + datetime.timedelta(days=self._horizon_days(entries) - 1), self.limit_reset,
+                           self._localize)
 
     def _makes_worse(self, cap_min: int, old: tuple, new: tuple) -> bool:
         """(entries, skips) before and after a change: does any 24 hours (or
         limit day) go over the cap, or further over it than it already was?"""
-        now = self._now()
-        length = limit_length(self.limit_reset)
+        now, reset = self._now(), self.limit_reset
         before = self.windows(old[0], now, old[1], open_ended=True)
         after = self.windows(new[0], now, new[1], open_ended=True)
         for a in limit_starts(after, now - datetime.timedelta(days=1),
-                              now + datetime.timedelta(days=self._horizon_days(new[0]) - 1), self.limit_reset):
-            if window_minutes(after, a, length) > max(cap_min, window_minutes(before, a, length)):
+                              now + datetime.timedelta(days=self._horizon_days(new[0]) - 1), reset, self._localize):
+            end = limit_end(a, reset, self._localize)
+            if window_minutes(after, a, end) > max(cap_min, window_minutes(before, a, end)):
                 return True
         return False
 
@@ -749,12 +768,15 @@ class Automation:
         `minutes` to the schedule as a one-off (see the module docstring).
 
         With cap_min (Octopus: 360), the charge is at most that long, and if
-        it takes any 24 hours (the previous 24 included) over the cap, the next
-        scheduled slot's first half hours come off, as a one-off, just enough
-        to get back under it (or as much as helps). dry_run: work it out
-        without changing anything (Charge now asks first). Returns what was
-        (or would be) done, with "over": the most minutes in any 24 hours
-        before and after the next slot is trimmed."""
+        it takes any 24 hours (the previous 24 included) over the cap, the
+        scheduled slots after it lose their first half hours, as a one-off,
+        the next first: just enough to get back under it (a slot that's all
+        taken off is skipped, and the next one is trimmed too, as long as it's
+        in a day the charge takes over). dry_run: work it out without changing
+        anything (Charge now asks first). Returns what was (or would be) done,
+        with "over": the most minutes in any 24 hours before and after the
+        slots are trimmed."""
+        loc = self._localize
         now = self._now().replace(second=0, microsecond=0)
         end = self.first_ready_at(now + datetime.timedelta(minutes=minutes), ready_times)
         if end is None:
@@ -776,7 +798,7 @@ class Automation:
             pieces = []
             for x, y in segments:
                 while fixed:
-                    nxt = period_start(x, fixed) + datetime.timedelta(days=1)
+                    nxt = limit_end(period_start(x, fixed, loc), fixed, loc)
                     if nxt >= y:
                         break
                     pieces.append((x, nxt))
@@ -784,7 +806,7 @@ class Automation:
                 pieces.append((x, y))
             keep, used, stopped = [], {}, False
             for x, y in pieces:
-                key = period_start(x, fixed) if fixed else None
+                key = period_start(x, fixed, loc) if fixed else None
                 left = cap_min - used.get(key, 0)
                 length = (y - x).total_seconds() / 60
                 if length <= left:
@@ -833,25 +855,38 @@ class Automation:
                 seg_entries.append(one_off(y, "unplug"))
         unplug = one_off(end, "unplug")
         start_day = now.date() - datetime.timedelta(days=1)
-        nxt0 = next((s for s in self._stretches(start_day, 9, active, self.skips) if s["end"] > now), None)
-        can_trim = nxt0 is not None and nxt0["start"] > now
+        # The scheduled slots still to come (the first may meet the charge),
+        # up to 3 days on: the ones that can be trimmed
+        later = [s for s in self._stretches(start_day, 5, active, self.skips)
+                 if s["end"] > now and s["start"] < end + datetime.timedelta(days=3)]
+        nxt0 = later[0] if later else None
+        if later and later[0]["start"] <= now:
+            later = later[1:]  # one going now isn't trimmed
+        can_trim = bool(later)
 
-        def build(cut: int):
-            """The entries and skips for the charge, with the next slot's first
-            `cut` minutes taken off (all of it: skipped)."""
-            added, skips, nxt, note = list(seg_entries), list(self.skips), nxt0, None
-            if cut and can_trim:
-                new_start = nxt["start"] + datetime.timedelta(minutes=cut)
-                skips.append({"entry_id": nxt["plug"]["id"], "date": nxt["start"].date().isoformat()})
-                if new_start < nxt["end"]:
-                    later = one_off(new_start, "plug", nxt["plug"].get("source"))  # still that slot's own kind
-                    added.append(later)
-                    nxt = dict(nxt, start=new_start, plug=later)
-                    note = f"the {nxt['end'].strftime('%H:%M')} slot now starts at {new_start.strftime('%H:%M')}"
+        def build(cuts: dict):
+            """The entries and skips for the charge, with the first `cuts[i]`
+            minutes of later slot i taken off (all of it: skipped)."""
+            added, skips, nxt, notes = list(seg_entries), list(self.skips), nxt0, []
+            for i, s in enumerate(later):
+                cut = cuts.get(i)
+                if not cut:
+                    continue
+                new_start = s["start"] + datetime.timedelta(minutes=cut)
+                skips.append({"entry_id": s["plug"]["id"], "date": s["start"].date().isoformat()})
+                if new_start < s["end"]:
+                    plug_later = one_off(new_start, "plug", s["plug"].get("source"))  # still that slot's own kind
+                    added.append(plug_later)
+                    trimmed = dict(s, start=new_start, plug=plug_later)
+                    notes.append(f"the {s['end'].strftime('%H:%M')} slot now starts at {new_start.strftime('%H:%M')}")
                 else:
-                    skips.append({"entry_id": nxt["unplug"]["id"], "date": nxt["end"].date().isoformat()})
-                    note = "the next scheduled slot is skipped"
-                    nxt = None
+                    skips.append({"entry_id": s["unplug"]["id"], "date": s["end"].date().isoformat()})
+                    notes.append(f"the {s['start'].strftime('%H:%M')}–{s['end'].strftime('%H:%M')} slot is skipped"
+                                 + (f" ({s['start'].strftime('%a')})" if s["start"].date() != now.date() else ""))
+                    trimmed = None
+                if s is nxt0:
+                    nxt = trimmed
+            note = "; ".join(notes) or None
             combined = nxt is not None and end >= nxt["start"]
             if combined:
                 # One slot: plugged in from now to the scheduled unplug
@@ -872,41 +907,50 @@ class Automation:
                     skips.append({"entry_id": e["id"], "date": t.date().isoformat()})
             return added, skips, combined, slot_end, note
 
-        span = (now - datetime.timedelta(days=1), now + span_len)
+        span = (now - datetime.timedelta(days=1), (later[-1]["end"] if later else end) + span_len)
         base = self.windows(active, now, self.skips)  # the schedule without this charge
 
-        def totals_for(cut: int) -> tuple:
+        def totals_for(cuts: dict) -> tuple:
             """(most minutes in any 24 hours; most minutes the charge puts any
             24 hours over the cap, beyond what the schedule already had; the
-            same for the 24 hours that meet the next slot, which trimming it
-            can fix)."""
-            added, skips, *_ = build(cut)
+            same for the 24 hours that meet each later slot, which trimming it
+            can fix: {i: minutes})."""
+            added, skips, *_ = build(cuts)
             wins = self.windows(active + added, now, skips)
-            starts = limit_starts(wins + base, span[0], span[1], reset)
-            worst = excess = near = 0
-            for a in starts:
-                with_it = window_minutes(wins, a, span_len)
+            worst = excess = 0
+            near = {}
+            for a in limit_starts(wins + base, span[0], span[1], reset, loc):
+                stop = limit_end(a, reset, loc)
+                with_it = window_minutes(wins, a, stop)
                 worst = max(worst, with_it)
-                ex = with_it - max(cap_min, window_minutes(base, a, span_len))
+                ex = with_it - max(cap_min, window_minutes(base, a, stop))
                 excess = max(excess, ex)
-                if can_trim and a < nxt0["end"] and a + span_len > nxt0["start"]:
-                    near = max(near, ex)
+                for i, s in enumerate(later):
+                    if a < s["end"] and stop > s["start"]:
+                        near[i] = max(near.get(i, 0), ex)
             return worst, excess, near
 
-        cut, before, after, added_over, left_over = 0, None, None, 0, 0
+        cuts, before, after, added_over, left_over = {}, None, None, 0, 0
         if cap_min:
-            before, added_over, near = totals_for(0)
+            before, added_over, near = totals_for(cuts)
             after, left_over = before, added_over
-            if near > 0:
-                # The next slot's first half hours come off: just enough, or as many as help
-                length = (nxt0["end"] - nxt0["start"]).total_seconds() / 60
+            # Each later slot in turn, the next first: its first half hours
+            # come off, just enough (or all of it, then the one after)
+            for i, s in enumerate(later):
+                if near.get(i, 0) <= 0:
+                    continue
+                length = (s["end"] - s["start"]).total_seconds() / 60
+                best = None
                 for c in range(30, int(math.ceil(length / 30)) * 30 + 1, 30):
-                    total, ex, n = totals_for(c)
-                    if n < near:
-                        cut, after, left_over, near = c, total, ex, n
-                    if n <= 0:
+                    total, ex, n = totals_for({**cuts, i: c})
+                    if n.get(i, 0) < near[i] and (best is None or n.get(i, 0) < best[3].get(i, 0)):
+                        best = (c, total, ex, n)
+                    if n.get(i, 0) <= 0:
                         break
-        added, skips, combined, slot_end, moved = build(cut)
+                if best:
+                    cuts[i] = best[0]
+                    after, left_over, near = best[1], best[2], best[3]
+        added, skips, combined, slot_end, moved = build(cuts)
         changed = {"skips": [k for k in skips if k not in self.skips],
                    "added": [e["id"] for e in added if e["id"] not in {x["id"] for x in seg_entries + [unplug]}]}
         if changed["skips"] or changed["added"]:

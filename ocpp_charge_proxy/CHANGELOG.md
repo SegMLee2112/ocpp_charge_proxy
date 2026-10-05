@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.35.0 — Later slots trimmed too; clock changes
+
+- **Fix:** auto plug-in, the car plugged in sensor and Charge now only
+  shortened or skipped the next scheduled slot, so a later one in the same
+  24 hours (or limit day) could still take it over the daily limit (14:00
+  for 6 hours with 21:00–22:00 and 01:00–05:00 after it: 10 hours). Later
+  slots are now trimmed too, the next first, just enough; deleting the
+  charge puts them all back.
+- **Fix:** limit days with a reset time run from it to the same time the
+  next day by the clock, so the day the clocks change is 25 (or 23) hours.
+- **Change:** the schedule page counts real hours, as the add-on and
+  Octopus do: the night the clocks go back, 23:30–05:30 is 7 hours and is
+  marked in red (it was only refused when saving).
+- **Docs:** both.
+
 ## 2.34.0 — Daily limit loopholes closed
 
 - **Fix:** once the schedule was over the daily limit (e.g. after Charge
