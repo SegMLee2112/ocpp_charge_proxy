@@ -215,6 +215,7 @@ async def run() -> None:
         plug=do_plug,
         unplug=do_unplug,
     )
+    cp.set_voltage_source(ha_link.voltage)  # Settings › Voltage: a sensor, a set value, or 230 V
 
     def _health_info() -> dict:
         info = health.snapshot()

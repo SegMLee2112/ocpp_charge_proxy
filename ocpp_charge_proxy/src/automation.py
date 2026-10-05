@@ -91,9 +91,10 @@ class ReplugOptions:
     enabled: bool = True
     after_min: int = 10
     attempts: int = 3
+    off_s: int = REPLUG_WAIT_S  # left unplugged this long before plugging back in
 
     def as_dict(self) -> dict:
-        return {"enabled": self.enabled, "after_min": self.after_min, "attempts": self.attempts}
+        return {"enabled": self.enabled, "after_min": self.after_min, "attempts": self.attempts, "off_s": self.off_s}
 
 
 def _iso_local(dt: Optional[datetime.datetime]) -> Optional[str]:
@@ -543,16 +544,19 @@ class Automation:
         try:
             after = int(values["after_min"])
             attempts = int(values["attempts"])
+            off = int(values.get("off_s", REPLUG_WAIT_S))
         except (KeyError, TypeError, ValueError):
-            raise ValueError("after_min and attempts must be whole numbers") from None
+            raise ValueError("after_min, attempts and off_s must be whole numbers") from None
         if not 1 <= after <= 240:
             raise ValueError("after_min must be 1 to 240 minutes")
         if not 0 <= attempts <= 20:
             raise ValueError("attempts must be 0 to 20")
-        return {"enabled": bool(values.get("enabled", True)), "after_min": after, "attempts": attempts}
+        if not 5 <= off <= 300:
+            raise ValueError("off_s must be 5 to 300 seconds")
+        return {"enabled": bool(values.get("enabled", True)), "after_min": after, "attempts": attempts, "off_s": off}
 
     def set_replug(self, **changes) -> None:
-        allowed = {k: v for k, v in changes.items() if k in ("enabled", "after_min", "attempts") and v is not None}
+        allowed = {k: v for k, v in changes.items() if k in ("enabled", "after_min", "attempts", "off_s") and v is not None}
         self.replug = self._valid_replug({**self.replug, **allowed})
         if not self.replug["enabled"]:
             self.waiting_since = None
@@ -676,7 +680,7 @@ class Automation:
         if worst and worst[0] > cap_min:
             total, start = worst
             raise ValueError(
-                f"{provider} schedules at most {_hours(cap_min)} hours of smart charging "
+                f"{provider[:1].upper() + provider[1:]} schedules at most {_hours(cap_min)} hours of smart charging "
                 f"{limit_period_text(self.limit_reset)}, but the schedule "
                 f"plugs in for {total // 60}h {total % 60:02d}m in {limit_day_text(start, self.limit_reset)}: shorten it"
             )
@@ -1186,7 +1190,7 @@ class Automation:
         return start + self.replug["after_min"] * 60
 
     async def run_replug(self, unplug: Callable[..., Awaitable[None]], plug: Callable[..., Awaitable[None]],
-                         wait_s: float = REPLUG_WAIT_S) -> None:
+                         wait_s: Optional[float] = None) -> None:
         self.attempts_used += 1
         logger.warning(
             "No session from the supplier %d min after plugging in: re-plugging (try %d of %d)",
@@ -1195,7 +1199,7 @@ class Automation:
         self.replugging = True
         try:
             await unplug(source="auto re-plug")
-            await asyncio.sleep(wait_s)
+            await asyncio.sleep(self.replug.get("off_s", REPLUG_WAIT_S) if wait_s is None else wait_s)
             await plug(source="auto re-plug")
         finally:
             self.replugging = False

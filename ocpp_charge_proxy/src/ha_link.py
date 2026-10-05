@@ -48,7 +48,7 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
     if not isinstance(raw, dict):
         raise ValueError("Send a JSON object")
     out = dict(current or default_settings())
-    for key in ("power_entity", "soc_entity", "plug_entity", "auto_plug_entity"):
+    for key in ("power_entity", "soc_entity", "plug_entity", "auto_plug_entity", "voltage_entity"):
         if key in raw:
             value = (raw[key] or "").strip() if isinstance(raw[key], (str, type(None))) else None
             if value is None:
@@ -110,6 +110,18 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
             if not 0 <= hours <= 24 or hours * 2 != int(hours * 2):
                 raise ValueError("The daily limit must be 0 to 24 hours, in half hours (0: no limit)")
             out["daily_limit_h"] = hours
+    if "voltage_v" in raw:
+        value = raw["voltage_v"]
+        if value in (None, ""):
+            out["voltage_v"] = None
+        else:
+            try:
+                volts = float(value)
+            except (TypeError, ValueError):
+                raise ValueError("voltage_v must be a number of volts") from None
+            if not 100 <= volts <= 300:
+                raise ValueError("The supply voltage must be 100 to 300 V")
+            out["voltage_v"] = round(volts, 1)
     if "limit_reset" in raw:
         value = str(raw["limit_reset"] or "").strip()
         if value == "48h":  # 2.31.0
@@ -148,6 +160,7 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
 def default_settings() -> dict:
     return {
         "power_entity": "", "soc_entity": "", "plug_entity": "",
+        "voltage_entity": "", "voltage_v": None,  # supply voltage: a sensor, else this, else 230 V
         "auto_plug": False, "auto_plug_entity": "", "auto_plug_soc": DEFAULT_AUTO_PLUG_SOC,
         "auto_plug_ready": False, "auto_plug_hours": DEFAULT_AUTO_PLUG_HOURS,
         "plug_ready": False, "plug_hours": DEFAULT_AUTO_PLUG_HOURS,
@@ -301,7 +314,7 @@ class HaLink:
     @property
     def watched(self) -> list[str]:
         s = self.settings
-        ids = [s["power_entity"], s["soc_entity"], s["plug_entity"]]
+        ids = [s["power_entity"], s["soc_entity"], s["plug_entity"], s.get("voltage_entity") or ""]
         if self.auto_plug.enabled:
             ids.append(self.monitor_entity)
         return sorted({e for e in ids if e})
@@ -678,6 +691,16 @@ class HaLink:
             return [t for t in ALL_DAY_TIMES if lo <= t <= hi]
         return allowed_times(entity)
 
+    def voltage(self) -> Optional[float]:
+        """The supply voltage: the voltage sensor's reading (100-300 V), else
+        the one set on the Settings tab, else None (230 V is used)."""
+        entity_id = self.settings.get("voltage_entity")
+        if entity_id:
+            v = _number(self.states.get(entity_id))
+            if v is not None and 100 <= v <= 300:
+                return v
+        return self.settings.get("voltage_v")
+
     def daily_limit_min(self, provider: Optional[str]) -> Optional[int]:
         """Minutes of smart charging a day your supplier schedules at most
         (None: no limit): set on the Settings tab, else Octopus's 6 hours."""
@@ -850,6 +873,12 @@ class HaLink:
                 "entity": entity(s["power_entity"]),
                 "kw": power_kw(self.states.get(s["power_entity"])) if s["power_entity"] else None,
                 "source": self._shared.power_source,
+            },
+            "voltage": {
+                "entity": entity(s.get("voltage_entity") or ""),
+                "v": self.voltage(),
+                "source": ("sensor" if s.get("voltage_entity") and self.voltage() is not None
+                           and self.voltage() != s.get("voltage_v") else "set" if s.get("voltage_v") else "default"),
             },
             "reporting_soc": {
                 "entity": entity(s["soc_entity"]),

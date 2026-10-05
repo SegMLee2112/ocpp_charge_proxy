@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.36.0 — Tidier wording, supply voltage, re-plug time
+
+- **Feature:** Settings › Your Home Assistant sensors has a **Voltage**
+  card: pick a voltage sensor, or set the supply voltage (230 V if
+  neither). It's used to turn amps into kW for the simulated power reported
+  to your supplier and the ~kW figures on the page.
+- **Feature:** Auto re-plug has **Unplugged for** (5–300 s, default 30):
+  how long it stays unplugged before plugging back in.
+- **Change:** Charge now offers 12 h too, as auto plug-in and the car
+  plugged in sensor do.
+- **Change:** the week view's days read "Tue 6" (weekday first).
+- **Change:** hour inputs all use "h".
+- **Change:** the daily limit note on the Automations cards is one short
+  line ("Daily limit: up to 6 h is scheduled per day from 12:00…").
+- **Fix:** help text no longer hard-codes Octopus's 6 hours or "any 24
+  hours" where the limit and when it resets can be changed; Force schedule
+  on supplier is named for your supplier everywhere; the car plugged in
+  help points to the schedule above (it's on the Automations tab now);
+  messages without a supplier name start with a capital.
+- **Docs:** the new settings.
+
 ## 2.35.0 — Later slots trimmed too; clock changes
 
 - **Fix:** auto plug-in, the car plugged in sensor and Charge now only

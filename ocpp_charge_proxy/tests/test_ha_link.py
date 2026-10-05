@@ -199,3 +199,26 @@ def test_car_plugged_in_sensor_can_add_a_charge():
     _run(link.handle_entities_event(_added(**{"binary_sensor.cable": "off"})))
     _run(link.handle_entities_event(_changed("binary_sensor.cable", "on")))
     assert calls == [(8, "car_plugged", "car plugged in sensor")] and fake.plugs == 0  # it plugs in, not us
+
+
+def test_supply_voltage_from_a_sensor_or_set():
+    from src.charger_sim import ChargerSimulator
+    link, fake = _link()
+    assert link.voltage() is None  # 230 V
+    _run(link.update_settings({"voltage_v": 240}))
+    assert link.voltage() == 240
+    _run(link.update_settings({"voltage_entity": "sensor.mains_voltage"}))
+    assert "sensor.mains_voltage" in link.watched
+    link.states["sensor.mains_voltage"] = {"state": "243.6", "attributes": {}}
+    assert link.voltage() == 243.6
+    link.states["sensor.mains_voltage"] = {"state": "unavailable", "attributes": {}}
+    assert link.voltage() == 240  # falls back to the set value
+    for bad in ({"voltage_v": 50}, {"voltage_v": "x"}, {"voltage_entity": "switch.x"}):
+        with pytest.raises(ValueError):
+            validate_settings(bad)
+    sim = ChargerSimulator(current_amps=32)
+    assert sim.rated_power_kw == 7.4  # 230 V
+    sim.voltage_source = lambda: 250.0
+    assert sim.rated_power_kw == 8.0 and 248 <= sim.sample_full().voltage <= 252
+    sim.voltage_source = lambda: 5.0  # nonsense: ignored
+    assert sim.rated_power_kw == 7.4

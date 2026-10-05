@@ -197,7 +197,8 @@ hatched in blue-grey.
   Automations tab (whether or not this is on).
 - **Auto re-plug** (**Automations** tab): Octopus sometimes doesn't start a session after you plug
   in. When Plugged In has been on for the set minutes (default 10) with no
-  session and the add-on is connected, it unplugs, waits 30 seconds and
+  session and the add-on is connected, it unplugs, waits the set
+  **Unplugged for** seconds (default 30) and
   plugs back in, up to the set number of tries (default 3). It then gives up
   until the car is next unplugged or a session starts, and the wait starts
   again after each re-plug. If your supplier's smart charging plan is found
@@ -333,7 +334,7 @@ follows your Home Assistant theme. Settings save as soon as you change them.
   plugged in, and whether auto re-plug gave up on it or it was unplugged
   first.
 - **Automations:**
-  - **Charge now** (at the top): click how long to plug in for (1, 2, 3, 4, 6 or 8
+  - **Charge now** (at the top): click how long to plug in for (1, 2, 3, 4, 6, 8 or 12
     hours). It plugs in straight away and adjusts the schedule the same way
     auto plug-in does (see [Auto plug-in](#auto-plug-in)): a one-off slot
     in the schedule below, the ready time set to its end, and it unplugs
@@ -346,7 +347,9 @@ follows your Home Assistant theme. Settings save as soon as you change them.
     plug-in, the car plugged in sensor and auto re-plug.
 - **Settings:** controls for Plugged In, max current and **Continue session
   after a restart**; the simulated car's start delay and ramp-up; your
-  power and SoC sensors, with their live values; and **Your
+  power and SoC sensors, with their live values; the **Voltage** card (a
+  voltage sensor, or a set supply voltage; 230 V if neither) used to turn
+  amps into kW for the simulated power and the ~kW figures; and **Your
   supplier**, for when what's found automatically isn't right, or your
   supplier's rules change:
   - **Smart charging sensor:** the dispatching sensor with its planned

@@ -449,10 +449,11 @@ async def handle_skip(request: web.Request) -> web.Response:
 
 
 async def handle_replug(request: web.Request) -> web.Response:
-    """Any of {"enabled": bool, "after_min": N, "attempts": N}."""
+    """Any of {"enabled": bool, "after_min": N, "attempts": N, "off_s": N}."""
     return await _automation_change(
         request, lambda a, b: a.set_replug(
             enabled=b.get("enabled"), after_min=b.get("after_min"), attempts=b.get("attempts"),
+            off_s=b.get("off_s"),
         ),
     )
 

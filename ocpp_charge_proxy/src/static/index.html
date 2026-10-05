@@ -388,7 +388,7 @@
   <section id="tab-automation" class="stack" hidden>
     <div class="card">
       <h2>Charge now</h2>
-      <div class="note" style="margin:0 0 10px">Plug in now for this long. <details class="more"><summary>More</summary><div>The schedule is adjusted the same way as for auto plug-in: the charge is added as a one-off slot (shown in the schedule below, where you can change it) that unplugs at the first ready time <span class="supn" data-f="your supplier">your supplier</span> accepts after these hours, and the ready time is set to it. If it meets a scheduled slot they become one; with a daily limit (Octopus: 6 hours) and Force schedule on <span class="supn" data-f="supplier">supplier</span> on, if it takes any 24 hours over your supplier's daily limit (Octopus: 6 hours, from 12:00 to 12:00), you're asked first, and the next scheduled slot then starts just late enough to stay within it (and later ones too, if skipping it isn't enough).</div></details></div>
+      <div class="note" style="margin:0 0 10px">Plug in now for this long. <details class="more"><summary>More</summary><div>The schedule is adjusted the same way as for auto plug-in: the charge is added as a one-off slot (shown in the schedule below, where you can change it) that unplugs at the first ready time <span class="supn" data-f="your supplier">your supplier</span> accepts after these hours, and the ready time is set to it. If it meets a scheduled slot they become one. With Force schedule on <span class="supn" data-f="supplier">supplier</span> on, if it would take a day over the daily limit (Settings › Your supplier), you're asked first, and the next scheduled slot then starts just late enough to stay within it (and later ones too, if skipping it isn't enough).</div></details></div>
       <div class="row" style="margin-top:0"><div class="seg" id="c-charge" role="group" aria-label="Charge now for"></div></div>
       <div class="note" id="c-charge-cap" hidden style="margin:4px 0 0"></div>
       <div class="sub" id="c-charge-note"></div>
@@ -447,7 +447,7 @@
           <div class="grow">Automatically adjust schedule to fit auto plug-in
             <div class="note" style="margin:0">Adds the charge to the schedule and sets <span class="supn" data-f="your supplier">your supplier</span>'s ready time. <details class="more"><summary>More</summary><div>As a one-off that unplugs when it's done; the ready time is set to that unplug. If it meets a scheduled slot they become one.
               <br><b>Octopus Energy:</b> unplugs after the hours below (rounded up to the half hour); with Force schedule on <span class="supn" data-f="supplier">supplier</span> on,
-              if that takes a day over its daily limit (6 hours from 12:00 to 12:00, unless changed on the Settings tab; the day so far included), the next scheduled slot starts just late enough to stay within it (and later ones too, if skipping it isn't enough), for that day only.
+              if that takes a day over the daily limit (Settings › Your supplier; the day so far included), the next scheduled slot starts just late enough to stay within it (and later ones too, if skipping it isn't enough), for that day only.
               <br><b>EDF Energy:</b> ready times can only be 04:00–11:00, so it unplugs at the first of those after the hours below
               (e.g. plugging in at 18:00 for 3 hours unplugs at 04:00 the next morning).
               <br><b>E.ON Next:</b> unplugs after the hours below (rounded up to the half hour); its integration has no ready time, so none is set.</div></details></div></div>
@@ -455,7 +455,7 @@
         </div>
         <div class="row" id="sim-auto-hours-row">
           <div class="grow">Charge for<div class="note" style="margin:0">Hours from plugging in (30-minute steps)</div></div>
-          <span class="ctl"><input type="number" id="sim-auto-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours"> hours</span>
+          <span class="ctl"><input type="number" id="sim-auto-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours"> h</span>
         </div>
         <div class="note" id="sim-auto-cap" hidden style="margin:0"></div>
         <div id="sim-auto-last" class="sub" style="margin-top:8px"></div>
@@ -466,12 +466,12 @@
         <div class="row"><div class="grow">Car plugged in sensor<div class="note" style="margin:0">Turns Plugged In on when your car's cable is connected. <details class="more"><summary>More</summary><div>A binary sensor such as your car's "charging cable connected". It never switches Plugged In off.</div></details></div></div></div>
         <div class="row" style="margin-top:6px"><span class="picker" data-key="plug_entity" data-domain="binary_sensor" data-class="plug,connectivity,battery_charging,power"></span></div>
         <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
-          <div class="grow">Add a charge to the schedule<div class="note" style="margin:0">When it plugs in, for the hours below, as auto plug-in does. <details class="more"><summary>More</summary><div>A one-off slot from plugging in, shown on the Automations tab, with the ready time set to its end. With a daily limit (Octopus: 6 hours) only that many hours are scheduled; not plugged in during a no-charging time.</div></details></div></div>
+          <div class="grow">Add a charge to the schedule<div class="note" style="margin:0">When it plugs in, for the hours below, as auto plug-in does. <details class="more"><summary>More</summary><div>A one-off slot from plugging in, shown in the schedule above, with the ready time set to its end. Kept within the daily limit as auto plug-in is; not plugged in during a no-charging time.</div></details></div></div>
           <label class="switch"><input type="checkbox" id="plug-ready" aria-label="Add a charge to the schedule when the car is plugged in"><span></span></label>
         </div>
         <div class="row" id="plug-hours-row">
           <div class="grow">Charge for<div class="note" style="margin:0">Hours from plugging in (30-minute steps)</div></div>
-          <span class="ctl"><input type="number" id="plug-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours when plugged in"> hours</span>
+          <span class="ctl"><input type="number" id="plug-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours when plugged in"> h</span>
         </div>
         <div class="note" id="plug-cap" hidden style="margin:0"></div>
         <dl class="kv" id="sim-plug" style="margin-top:14px"></dl>
@@ -480,15 +480,19 @@
         <h2>Auto re-plug<span class="spacer"></span>
           <label class="switch"><input type="checkbox" id="a-rp-on" aria-label="Auto re-plug on"><span></span></label>
         </h2>
-        <div class="note" style="margin:0 0 10px">Unplugs and plugs back in if <span class="supn" data-f="your supplier">your supplier</span> doesn't start a session. <details class="more"><summary>More</summary><div>Octopus sometimes doesn't start a session after you plug in. If there's still no session after the minutes below, the add-on unplugs for 30 seconds and plugs back in, up to the number of tries below, then gives up until the car is next unplugged. A slot <span class="supn" data-f="your supplier">your supplier</span> has planned for later counts as an answer, so it waits for that; during a slot that's running, it waits until 10 minutes after the next hour or half hour.</div></details></div>
+        <div class="note" style="margin:0 0 10px">Unplugs and plugs back in if <span class="supn" data-f="your supplier">your supplier</span> doesn't start a session. <details class="more"><summary>More</summary><div>Octopus sometimes doesn't start a session after you plug in. If there's still no session after the minutes below, the add-on unplugs for the time below and plugs back in, up to the number of tries below, then gives up until the car is next unplugged. A slot <span class="supn" data-f="your supplier">your supplier</span> has planned for later counts as an answer, so it waits for that; during a slot that's running, it waits until 10 minutes after the next hour or half hour.</div></details></div>
         <div id="a-rp-status" style="margin-bottom:12px"></div>
         <div class="row">
-          <div class="grow">Re-plug after<div class="note" style="margin:0">Minutes plugged in with no session. <details class="more"><summary>More</summary><div>If <span class="supn" data-f="your supplier">your supplier</span>'s plan is found: nothing scheduled, or a slot running with no session. Then the add-on unplugs for 30 seconds and plugs back in.</div></details></div></div>
+          <div class="grow">Re-plug after<div class="note" style="margin:0">Minutes plugged in with no session. <details class="more"><summary>More</summary><div>If <span class="supn" data-f="your supplier">your supplier</span>'s plan is found: nothing scheduled, or a slot running with no session. Then the add-on unplugs and plugs back in.</div></details></div></div>
           <span class="ctl"><input type="number" id="a-rp-after" min="1" max="240" step="1" aria-label="Re-plug after minutes"> min</span>
         </div>
         <div class="row">
           <div class="grow">Tries<div class="note" style="margin:0">Before giving up until the car is next unplugged</div></div>
           <span class="ctl"><input type="number" id="a-rp-tries" min="0" max="20" step="1" aria-label="Re-plug tries"></span>
+        </div>
+        <div class="row">
+          <div class="grow">Unplugged for<div class="note" style="margin:0">Seconds between unplugging and plugging back in</div></div>
+          <span class="ctl"><input type="number" id="a-rp-off" min="5" max="300" step="1" aria-label="Re-plug unplugged for seconds"> s</span>
         </div>
       </div>
     </div>
@@ -536,6 +540,16 @@
         <div class="row" style="margin-top:6px"><span class="picker" data-key="soc_entity" data-domain="sensor" data-class="battery" data-units="%"></span></div>
         <dl class="kv" id="sim-soc" style="margin-top:14px"></dl>
       </div>
+      <div class="card">
+        <h2>Voltage</h2>
+        <div class="row"><div class="grow">Voltage sensor<div class="note" style="margin:0">Your supply voltage, if you have a sensor for it. <details class="more"><summary>More</summary><div>Used to turn amps into kW: the simulated power reported to <span class="supn" data-f="your supplier">your supplier</span> (when there's no power sensor) and the ~kW figures on this page. Readings outside 100–300 V are ignored.</div></details></div></div></div>
+        <div class="row" style="margin-top:6px"><span class="picker" data-key="voltage_entity" data-domain="sensor" data-class="voltage" data-units="V"></span></div>
+        <div class="row">
+          <div class="grow">Supply voltage<div class="note" style="margin:0">Used when there's no sensor (empty: 230 V)</div></div>
+          <span class="ctl"><input type="number" id="sim-volt" min="100" max="300" step="1" placeholder="230" aria-label="Supply voltage"> V</span>
+        </div>
+        <dl class="kv" id="sim-voltage" style="margin-top:14px"></dl>
+      </div>
     </div>
     <div class="section-title">Your supplier</div>
     <div class="grid">
@@ -557,7 +571,7 @@
       </div>
       <div class="card">
         <h2>Daily limit</h2>
-        <div class="note" style="margin:0 0 10px">Most smart charging hours <span class="supn" data-f="your supplier">your supplier</span> schedules in a day. <details class="more"><summary>More</summary><div>Octopus Energy: 6 hours, from 12:00 to 12:00; none for the others. While Force schedule on supplier is on, the schedule, auto plug-in and Charge now are kept within it. Empty: automatic; 0: no limit.</div></details></div>
+        <div class="note" style="margin:0 0 10px">Most smart charging hours <span class="supn" data-f="your supplier">your supplier</span> schedules in a day. <details class="more"><summary>More</summary><div>Octopus Energy: 6 hours, from 12:00 to 12:00; none for the others. While Force schedule on <span class="supn" data-f="supplier">supplier</span> is on, the schedule, auto plug-in and Charge now are kept within it. Empty: automatic; 0: no limit.</div></details></div>
         <div class="row" style="margin-top:0">
           <div class="grow">Hours a day<div class="note" style="margin:0" id="sup-limit-note"></div></div>
           <span class="ctl"><input type="number" id="sup-limit" min="0" max="24" step="0.5" placeholder="Auto" aria-label="Daily limit in hours"> h</span>
@@ -622,7 +636,7 @@
         <span class="muted" style="font-size:13px;font-weight:400">Override</span>
         <label class="switch"><input type="checkbox" id="d-guards" aria-label="Override scheduling guards"><span></span></label>
       </h2>
-      <div class="note" style="margin:0">Off by default. On: the schedule, auto plug-in and Charge now can plug in for longer than your supplier's daily limit (Octopus: 6 hours) while Force schedule on supplier is on. <details class="more"><summary>More</summary><div>Your supplier may not charge for the rest. Turning the guards back on needs the schedule to be within the limit again.</div></details></div>
+      <div class="note" style="margin:0">Off by default. On: the schedule, auto plug-in and Charge now can plug in for longer than <span class="supn" data-f="your supplier">your supplier</span>'s daily limit while Force schedule on <span class="supn" data-f="supplier">supplier</span> is on. <details class="more"><summary>More</summary><div>Your supplier may not charge for the rest. Turning the guards back on needs the schedule to be within the limit again.</div></details></div>
     </div>
     <div class="card">
       <h2>Logs</h2>
@@ -724,7 +738,9 @@ const PREF_BOXES = ['m-hide-hb', 'm-hide-mv', 'p-only-server'];
   }
 })();
 const AMPS = [6, 10, 13, 16, 20, 25, 32];
-const VOLTS = 230;
+// The supply voltage for ~kW figures: the live reading (a sensor or the
+// value on Settings › Voltage), else 230 V
+const volts = () => (sim.data && sim.data.voltage && sim.data.voltage.v) || 230;
 let state = null;          // latest /api/state
 let activeTab = 'overview';
 
@@ -1117,7 +1133,7 @@ function seriesDefs() {
   ]};
   return {unit: 'kW', lines: [
     {name: 'Power', color: p, fill: true, get: (s) => s.power_kw},
-    {name: 'Limit (effective current)', color: w, dash: true, step: true, get: (s) => s.effective_amps * VOLTS / 1000},
+    {name: 'Limit (effective current)', color: w, dash: true, step: true, get: (s) => s.effective_amps * volts() / 1000},
   ]};
 }
 function drawChart() {
@@ -1656,7 +1672,7 @@ async function refreshProvider() {
   $('p-limits').innerHTML = kv([
     ['Supplier limit', p.provider_limit_amps == null ? '<span class="muted">None set</span>' : `${num(p.provider_limit_amps, 0)} A <span class="badge">chargingALimitConn1</span>`],
     ['Your max (HA)', `${p.max_amps} A`],
-    ['Charging at', `<b>${p.effective_amps} A</b> (~${num(p.effective_amps * VOLTS / 1000, 1)} kW)`],
+    ['Charging at', `<b>${p.effective_amps} A</b> (~${num(p.effective_amps * volts() / 1000, 1)} kW)`],
     ['Profile limit now', p.profile_limit_kw == null ? '<span class="muted">No active profile</span>' : (p.profile_limit_kw === 0 ? 'Pause (0 kW)' : num(p.profile_limit_kw, 1) + ' kW')],
   ]);
   const tags = p.local_auth_list || [];
@@ -1840,6 +1856,12 @@ function drawSimulation() {
     ['Sensor', entityState(d.power.entity)],
     ['Reported', d.power.kw == null ? '—' : num(d.power.kw, 2) + ' kW'],
   ]);
+  const vs = d.voltage || {};
+  $('sim-voltage').innerHTML = kv([
+    ['Using', `<b>${num(volts(), 0)} V</b> ${vs.source === 'sensor' ? '<span class="chip ok">Your voltage sensor</span>' : vs.source === 'set' ? '<span class="chip">Set</span>' : '<span class="chip">Default</span>'}`],
+    ['Sensor', entityState(vs.entity)],
+  ]);
+  if (document.activeElement !== $('sim-volt')) $('sim-volt').value = (sim.edit && sim.edit.voltage_v) ?? '';
   $('sim-soc').innerHTML = kv([
     ['Reporting SoC', `<b>${socTxt(d.reporting_soc.entity, d.reporting_soc.soc)}</b>`],
     ['Sensor', entityState(d.reporting_soc.entity)],
@@ -1870,7 +1892,7 @@ $('sim-auto-ready').addEventListener('change', (e) => {
 const chargeHours = (key) => (e) => {
   const h = parseFloat(e.target.value);
   if (!(h >= 0.5 && h <= 12) || h * 2 !== Math.round(h * 2)) { toast('Charge for: 0.5–12 hours, in half hours'); refreshSimulation(true); return; }
-  saveSensors({[key]: h}, `Charge for ${h} hours`);
+  saveSensors({[key]: h}, `Charge for ${h} h`);
 };
 $('sim-auto-hours').addEventListener('change', chargeHours('auto_plug_hours'));
 $('plug-hours').addEventListener('change', chargeHours('plug_hours'));
@@ -1922,6 +1944,7 @@ async function refreshAutomation(force) {
   $('a-tz').innerHTML = `Times are in ${esc(d.timezone)} (now ${d.now ? d.now.slice(11, 16) : '—'}).`;
   if (document.activeElement !== $('a-rp-after')) $('a-rp-after').value = d.replug.after_min;
   if (document.activeElement !== $('a-rp-tries')) $('a-rp-tries').value = d.replug.attempts;
+  if (document.activeElement !== $('a-rp-off')) $('a-rp-off').value = d.replug.off_s ?? 30;
   $('a-rp-on').checked = d.replug.enabled;
   drawReplugStatus(d.replug);
   applyDailyLimit();
@@ -2181,7 +2204,7 @@ function drawWeek() {
   week.model = model; week.occ = occ;
   const day0 = today0();
   const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
-  const dayLabel = (d) => { const t = new Date(day0); t.setDate(day0.getDate() + d); return t.toLocaleDateString([], {weekday: 'short', day: 'numeric'}); };
+  const dayLabel = (d) => { const t = new Date(day0); t.setDate(day0.getDate() + d); return `${t.toLocaleDateString([], {weekday: 'short'})} ${t.getDate()}`; };
   const ed = week.edit;
   let html = '';
   // Slot colours by type (weekly ones stay blue)
@@ -2538,6 +2561,11 @@ $('a-rp-tries').addEventListener('change', (e) => {
   if (!(v >= 0 && v <= 20)) { toast('Tries: 0–20'); refreshAutomation(false); return; }
   saveReplug({attempts: v}, `Up to ${v} tr${v === 1 ? 'y' : 'ies'}`);
 });
+$('a-rp-off').addEventListener('change', (e) => {
+  const v = parseInt(e.target.value, 10);
+  if (!(v >= 5 && v <= 300)) { toast('Unplugged for: 5–300 seconds'); refreshAutomation(false); return; }
+  saveReplug({off_s: v}, `Unplugged for ${v} s when re-plugging`);
+});
 
 // ---------- Health ----------
 async function refreshHealth() {
@@ -2664,7 +2692,7 @@ $('d-guards').addEventListener('change', async (e) => {
   try {
     auto.data = await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({override_guards: on})});
     applyDailyLimit();
-    toast(on ? 'Scheduling guards overridden: no 6-hour limit' : 'Scheduling guards back on');
+    toast(on ? 'Scheduling guards overridden: no daily limit' : 'Scheduling guards back on');
   } catch (err) { e.target.checked = !on; toast('Failed: ' + err.message); }
 });
 $('d-bundle').addEventListener('click', async () => {
@@ -2688,15 +2716,13 @@ $('d-bundle').addEventListener('click', async () => {
 function applyDailyLimit() {
   const on = limitApplies(), h = on ? capMin() / 60 : null;
   const rs = limitReset();
-  const text = !on ? '' : rs
-    ? `With ${sup('your supplier')}'s daily limit, only ${h} hours are scheduled in each day from ${rs} (while Force schedule on ${sup('supplier')} is on); a charge that reaches it stops then.`
-    : `With ${sup('your supplier')}'s daily limit, only ${h} hours are scheduled${limitHours() !== 24 ? ` in a rolling ${limitHours()} hours` : ''} (while Force schedule on ${sup('supplier')} is on); a longer charge stops then.`;
+  const text = !on ? '' : `Daily limit: up to ${h} h is scheduled ${rs ? `per day from ${rs}` : `in any ${limitHours()} h`}; a longer charge stops then.`;
   ['c-charge-cap', 'sim-auto-cap', 'plug-cap'].forEach((id) => { $(id).innerHTML = text; $(id).hidden = !on; });
 }
 // ---------- Charge now (Automations tab): plug in for a set time ----------
 // Added to the schedule as a one-off, so it can be changed in the schedule below.
 // Over the supplier's daily limit (Force schedule on supplier on), it asks first.
-const CHARGE_HOURS = [1, 2, 3, 4, 6, 8];
+const CHARGE_HOURS = [1, 2, 3, 4, 6, 8, 12];
 CHARGE_HOURS.forEach((h) => { const b = document.createElement('button'); b.textContent = h + ' h'; b.dataset.hours = h; $('c-charge').appendChild(b); });
 async function chargeNow(h, confirm) {
   const buttons = $('c-charge').querySelectorAll('button');
@@ -2804,6 +2830,11 @@ $('sup-from').addEventListener('change', (e) => saveSupplier({ready_from: e.targ
   e.target.value ? 'Ready times saved' : 'Ready times: automatic'));
 $('sup-to').addEventListener('change', (e) => saveSupplier({ready_to: e.target.value, ready_from: e.target.value ? ($('sup-from').value || '00:00') : ''},
   e.target.value ? 'Ready times saved' : 'Ready times: automatic'));
+$('sim-volt').addEventListener('change', (e) => {
+  const v = e.target.value.trim(), n = Number(v);
+  if (v !== '' && !(n >= 100 && n <= 300)) { toast('Supply voltage: 100–300 V (empty: 230 V)'); refreshSimulation(true); return; }
+  saveSensors({voltage_v: v === '' ? null : n}, v === '' ? 'Supply voltage: 230 V' : `Supply voltage: ${n} V`);
+});
 $('sup-reset').addEventListener('change', (e) => {
   const v = e.target.value;
   saveSupplier({limit_reset: v}, !v ? 'Daily limit resets: automatic' : v === 'rolling' ? 'Daily limit: rolling' : `Daily limit resets at ${v}`);

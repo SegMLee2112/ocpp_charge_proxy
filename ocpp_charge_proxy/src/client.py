@@ -696,6 +696,10 @@ class ChargePoint(BaseChargePoint):
         self._shared_state.current_amps_effective = effective
         self._shared_state.current_amps_provider_limit = self._server_limit_amps
 
+    def set_voltage_source(self, source) -> None:
+        """Where the simulated charger gets the supply voltage (Settings › Voltage)."""
+        self._charger_sim.voltage_source = source
+
     def set_ramp(self, start_delay_s: float, ramp_up_s: float) -> None:
         """Simulated car start-up: seconds before it draws current, then seconds
         to ramp to full power (0-60 each). Saved; applies from the next start."""

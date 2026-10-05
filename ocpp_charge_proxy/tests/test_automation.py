@@ -1172,3 +1172,35 @@ def test_auto_plug_trims_every_later_slot_it_needs_to():
     assert c.skips
     c.set_schedule(entries=weekly)
     assert c.skips == [] and all(not e.get("date") for e in c.entries)
+
+
+def test_replug_unplugged_for_is_a_setting():
+    a, clock = _automation()
+    assert a.replug["off_s"] == 30
+    a.set_replug(off_s=60)
+    assert a.replug["off_s"] == 60
+    for bad in (2, 301, "x"):
+        try:
+            a.set_replug(off_s=bad)
+            raise AssertionError("should have refused")
+        except ValueError:
+            pass
+    waits = []
+
+    async def unplug(source):
+        pass
+
+    async def plug(source):
+        pass
+
+    async def fake_sleep(s):
+        waits.append(s)
+
+    import src.automation as mod
+    real = mod.asyncio.sleep
+    mod.asyncio.sleep = fake_sleep
+    try:
+        _run(a.run_replug(unplug, plug))
+    finally:
+        mod.asyncio.sleep = real
+    assert waits == [60]

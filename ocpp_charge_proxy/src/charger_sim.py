@@ -10,9 +10,10 @@ logger = logging.getLogger(__name__)
 # Valid current settings (amps)
 VALID_CURRENT_SETTINGS = [6, 10, 13, 16, 20, 25, 32]
 
-# Power delivery model at 32A (~230V)
+# Power delivery model at 32A (~230V unless set on the Settings tab)
 # At lower current settings, power scales proportionally
 _VOLTAGE_NOMINAL = 230.0
+VOLTAGE_RANGE = (100.0, 300.0)  # a supply voltage outside this is ignored
 _EFFICIENCY_FACTOR = 0.985  # real delivery is ~98.5% of theoretical
 
 
@@ -54,6 +55,19 @@ class ChargerSimulator:
         self._ramp_up_s = max(0.0, float(ramp_up_s))
         self._clock = clock
         self._charging_started_at: Optional[float] = None
+        # The supply voltage (Settings › Voltage: a sensor or a set value), or None: 230 V
+        self.voltage_source: Optional[Callable[[], Optional[float]]] = None
+
+    @property
+    def nominal_voltage(self) -> float:
+        """The supply voltage: from the Settings tab if set and sensible, else 230 V."""
+        try:
+            v = self.voltage_source() if self.voltage_source else None
+        except Exception:
+            v = None
+        if v is not None and VOLTAGE_RANGE[0] <= v <= VOLTAGE_RANGE[1]:
+            return float(v)
+        return _VOLTAGE_NOMINAL
 
     @property
     def current_amps(self) -> int:
@@ -82,12 +96,12 @@ class ChargerSimulator:
     @property
     def rated_power_kw(self) -> float:
         """Theoretical max power at current setting."""
-        return round(self._current_amps * _VOLTAGE_NOMINAL / 1000, 1)
+        return round(self._current_amps * self.nominal_voltage / 1000, 1)
 
     @property
     def expected_power_kw(self) -> float:
         """Expected real-world power delivery (slightly below rated)."""
-        return round(self._current_amps * _VOLTAGE_NOMINAL * _EFFICIENCY_FACTOR / 1000, 2)
+        return round(self._current_amps * self.nominal_voltage * _EFFICIENCY_FACTOR / 1000, 2)
 
     def start_charging(self, now: Optional[float] = None) -> None:
         if self._charging:
@@ -164,7 +178,8 @@ class ChargerSimulator:
 
     def sample_full(self) -> ChargerReading:
         """Reading at full (post-ramp) power, ignoring start delay / ramp-up."""
-        voltage = round(random.uniform(228.0, 232.0), 1)
+        nominal = self.nominal_voltage
+        voltage = round(random.uniform(nominal - 2.0, nominal + 2.0), 1)
         frequency = round(random.uniform(49.95, 50.05), 2)
 
         if not self._charging:
