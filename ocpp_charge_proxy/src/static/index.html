@@ -2066,7 +2066,8 @@ function weekPlan(entries = auto.entries, skipList = null, forceCap = false) {
     && !(auto.data && auto.data.schedule.override_guards);  // Diagnostics › Debug
   const reset = limitReset(), r0 = reset ? tmin(reset) : null, span = limitHours() * 60;
   let starts;
-  if (r0 == null) starts = segs.map(([a]) => a).filter((a) => a >= nowMin - span && a <= 7 * DAY_MIN);
+  // (a stretch already going a period ago counts from then)
+  if (r0 == null) starts = [...new Set(segs.filter(([x, y]) => y > nowMin - span && x <= 7 * DAY_MIN).map(([x]) => Math.max(x, nowMin - span)))];
   else {
     // Each limit day a stretch is in (not over yet)
     const set = new Set();

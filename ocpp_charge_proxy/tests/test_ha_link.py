@@ -151,7 +151,7 @@ def test_supplier_settings_are_checked():
     for bad in ({"supplier_entity": "switch.x"}, {"ready_entity": "sensor.x"}, {"daily_limit_h": 25},
                 {"daily_limit_h": 1.2}, {"ready_from": "04:15"}, {"ready_from": "11:00", "ready_to": "04:00"},
                 {"limit_reset": "12:15"}, {"limit_reset": "daily"}, {"limit_hours": 0}, {"limit_hours": 1.5},
-                {"limit_hours": 200}):
+                {"limit_hours": 200}, {"limit_hours": 4}, {"limit_hours": 8, "daily_limit_h": 10}):
         with pytest.raises(ValueError):
             validate_settings(bad)
 

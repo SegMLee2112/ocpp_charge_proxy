@@ -1046,3 +1046,61 @@ def test_back_to_back_slots_are_one_stretch():
         raise AssertionError("should have refused")
     except ValueError as err:
         assert "11h 00m" in str(err) and "Thu 12:00" in str(err)
+
+
+def _over_cap(fn):
+    try:
+        fn()
+    except ValueError as err:
+        assert "6 hours" in str(err)
+        return True
+    return False
+
+
+def _fresh_cap(reset=None):
+    a, clock = _automation(start=datetime.datetime(2026, 10, 5, 14, 0, tzinfo=TZ))  # Monday 14:00
+    a.limit_reset = reset
+    a.set_schedule(enabled=True, ready_time=True, daily_cap_min=360)
+    return a
+
+
+def _slot(p, u, **k):
+    return [{"time": p, "action": "plug", **k}, {"time": u, "action": "unplug", **k}]
+
+
+def test_already_over_cant_add_another_day_over():
+    a = _fresh_cap()
+    a.override_guards = True  # e.g. Charge anyway: Tuesday is 7 h
+    a.set_schedule(entries=_slot("10:00", "17:00", date="2026-10-06"), daily_cap_min=360)
+    a.override_guards = False
+    assert _over_cap(lambda: a.set_schedule(entries=a.entries + _slot("10:00", "17:00", date="2026-10-08"), daily_cap_min=360))
+    # Shortening the one that's over is fine
+    a.set_schedule(entries=_slot("10:00", "16:00", date="2026-10-06"), daily_cap_min=360)
+
+
+def test_one_offs_weeks_ahead_are_checked():
+    a = _fresh_cap()
+    assert _over_cap(lambda: a.set_schedule(entries=_slot("06:00", "18:00", date="2026-10-26"), daily_cap_min=360))
+    a.set_schedule(entries=_slot("06:00", "12:00", date="2026-10-26"), daily_cap_min=360)  # 6 h: fine
+
+
+def test_plug_in_that_never_unplugs_counts():
+    a = _fresh_cap()
+    assert _over_cap(lambda: a.set_schedule(entries=[{"time": "06:00", "action": "plug", "days": [2]}], daily_cap_min=360))
+
+
+def test_unskipping_into_a_no_charging_time_is_refused():
+    a = _fresh_cap()
+    a.set_schedule(entries=[{"time": "23:30", "action": "plug", "date": "2026-10-07"},
+                            {"time": "03:30", "action": "unplug", "date": "2026-10-08"}], daily_cap_min=360)
+    p = next(e for e in a.entries if e["action"] == "plug")
+    u = next(e for e in a.entries if e["action"] == "unplug")
+    keys = [{"entry_id": p["id"], "date": "2026-10-07"}, {"entry_id": u["id"], "date": "2026-10-08"}]
+    a.set_skips(keys, True, daily_cap_min=360)
+    a.set_schedule(blocks=[{"start": "23:00", "end": "05:00", "days": [2]}])  # fine while it's skipped
+    try:
+        a.set_skips(keys, False, daily_cap_min=360)
+        raise AssertionError("should have refused")
+    except ValueError as err:
+        assert "no-charging time" in str(err)
+    assert keys[0] in a.skips

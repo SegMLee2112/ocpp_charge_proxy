@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.34.0 — Daily limit loopholes closed
+
+- **Fix:** once the schedule was over the daily limit (e.g. after Charge
+  anyway), any change was allowed as long as the worst day didn't get
+  worse, so another day could be taken over the limit too. Now no 24 hours
+  (or limit day) may go over it, or further over than it already was.
+  Un-skipping a slot follows the same rule.
+- **Fix:** one-off slots more than a week ahead weren't checked against
+  the daily limit (a 12-hour one-off three weeks out was accepted). The
+  check now runs to the last one-off.
+- **Fix:** a plug-in with no unplug after it (sent straight to the API)
+  wasn't counted at all; it now counts as plugged in from then on.
+- **Fix:** un-skipping a slot that a no-charging time was added over while
+  it was skipped is refused, as adding it would be.
+- **Fix:** the reset frequency can't be shorter than the daily limit
+  (e.g. 4 hours with a 6-hour limit), which meant no limit at all.
+
 ## 2.33.1 — Back-to-back slots
 
 - **Fix:** two slots that meet (e.g. 06:00–12:00 and 12:00–23:00) are now

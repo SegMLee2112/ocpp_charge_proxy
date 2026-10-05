@@ -129,6 +129,11 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
             if hours != int(hours) or not 1 <= hours <= 168:
                 raise ValueError("The reset frequency must be 1 to 168 whole hours")
             out["limit_hours"] = int(hours)
+    limit_h = out.get("daily_limit_h")
+    limit_h = 6 if limit_h is None else limit_h  # automatic: Octopus's 6 (none for the others)
+    if out.get("limit_hours") and limit_h and out["limit_hours"] < limit_h:
+        raise ValueError(f"The reset frequency ({out['limit_hours']} hours) can't be shorter than the daily "
+                         f"limit ({limit_h:g} hours): nothing would ever be over it")
     for key in ("ready_from", "ready_to"):
         if key in raw:
             value = str(raw[key] or "").strip()

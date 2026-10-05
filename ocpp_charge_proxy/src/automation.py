@@ -212,9 +212,10 @@ def validate_entry(raw: dict) -> dict:
     }
 
 
-def plugged_windows(events):
+def plugged_windows(events, open_until=None):
     """(time, is_plug) events in time order -> the stretches plugged in, as
-    (start, end). A stretch still open at the last event is left out."""
+    (start, end). A stretch still open at the last event is left out, or
+    with `open_until`, ends then (a plug-in that's never unplugged)."""
     windows = []
     state, since = None, None
     for t, plug in events:
@@ -224,6 +225,8 @@ def plugged_windows(events):
             if state is True:
                 windows.append((since, t))
             state = False
+    if open_until is not None and state is True and since < open_until:
+        windows.append((since, open_until))
     return windows
 
 
@@ -283,7 +286,8 @@ def limit_starts(windows, after, until, reset: Optional[str] = None) -> list:
     if not _fixed(reset):
         if reset:
             after += datetime.timedelta(days=1) - limit_length(reset)
-        return sorted({a for a, _ in windows if after <= a <= until})
+        # a stretch already going at `after` (e.g. one that's never unplugged) counts from then
+        return sorted({max(a, after) for a, b in windows if b > after and a <= until})
     out = set()
     for a, b in windows:
         for t in (a, b - datetime.timedelta(microseconds=1)):
@@ -476,9 +480,7 @@ class Automation:
                 # that's already over (e.g. after a Charge now) can still be
                 # changed, as long as it doesn't get worse.
                 only_times = entries is not None and not ready_time and override_guards is None
-                worst_now = self._longest_day(self.entries) if only_times else None
-                worst_new = self._longest_day(new_entries, new_skips)
-                if not (only_times and worst_new and worst_now and worst_new[0] <= worst_now[0]):
+                if not only_times or self._makes_worse(daily_cap_min, (self.entries, self.skips), (new_entries, new_skips)):
                     self.check_daily_cap(new_entries, daily_cap_min, provider, new_skips)
         new_blocks = self.blocks
         if blocks is not None:
@@ -486,7 +488,7 @@ class Automation:
                 raise ValueError("No-charging times must be a list (at most 20)")
             new_blocks = [validate_block(b) for b in blocks]
         if entries is not None or blocks is not None:
-            self.check_blocks(new_entries, new_blocks)
+            self.check_blocks(new_entries, new_blocks, new_skips)
         self.blocks = new_blocks
         self.entries = new_entries
         ids = {e["id"] for e in self.entries}
@@ -576,12 +578,24 @@ class Automation:
             return self.entries
         return [e for e in self.entries if e.get("source") in AUTO_SOURCES]
 
+    def _horizon_days(self, entries: Optional[list] = None) -> int:
+        """Days on from today the schedule is looked at: 8, or to the last one-off."""
+        today = self._now().date()
+        last = max((_parse_date(e["date"]) for e in (self._active_entries() if entries is None else entries)
+                    if e.get("date")), default=today)
+        return max(8, (last - today).days + 2)
+
     def windows(self, entries: Optional[list] = None, now: Optional[datetime.datetime] = None,
-                skips: Optional[list] = None) -> list:
-        """The stretches the schedule has the car plugged in, a week back to 8 days on."""
+                skips: Optional[list] = None, open_ended: bool = False) -> list:
+        """The stretches the schedule has the car plugged in, a week back to 8
+        days on (or to the last one-off). open_ended: a plug-in with no unplug
+        after it counts as plugged in to the end (for the daily limit)."""
         now = now or self._now()
-        tl = self.timeline(now.date() - datetime.timedelta(days=7), 16, entries, skips)
-        return plugged_windows([(t, e["action"] == "plug") for t, e, skipped in tl if not skipped])
+        days = self._horizon_days(entries)
+        tl = self.timeline(now.date() - datetime.timedelta(days=7), 8 + days, entries, skips)
+        end = self._localize(datetime.datetime.combine(now.date() + datetime.timedelta(days=days), datetime.time()))
+        return plugged_windows([(t, e["action"] == "plug") for t, e, skipped in tl if not skipped],
+                               end if open_ended else None)
 
     def block_windows(self, start: datetime.date, days: int, blocks: Optional[list] = None) -> list:
         """The no-charging times from `start` for `days` days: [(a, b)]."""
@@ -598,12 +612,12 @@ class Automation:
                 out.append((a, self._localize(datetime.datetime(e.year, e.month, e.day, h2, m2))))
         return sorted(out)
 
-    def check_blocks(self, entries: list, blocks: list) -> None:
+    def check_blocks(self, entries: list, blocks: list, skips: Optional[list] = None) -> None:
         """Nothing scheduled may plug in during a no-charging time (over the
         coming week; auto plug-in and Charge now are planned around them)."""
         now = self._now()
-        cuts = self.block_windows(now.date(), 9, blocks)
-        for a, b in self.windows(entries, now):
+        cuts = self.block_windows(now.date(), self._horizon_days(entries) + 1, blocks)
+        for a, b in self.windows(entries, now, skips):
             if b <= now:
                 continue
             hit = next(((ca, cb) for ca, cb in cuts if ca < b and cb > a), None)
@@ -619,8 +633,21 @@ class Automation:
 
     def _longest_day(self, entries: list, skips: Optional[list] = None):
         now = self._now()
-        return longest_day(self.windows(entries, now, skips), now - datetime.timedelta(days=1),
-                           now + datetime.timedelta(days=7), self.limit_reset)
+        return longest_day(self.windows(entries, now, skips, open_ended=True), now - datetime.timedelta(days=1),
+                           now + datetime.timedelta(days=self._horizon_days(entries) - 1), self.limit_reset)
+
+    def _makes_worse(self, cap_min: int, old: tuple, new: tuple) -> bool:
+        """(entries, skips) before and after a change: does any 24 hours (or
+        limit day) go over the cap, or further over it than it already was?"""
+        now = self._now()
+        length = limit_length(self.limit_reset)
+        before = self.windows(old[0], now, old[1], open_ended=True)
+        after = self.windows(new[0], now, new[1], open_ended=True)
+        for a in limit_starts(after, now - datetime.timedelta(days=1),
+                              now + datetime.timedelta(days=self._horizon_days(new[0]) - 1), self.limit_reset):
+            if window_minutes(after, a, length) > max(cap_min, window_minutes(before, a, length)):
+                return True
+        return False
 
     def check_daily_cap(self, entries: list, cap_min: int, provider: str, skips: Optional[list] = None) -> None:
         """Octopus schedules at most 6 hours of smart charging a day: refuse a
@@ -943,9 +970,13 @@ class Automation:
             new = list(self.skips)
             for key, _ in keys:
                 new = [k for k in new if k != key] + ([key] if skip else [])
-            before, after = self._longest_day(self.entries), self._longest_day(self.entries, new)
-            if after and after[0] > daily_cap_min and (not before or after[0] > before[0]):
+            if self._makes_worse(daily_cap_min, (self.entries, self.skips), (self.entries, new)):
                 self.check_daily_cap(self.entries, daily_cap_min, provider, new)  # raises, with the details
+        if not skip:
+            new = list(self.skips)
+            for key, _ in keys:
+                new = [k for k in new if k != key]
+            self.check_blocks(self.entries, self.blocks, new)  # e.g. a no-charging time added while it was skipped
         for key, entry in keys:
             self.skips = [k for k in self.skips if k != key] + ([key] if skip else [])
             logger.info("Schedule: %s the %s at %s on %s", "skipping" if skip else "no longer skipping",
