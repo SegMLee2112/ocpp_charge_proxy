@@ -976,3 +976,25 @@ def test_limit_reset_trims_only_within_the_limit_day():
     assert out["moved"] is None and _today_windows(a, clock) == [("10:00", "13:00"), ("18:00", "22:00")]
     b, clock_b = _sat_slots(("18:00", "22:00"), start=_at(10))  # rolling: 7 h, the slot loses 1 h
     assert "19:00" in b.plan_auto_plug(180, cap_min=360)["moved"]
+
+
+def test_daily_limit_over_any_48_hours():
+    # 4 h on Saturday and 4 h on Sunday: fine in any 24 hours, 8 h in 48
+    two = [{"time": "18:00", "action": "plug", "days": [5, 6]}, {"time": "22:00", "action": "unplug", "days": [5, 6]}]
+    a, clock = _automation(start=_at(1))
+    a.set_schedule(entries=two, ready_time=True, daily_cap_min=360)
+    a.set_schedule(entries=[], daily_cap_min=360)
+    a.limit_reset = "48h"
+    try:
+        a.set_schedule(entries=two, daily_cap_min=360)
+        raise AssertionError("should have refused")
+    except ValueError as err:
+        assert "8h 00m" in str(err) and "48 hours" in str(err)
+    # A charge counts the 48 hours around it: 12-15 with tonight's 18-22 (Saturday only)
+    b, clock_b = _sat_slots(("18:00", "22:00"))
+    b.limit_reset = "48h"
+    out = b.plan_auto_plug(180, cap_min=360)  # 7 h in 48: the slot loses 1 h
+    assert "19:00" in out["moved"] and out["over"]["left"] == 0
+    c, clock_c = _automation(start=_at(8))
+    c.limit_reset = "48h"
+    assert c.plan_auto_plug(720, cap_min=360)["ready_for"].startswith("2026-10-03T14:00")  # 6 h, then it stops

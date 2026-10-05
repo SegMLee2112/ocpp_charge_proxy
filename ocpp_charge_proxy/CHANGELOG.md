@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.31.0 — Rolling 48 hours
+
+- **Feature:** the daily limit's **Resets** setting has **Rolling 48
+  hours**: no more than the limit in any 48 hours. The schedule, auto
+  plug-in, Charge now and the slots marked in red all follow it.
+- **Change:** "Any 24 hours" is now called **Rolling 24 hours**.
+- **Fix:** the Resets drop-down sits to the right of its text, as the
+  other settings do.
+- **Docs:** the new option.
+
 ## 2.30.0 — When the daily limit resets
 
 - **Feature:** Settings › Your supplier › Daily limit has a **Resets**

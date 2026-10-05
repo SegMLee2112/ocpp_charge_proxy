@@ -166,6 +166,8 @@ def test_supplier_daily_limit_and_ready_times(tmp_path):
     assert link.limit_reset("Octopus Energy") == "12:00" and link.limit_reset("EDF Energy") is None
     _run(link.update_settings({"limit_reset": "rolling"}))
     assert link.limit_reset("Octopus Energy") is None
+    _run(link.update_settings({"limit_reset": "48h"}))
+    assert link.limit_reset("Octopus Energy") == "48h"
     _run(link.update_settings({"limit_reset": "00:00"}))
     assert link.limit_reset("Octopus Energy") == "00:00" and link.limit_reset("EDF Energy") == "00:00"
     _run(link.update_settings({"limit_reset": ""}))

@@ -232,9 +232,22 @@ def _hours(minutes: int) -> str:
     return f"{minutes / 60:g}"
 
 
-def window_minutes(windows, start) -> int:
-    """Plugged-in minutes in the 24 hours from `start`."""
-    end = start + datetime.timedelta(days=1)
+ROLLING_48 = "48h"  # limit_reset: no more than the limit in any 48 hours
+
+
+def limit_length(reset: Optional[str]) -> datetime.timedelta:
+    """How long the daily limit is counted over: 48 hours for "48h", else 24."""
+    return datetime.timedelta(days=2 if reset == ROLLING_48 else 1)
+
+
+def _fixed(reset: Optional[str]) -> Optional[str]:
+    """The reset time ("HH:MM") if the limit resets at a set time every day."""
+    return reset if reset and reset != ROLLING_48 else None
+
+
+def window_minutes(windows, start, length: datetime.timedelta = datetime.timedelta(days=1)) -> int:
+    """Plugged-in minutes in the 24 hours (or `length`) from `start`."""
+    end = start + length
     return int(round(sum(max(0.0, (min(y, end) - max(x, start)).total_seconds()) for x, y in windows) / 60))
 
 
@@ -252,10 +265,13 @@ def period_start(t: datetime.datetime, reset: str) -> datetime.datetime:
 def limit_starts(windows, after, until, reset: Optional[str] = None) -> list:
     """Where the 24 hours a daily limit is checked over start. reset None
     (rolling): any 24 hours, i.e. from each stretch's start between `after`
-    and `until`. reset "HH:MM": the limit resets then every day, so each limit
-    day a stretch is in, from after `after` (i.e. not over yet when `after`
-    is a day ago) to `until`."""
-    if not reset:
+    and `until`; "48h": the same over 48 hours (looking a day further back).
+    reset "HH:MM": the limit resets then every day, so each limit day a
+    stretch is in, from after `after` (i.e. not over yet when `after` is a
+    day ago) to `until`."""
+    if not _fixed(reset):
+        if reset == ROLLING_48:
+            after -= datetime.timedelta(days=1)
         return sorted({a for a, _ in windows if after <= a <= until})
     out = set()
     for a, b in windows:
@@ -271,7 +287,7 @@ def longest_day(windows, after, until, reset: Optional[str] = None):
     over (see limit_starts): (minutes, start), or None."""
     worst = None
     for a in limit_starts(windows, after, until, reset):
-        total = window_minutes(windows, a)
+        total = window_minutes(windows, a, limit_length(reset))
         if worst is None or total > worst[0]:
             worst = (total, a)
     return worst
@@ -279,8 +295,8 @@ def longest_day(windows, after, until, reset: Optional[str] = None):
 
 def limit_day_text(start: datetime.datetime, reset: Optional[str]) -> str:
     """"the 24 hours from Sat 18:00" / "the day from Sat 12:00 (the limit resets at 12:00)"."""
-    if not reset:
-        return f"the 24 hours from {start.strftime('%a %H:%M')}"
+    if not _fixed(reset):
+        return f"the {48 if reset == ROLLING_48 else 24} hours from {start.strftime('%a %H:%M')}"
     return f"the day from {start.strftime('%a %H:%M')} (the limit resets at {reset})"
 
 
@@ -314,8 +330,9 @@ class Automation:
         self.unplug_wait_s = GRACEFUL_UNPLUG_S
         self.blocks: list[dict] = []  # no-charging times: nothing is scheduled in them
         self.override_guards = False  # Diagnostics › Debug: no daily limit (Octopus: 6 hours)
-        # When the daily limit resets: None = any 24 hours (rolling), "HH:MM" =
-        # every day then (Octopus: 12:00). From the Settings tab, not saved here.
+        # When the daily limit resets: None = any 24 hours (rolling), "48h" =
+        # any 48 hours, "HH:MM" = every day then (Octopus: 12:00). From the
+        # Settings tab, not saved here.
         self.limit_reset: Optional[str] = None
         self.plan_check: Optional[dict] = None  # the supplier's plan vs the schedule, while plugged in
         self._plan_problems: tuple = ()
@@ -601,7 +618,8 @@ class Automation:
         if worst and worst[0] > cap_min:
             total, start = worst
             raise ValueError(
-                f"{provider} schedules at most {_hours(cap_min)} hours of smart charging a day, but the schedule "
+                f"{provider} schedules at most {_hours(cap_min)} hours of smart charging "
+                f"{'in any 48 hours' if self.limit_reset == ROLLING_48 else 'a day'}, but the schedule "
                 f"plugs in for {total // 60}h {total % 60:02d}m in {limit_day_text(start, self.limit_reset)}: shorten it"
             )
 
@@ -711,14 +729,15 @@ class Automation:
                          for ca, cb in cuts if ca < end and cb > now]
         shortened = None
         reset = self.limit_reset
+        fixed, span_len = _fixed(reset), limit_length(reset)
         if cap_min:
             # e.g. Octopus schedules at most 6 hours a day: the earliest that many
             # are scheduled, then it stops. With a reset time (Octopus: 12:00),
             # that many in each limit day: a charge across it can be longer.
             pieces = []
             for x, y in segments:
-                while reset:
-                    nxt = period_start(x, reset) + datetime.timedelta(days=1)
+                while fixed:
+                    nxt = period_start(x, fixed) + datetime.timedelta(days=1)
                     if nxt >= y:
                         break
                     pieces.append((x, nxt))
@@ -726,7 +745,7 @@ class Automation:
                 pieces.append((x, y))
             keep, used, stopped = [], {}, False
             for x, y in pieces:
-                key = period_start(x, reset) if reset else None
+                key = period_start(x, fixed) if fixed else None
                 left = cap_min - used.get(key, 0)
                 length = (y - x).total_seconds() / 60
                 if length <= left:
@@ -748,9 +767,9 @@ class Automation:
                         merged.append((x, y))
                 segments = merged
                 kept = int(round(sum((y - x).total_seconds() for x, y in segments) / 60))
-                shortened = (f"shortened to {_hours(cap_min)} hours, {provider}'s daily limit" if not reset
+                shortened = (f"shortened to {_hours(cap_min)} hours, {provider}'s daily limit" if not fixed
                              else f"shortened to {_hours(kept)} hours, {provider}'s daily limit of "
-                                  f"{_hours(cap_min)} hours (resets at {reset})")
+                                  f"{_hours(cap_min)} hours (resets at {fixed})")
         if not segments:
             plan = {"at": _iso_local(now), "minutes": 0, "ready_for": None, "end": None, "combined": False,
                     "moved": None, "notes": blocked_notes or ["nothing to schedule"], "source": source,
@@ -814,7 +833,7 @@ class Automation:
                     skips.append({"entry_id": e["id"], "date": t.date().isoformat()})
             return added, skips, combined, slot_end, note
 
-        span = (now - datetime.timedelta(days=1), now + datetime.timedelta(days=1))
+        span = (now - datetime.timedelta(days=1), now + span_len)
         base = self.windows(active, now, self.skips)  # the schedule without this charge
 
         def totals_for(cut: int) -> tuple:
@@ -827,11 +846,11 @@ class Automation:
             starts = limit_starts(wins + base, span[0], span[1], reset)
             worst = excess = near = 0
             for a in starts:
-                with_it = window_minutes(wins, a)
+                with_it = window_minutes(wins, a, span_len)
                 worst = max(worst, with_it)
-                ex = with_it - max(cap_min, window_minutes(base, a))
+                ex = with_it - max(cap_min, window_minutes(base, a, span_len))
                 excess = max(excess, ex)
-                if can_trim and a < nxt0["end"] and a + datetime.timedelta(days=1) > nxt0["start"]:
+                if can_trim and a < nxt0["end"] and a + span_len > nxt0["start"]:
                     near = max(near, ex)
             return worst, excess, near
 
@@ -882,7 +901,8 @@ class Automation:
         if cap_min and left_over > 0:
             logger.warning("%s: the schedule plugs in for %dh %02dm in %s, over %s's %s hours",
                            SOURCE_NAMES.get(source, "Charge"), after // 60, after % 60,
-                           f"a day (from {reset})" if reset else "24 hours", provider, _hours(cap_min))
+                           f"a day (from {fixed})" if fixed else f"{int(span_len.total_seconds() // 3600)} hours",
+                           provider, _hours(cap_min))
         return plan
 
     def set_skip(self, entry_id: str, date: str, skip: bool = True) -> None:

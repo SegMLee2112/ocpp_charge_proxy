@@ -112,8 +112,8 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
             out["daily_limit_h"] = hours
     if "limit_reset" in raw:
         value = str(raw["limit_reset"] or "").strip()
-        if value and value != "rolling" and value not in ALL_DAY_TIMES:
-            raise ValueError("limit_reset must be empty (automatic), rolling, or a time on the hour or half hour, e.g. 12:00")
+        if value and value not in ("rolling", "48h") and value not in ALL_DAY_TIMES:
+            raise ValueError("limit_reset must be empty (automatic), rolling, 48h, or a time on the hour or half hour, e.g. 12:00")
         out["limit_reset"] = value
     for key in ("ready_from", "ready_to"):
         if key in raw:
@@ -134,7 +134,7 @@ def default_settings() -> dict:
         "plug_ready": False, "plug_hours": DEFAULT_AUTO_PLUG_HOURS,
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
-        "limit_reset": "",  # "": automatic, "rolling": any 24 hours, "HH:MM": resets every day then
+        "limit_reset": "",  # "": automatic, "rolling": any 24 hours, "48h": any 48 hours, "HH:MM": resets every day then
     }
 
 
@@ -667,9 +667,9 @@ class HaLink:
         return int(round(hours * 60)) or None
 
     def limit_reset(self, provider: Optional[str]) -> Optional[str]:
-        """When your supplier's daily limit resets: "HH:MM" every day, or None
-        for any 24 hours (rolling). Set on the Settings tab, else Octopus's
-        12:00 (rolling for the others)."""
+        """When your supplier's daily limit resets: "HH:MM" every day, None for
+        any 24 hours (rolling), or "48h" for any 48 hours. Set on the Settings
+        tab, else Octopus's 12:00 (rolling for the others)."""
         value = self.settings.get("limit_reset") or ""
         if not value:
             return DEFAULT_LIMIT_RESETS.get(provider or "")
