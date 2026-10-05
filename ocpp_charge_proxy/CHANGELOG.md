@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.29.1 — Schedule drawn on top
+
+- **Fix:** skipped slots keep their own colour with the skip stripes over it,
+  and sit on top of the green plugged-in line, so they no longer look green.
+- **Fix:** no-charging times are drawn on top of the plugged-in line too.
+
 ## 2.29.0 — No-charging times in the schedule
 
 - **Change:** no-charging times are part of the schedule now, not a
