@@ -931,3 +931,48 @@ def test_deleting_a_charge_puts_back_the_slot_it_trimmed():
     a.set_schedule(entries=[e for e in a.entries if e not in charge], daily_cap_min=360)
     assert _today_windows(a, clock) == [("18:00", "22:00")] and a.skips == []
     assert not any(e["time"] == "19:00" for e in a.entries)
+
+
+def test_daily_limit_that_resets_at_midday():
+    # Octopus's limit resets at 12:00: 6 hours before it and 6 after are fine
+    sat = [{"time": "06:00", "action": "plug", "days": [5]}, {"time": "18:00", "action": "unplug", "days": [5]}]
+    a, clock = _automation(start=_at(1))
+    try:
+        a.set_schedule(entries=sat, ready_time=True, daily_cap_min=360)  # any 24 hours: 12 h
+        raise AssertionError("should have refused")
+    except ValueError as err:
+        assert "12h 00m" in str(err)
+    a.limit_reset = "12:00"
+    a.set_schedule(entries=sat, ready_time=True, daily_cap_min=360)  # 06-12 and 12-18: 6 h each
+    assert a.entries[1]["time"] == "18:00"
+    try:
+        a.set_schedule(entries=[{"time": "11:00", "action": "plug", "days": [5]},
+                                {"time": "19:00", "action": "unplug", "days": [5]}], daily_cap_min=360)
+        raise AssertionError("should have refused")
+    except ValueError as err:  # 12-19: 7 h after 12:00
+        assert "7h 00m" in str(err) and "resets at 12:00" in str(err) and "Sat 12:00" in str(err)
+
+
+def test_charge_across_the_limit_reset():
+    a, clock = _automation(start=_at(8))  # Saturday 08:00, nothing scheduled
+    a.limit_reset = "12:00"
+    out = a.plan_auto_plug(720, cap_min=360, provider="Octopus Energy")  # 08-12 (4 h) + 12-18 (6 h, the limit)
+    assert out["ready_for"].startswith("2026-10-03T18:00") and "shortened to 10 hours" in out["notes"][0]
+    assert out["over"]["left"] == 0
+    b, clock_b = _automation(start=_at(6))
+    b.limit_reset = "12:00"
+    out = b.plan_auto_plug(720, cap_min=360)  # 06-12 and 12-18: 6 h each, all of it
+    assert out["ready_for"].startswith("2026-10-03T18:00") and not any("shortened" in n for n in out["notes"])
+    c, clock_c = _automation(start=_at(8))  # any 24 hours: 6 h
+    assert c.plan_auto_plug(720, cap_min=360)["ready_for"].startswith("2026-10-03T14:00")
+
+
+def test_limit_reset_trims_only_within_the_limit_day():
+    # 10:00-12:00 charge with an 18:00-22:00 slot: rolling, 6 h in 24 (fine);
+    # a 3 h charge from 10:00 is 1 h before 12:00 and 2 h after: with 18-22 that's 6 h
+    a, clock = _sat_slots(("18:00", "22:00"), start=_at(10))
+    a.limit_reset = "12:00"
+    out = a.plan_auto_plug(180, cap_min=360)
+    assert out["moved"] is None and _today_windows(a, clock) == [("10:00", "13:00"), ("18:00", "22:00")]
+    b, clock_b = _sat_slots(("18:00", "22:00"), start=_at(10))  # rolling: 7 h, the slot loses 1 h
+    assert "19:00" in b.plan_auto_plug(180, cap_min=360)["moved"]

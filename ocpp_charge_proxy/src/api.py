@@ -414,6 +414,8 @@ async def handle_schedule(request: web.Request) -> web.Response:
     {"entries": [{time, days, action, enabled}, ...]}."""
     link = request.app["ha_link"]
     sc = link.smart_charging() if link is not None else {}
+    if request.app["automation"] is not None:
+        request.app["automation"].limit_reset = sc.get("limit_reset")  # e.g. Octopus: 12:00
     return await _automation_change(
         request, lambda a, b: a.set_schedule(
             enabled=b.get("enabled"), entries=b.get("entries"), ready_time=b.get("ready_time"),
@@ -433,6 +435,8 @@ async def handle_skip(request: web.Request) -> web.Response:
     {"entry_id", "date"} works too."""
     link = request.app["ha_link"]
     sc = link.smart_charging() if link is not None else {}
+    if request.app["automation"] is not None:
+        request.app["automation"].limit_reset = sc.get("limit_reset")  # e.g. Octopus: 12:00
     return await _automation_change(
         request, lambda a, b: a.set_skips(
             b.get("times") if "times" in b else [{"entry_id": b.get("entry_id"), "date": b.get("date")}],

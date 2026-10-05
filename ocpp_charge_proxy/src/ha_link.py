@@ -110,6 +110,11 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
             if not 0 <= hours <= 24 or hours * 2 != int(hours * 2):
                 raise ValueError("The daily limit must be 0 to 24 hours, in half hours (0: no limit)")
             out["daily_limit_h"] = hours
+    if "limit_reset" in raw:
+        value = str(raw["limit_reset"] or "").strip()
+        if value and value != "rolling" and value not in ALL_DAY_TIMES:
+            raise ValueError("limit_reset must be empty (automatic), rolling, or a time on the hour or half hour, e.g. 12:00")
+        out["limit_reset"] = value
     for key in ("ready_from", "ready_to"):
         if key in raw:
             value = str(raw[key] or "").strip()
@@ -129,12 +134,17 @@ def default_settings() -> dict:
         "plug_ready": False, "plug_hours": DEFAULT_AUTO_PLUG_HOURS,
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
+        "limit_reset": "",  # "": automatic, "rolling": any 24 hours, "HH:MM": resets every day then
     }
 
 
 # Smart charging hours a day each supplier schedules at most (minutes), unless
 # set on the Settings tab
 DEFAULT_DAILY_LIMITS = {"Octopus Energy": 360}
+
+# When each supplier's daily limit resets (local time), unless set on the
+# Settings tab; not listed: any 24 hours (rolling)
+DEFAULT_LIMIT_RESETS = {"Octopus Energy": "12:00"}
 
 
 def _number(state: Optional[dict]) -> Optional[float]:
@@ -656,6 +666,15 @@ class HaLink:
             return DEFAULT_DAILY_LIMITS.get(provider or "")
         return int(round(hours * 60)) or None
 
+    def limit_reset(self, provider: Optional[str]) -> Optional[str]:
+        """When your supplier's daily limit resets: "HH:MM" every day, or None
+        for any 24 hours (rolling). Set on the Settings tab, else Octopus's
+        12:00 (rolling for the others)."""
+        value = self.settings.get("limit_reset") or ""
+        if not value:
+            return DEFAULT_LIMIT_RESETS.get(provider or "")
+        return None if value == "rolling" else value
+
     def smart_charging(self) -> dict:
         """Your supplier's planned charge slots, if its integration is installed."""
         if not self.dispatch_entities:
@@ -668,8 +687,9 @@ class HaLink:
             info["ready_time_entity"] = self.ready_entity
             info["ready_times"] = self.ready_times
             info["limit_min"] = self.daily_limit_min(info.get("provider"))
+            info["limit_reset"] = self.limit_reset(info.get("provider"))
             info["chosen"] = {k: self.settings.get(k) for k in
-                              ("supplier_entity", "ready_entity", "daily_limit_h", "ready_from", "ready_to")}
+                              ("supplier_entity", "ready_entity", "daily_limit_h", "limit_reset", "ready_from", "ready_to")}
         return info
 
     async def set_ready_time(self, unplug) -> dict:

@@ -149,7 +149,8 @@ def test_supplier_settings_are_checked():
     assert s["daily_limit_h"] == 5.5 and s["ready_from"] == "04:00"
     assert validate_settings({"daily_limit_h": ""})["daily_limit_h"] is None  # back to automatic
     for bad in ({"supplier_entity": "switch.x"}, {"ready_entity": "sensor.x"}, {"daily_limit_h": 25},
-                {"daily_limit_h": 1.2}, {"ready_from": "04:15"}, {"ready_from": "11:00", "ready_to": "04:00"}):
+                {"daily_limit_h": 1.2}, {"ready_from": "04:15"}, {"ready_from": "11:00", "ready_to": "04:00"},
+                {"limit_reset": "12:15"}, {"limit_reset": "daily"}):
         with pytest.raises(ValueError):
             validate_settings(bad)
 
@@ -161,6 +162,14 @@ def test_supplier_daily_limit_and_ready_times(tmp_path):
     assert link.daily_limit_min("Octopus Energy") == 300 and link.daily_limit_min("EDF Energy") == 300
     _run(link.update_settings({"daily_limit_h": 0}))
     assert link.daily_limit_min("Octopus Energy") is None  # 0: no limit
+    # Octopus's limit resets at 12:00; the others' over any 24 hours
+    assert link.limit_reset("Octopus Energy") == "12:00" and link.limit_reset("EDF Energy") is None
+    _run(link.update_settings({"limit_reset": "rolling"}))
+    assert link.limit_reset("Octopus Energy") is None
+    _run(link.update_settings({"limit_reset": "00:00"}))
+    assert link.limit_reset("Octopus Energy") == "00:00" and link.limit_reset("EDF Energy") == "00:00"
+    _run(link.update_settings({"limit_reset": ""}))
+    assert link.limit_reset("Octopus Energy") == "12:00"
     octopus = {"entity_id": "time.octopus_energy_x_intelligent_target_time", "state": "07:00:00", "attributes": {}}
     assert len(link._allowed_times(octopus)) == 48  # any half hour
     _run(link.update_settings({"ready_from": "05:00", "ready_to": "09:30"}))

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.30.0 — When the daily limit resets
+
+- **Feature:** Settings › Your supplier › Daily limit has a **Resets**
+  setting: every day at a set time, or any 24 hours. Automatic: 12:00 for
+  Octopus Energy (when its limit resets), any 24 hours for the others.
+- **Change:** with a reset time, the schedule, auto plug-in and Charge now
+  count the limit in each day from that time, so 6 hours before 12:00 and
+  another 6 after it are allowed, and a charge across 12:00 can be longer
+  (08:00 for 12 hours: 08:00–18:00). Slots marked in red follow it too.
+- **Docs:** the daily limit's reset time.
+
 ## 2.29.2 — Schedule drawing put back
 
 - **Change:** undoes the 2.29.1 drawing change. Skipped slots and

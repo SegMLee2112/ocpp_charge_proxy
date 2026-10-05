@@ -92,7 +92,7 @@ works the same way. In each case:
   if the charge would still be running. For example, 12 hours from 21:30
   with 23:30–05:30 blocked: 21:30–23:30, then 05:30–09:30.
 - Octopus Energy, with Force schedule on supplier on: only the daily limit
-  (6 hours) is scheduled, the earliest first, so up to 12 hours can be
+  (6 hours, in each day from 12:00 unless changed on the Settings tab) is scheduled, the earliest first, so up to 12 hours can be
   chosen but a longer charge stops after 6 plugged-in hours (e.g. 12 hours
   from 16:30 with 23:30–05:30 blocked: 16:30–22:30). If it puts more than 6 hours in any 24 (counting the previous
   24 hours too), the next scheduled slot starts later, by whole half hours,
@@ -353,7 +353,13 @@ follows your Home Assistant theme. Settings save as soon as you change them.
   - **Daily limit:** the most hours of smart charging your supplier
     schedules in a day (automatic: 6 for Octopus Energy, none for the
     others; 0: no limit). Used for the schedule, auto plug-in and Charge now
-    while Force schedule on supplier is on.
+    while Force schedule on supplier is on. **Resets** says when it starts
+    again: every day at a set time (automatic for Octopus Energy: 12:00, so
+    6 hours before midday and another 6 from midday are fine), or any 24
+    hours (automatic for the others: no more than the limit in any 24
+    hours). With a reset time, "any 24 hours" below means each day from
+    that time, and a charge across it can be longer: 08:00 for 12 hours is
+    08:00–18:00 (4 hours before 12:00, then 6 after).
   Each shows what's in use, and whether it was found or picked.
 - **Diagnostics**, in two parts:
   - **Health:** version, uptime, reconnects and the last drop's reason,
