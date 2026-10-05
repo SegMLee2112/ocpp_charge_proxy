@@ -131,14 +131,16 @@ Assistant's API.
     power, what ended them, with details, IDs and the power curve on click),
     and plug-ins that never got a session with the reason, kept across
     restarts.
-  - **Automations:** **Charge now**; the plug-in schedule (below), with one-off times and a
+  - **Automations:** **Charge now** at the top; the plug-in schedule (below), with one-off times and a
     view of the last 3 days and the next 7 where you click or drag to add a
     slot and click one to change, delete or skip it; Force schedule on
     supplier; auto plug-in and auto re-plug.
   - **Settings:** controls for Plugged In, max current and
     **Continue session after a restart**; the
-    simulated car's start delay and ramp-up; and your power, SoC and car
-    plugged in sensors, with live values.
+    simulated car's start delay and ramp-up; your power, SoC and car
+    plugged in sensors, with live values; and **Your supplier**: its smart
+    charging sensor, ready time entity, the ready times it accepts and its
+    daily limit (Octopus: 6 hours), found automatically or set by you.
   - **Diagnostics:** **Health** (version, uptime, reconnects and the last
     drop's reason, heartbeat and clock offset, the Home Assistant link and
     the add-on's entities, held messages, and at the bottom what your

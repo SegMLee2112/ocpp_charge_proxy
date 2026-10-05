@@ -141,3 +141,32 @@ def test_no_supervisor_means_link_off():
     link = HaLink(None, fake.state, fake.set_power, fake.set_soc, fake.plug, token="")
     _run(link.run())  # returns at once
     assert link.available is False and "Supervisor" in link.error
+
+
+def test_supplier_settings_are_checked():
+    s = validate_settings({"supplier_entity": "binary_sensor.x_intelligent_dispatching", "ready_entity": "select.x_target_time",
+                           "daily_limit_h": "5.5", "ready_from": "04:00", "ready_to": "11:00"})
+    assert s["daily_limit_h"] == 5.5 and s["ready_from"] == "04:00"
+    assert validate_settings({"daily_limit_h": ""})["daily_limit_h"] is None  # back to automatic
+    for bad in ({"supplier_entity": "switch.x"}, {"ready_entity": "sensor.x"}, {"daily_limit_h": 25},
+                {"daily_limit_h": 1.2}, {"ready_from": "04:15"}, {"ready_from": "11:00", "ready_to": "04:00"}):
+        with pytest.raises(ValueError):
+            validate_settings(bad)
+
+
+def test_supplier_daily_limit_and_ready_times(tmp_path):
+    link, fake = _link(tmp_path)
+    assert link.daily_limit_min("Octopus Energy") == 360 and link.daily_limit_min("EDF Energy") is None
+    _run(link.update_settings({"daily_limit_h": 5}))
+    assert link.daily_limit_min("Octopus Energy") == 300 and link.daily_limit_min("EDF Energy") == 300
+    _run(link.update_settings({"daily_limit_h": 0}))
+    assert link.daily_limit_min("Octopus Energy") is None  # 0: no limit
+    octopus = {"entity_id": "time.octopus_energy_x_intelligent_target_time", "state": "07:00:00", "attributes": {}}
+    assert len(link._allowed_times(octopus)) == 48  # any half hour
+    _run(link.update_settings({"ready_from": "05:00", "ready_to": "09:30"}))
+    assert link._allowed_times(octopus) == ["05:00", "05:30", "06:00", "06:30", "07:00", "07:30", "08:00",
+                                            "08:30", "09:00", "09:30"]
+    states = [octopus, {"entity_id": "select.mine_target_time", "state": "07:00"}]
+    assert link._ready_entity_id(states, "binary_sensor.octopus_energy_x_intelligent_dispatching") == octopus["entity_id"]
+    _run(link.update_settings({"ready_entity": "select.mine_target_time"}))
+    assert link._ready_entity_id(states, "binary_sensor.octopus_energy_x_intelligent_dispatching") == "select.mine_target_time"

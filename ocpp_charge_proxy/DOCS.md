@@ -303,19 +303,32 @@ follows your Home Assistant theme. Settings save as soon as you change them.
   plugged in, and whether auto re-plug gave up on it or it was unplugged
   first.
 - **Automations:**
+  - **Charge now** (at the top): click how long to plug in for (1, 2, 3, 4, 6 or 8
+    hours). It plugs in straight away and adjusts the schedule the same way
+    auto plug-in does (see [Auto plug-in](#auto-plug-in)): a one-off slot
+    in the schedule below, the ready time set to its end, and it unplugs
+    then. With a daily limit (Octopus: 6 hours) and Force schedule on
+    supplier on, if it would take any 24 hours (the previous 24 included)
+    over the limit, it asks first, saying what would change; **Charge
+    anyway** then goes ahead.
   - The plug-in schedule (see below), with the last 3 days and the next 7
     of when it has the car plugged in; Force schedule on supplier; auto
     plug-in and auto re-plug.
-  - **Charge now**: click how long to plug in for (1, 2, 3, 4, 6 or 8
-    hours). It plugs in straight away and adjusts the schedule the same way
-    auto plug-in does (see [Auto plug-in](#auto-plug-in)): a one-off slot
-    in the schedule above, the ready time set to its end, and it unplugs
-    then. With Octopus and Force schedule on supplier on, if it would take
-    any 24 hours (the previous 24 included) over 6 hours, it asks first,
-    saying what would change; **Charge anyway** then goes ahead.
 - **Settings:** controls for Plugged In, max current and **Continue session
-  after a restart**; the simulated car's start delay and ramp-up; and your
-  power, SoC and car plugged in sensors, with their live values.
+  after a restart**; the simulated car's start delay and ramp-up; your
+  power, SoC and car plugged in sensors, with their live values; and **Your
+  supplier**, for when what's found automatically isn't right, or your
+  supplier's rules change:
+  - **Smart charging sensor:** the dispatching sensor with its planned
+    slots (Octopus Energy / EDF Energy), or E.ON Next's schedule sensor.
+  - **Ready time:** the target time entity Force schedule on supplier sets,
+    and the **Ready times** it accepts (automatic: what the entity offers,
+    any half hour for Octopus, 04:00–11:00 for the others).
+  - **Daily limit:** the most hours of smart charging your supplier
+    schedules in a day (automatic: 6 for Octopus Energy, none for the
+    others; 0: no limit). Used for the schedule, auto plug-in and Charge now
+    while Force schedule on supplier is on.
+  Each shows what's in use, and whether it was found or picked.
 - **Diagnostics**, in two parts:
   - **Health:** version, uptime, reconnects and the last drop's reason,
     heartbeat and clock offset, the Home Assistant link and the add-on's

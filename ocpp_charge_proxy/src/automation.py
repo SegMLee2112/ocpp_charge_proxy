@@ -182,6 +182,11 @@ def plugged_windows(events):
     return windows
 
 
+def _hours(minutes: int) -> str:
+    """360 -> "6", 330 -> "5.5"."""
+    return f"{minutes / 60:g}"
+
+
 def window_minutes(windows, start) -> int:
     """Plugged-in minutes in the 24 hours from `start`."""
     end = start + datetime.timedelta(days=1)
@@ -230,7 +235,7 @@ class Automation:
         self.ready_status: Optional[dict] = None  # the last time it was set (or why not)
         self.auto_plug_last: Optional[dict] = None  # the last auto plug-in charge planned
         self.unplug_wait_s = GRACEFUL_UNPLUG_S
-        self.override_guards = False  # Diagnostics › Debug: no 6-hour limit with Octopus
+        self.override_guards = False  # Diagnostics › Debug: no daily limit (Octopus: 6 hours)
         self.plan_check: Optional[dict] = None  # the supplier's plan vs the schedule, while plugged in
         self._plan_problems: tuple = ()
         self.replug = options.as_dict()
@@ -360,7 +365,7 @@ class Automation:
             self.unplug_wait_s = wait
         if override_guards is not None and bool(override_guards) != self.override_guards:
             self.override_guards = bool(override_guards)
-            logger.info("Scheduling guards %s", "overridden: no 6-hour limit with Octopus"
+            logger.info("Scheduling guards %s", "overridden: no daily limit"
                         if self.override_guards else "back on")
         self._save()
         logger.info(
@@ -454,7 +459,7 @@ class Automation:
         if worst and worst[0] > cap_min:
             total, start = worst
             raise ValueError(
-                f"{provider} schedules at most {cap_min // 60} hours of smart charging a day, but the schedule "
+                f"{provider} schedules at most {_hours(cap_min)} hours of smart charging a day, but the schedule "
                 f"plugs in for {total // 60}h {total % 60:02d}m in the 24 hours from "
                 f"{start.strftime('%a %H:%M')}: shorten it"
             )
@@ -556,7 +561,7 @@ class Automation:
         shortened = None
         if cap_min and minutes > cap_min:
             # Octopus schedules at most 6 hours a day: the charge can't be longer
-            shortened = f"shortened to {cap_min // 60} hours, {provider}'s daily limit"
+            shortened = f"shortened to {_hours(cap_min)} hours, {provider}'s daily limit"
             minutes = cap_min
         end = self.first_ready_at(now + datetime.timedelta(minutes=minutes), ready_times)
         if end is None:
@@ -672,9 +677,9 @@ class Automation:
                     slot_end.strftime("%a %H:%M"),
                     f" ({'; '.join(notes)})" if notes else "")
         if cap_min and left_over > 0:
-            logger.warning("%s: the schedule plugs in for %dh %02dm in 24 hours, over %s's %d hours",
+            logger.warning("%s: the schedule plugs in for %dh %02dm in 24 hours, over %s's %s hours",
                            "Charge now" if source == CHARGE_NOW_SOURCE else "Auto plug-in charge",
-                           after // 60, after % 60, provider, cap_min // 60)
+                           after // 60, after % 60, provider, _hours(cap_min))
         return plan
 
     def set_skip(self, entry_id: str, date: str, skip: bool = True) -> None:

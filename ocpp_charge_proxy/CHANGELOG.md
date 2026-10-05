@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.26.0 — Your supplier's settings
+
+- **Feature:** Settings › **Your supplier**: pick the smart charging sensor
+  and ready time entity if they aren't found automatically (or the wrong
+  ones are), and set the ready times your supplier accepts and its daily
+  limit, so a change to your supplier's rules doesn't need an update. Each
+  shows what's in use and whether it was found or picked
+- **Change:** the 6-hour limit is now your supplier's **Daily limit**
+  (automatic: 6 hours for Octopus Energy, none for the others), used
+  everywhere the 6 hours were: the schedule, auto plug-in, Charge now, the
+  week view and the warnings
+- **Change:** **Charge now** is at the top of the Automations tab
+
 ## 2.25.0 — Automations tab and the 6-hour limit
 
 - **Change:** the Schedule tab is now **Automations**, and **Charge now**

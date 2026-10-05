@@ -25,7 +25,7 @@ import time
 from typing import Awaitable, Callable, Optional
 
 from src.autoplug import DEFAULT_AUTO_PLUG_SOC, AutoPlug, CarConnected
-from src.ready_time import allowed_times, pick_ready_time, service_call, target_time_entity
+from src.ready_time import ALL_DAY_TIMES, allowed_times, pick_ready_time, service_call, target_time_entity
 from src.smart_charging import find_dispatch_sensors, provider_name, smart_charging
 from src.ha_entities import (
     ALL_SENSORS, HELPER_ICON, HELPER_ID, HELPER_NAME, PluggedInSync, SensorPublisher,
@@ -77,6 +77,37 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         if not 0.5 <= hours <= 12 or hours * 2 != int(hours * 2):
             raise ValueError("auto_plug_hours must be 0.5 to 12, in half hours")
         out["auto_plug_hours"] = hours
+    # Your supplier (Settings tab): override what's found automatically
+    if "supplier_entity" in raw:
+        value = str(raw["supplier_entity"] or "").strip()
+        if value and not value.startswith(("binary_sensor.", "sensor.")):
+            raise ValueError("supplier_entity must be a binary_sensor or sensor entity")
+        out["supplier_entity"] = value
+    if "ready_entity" in raw:
+        value = str(raw["ready_entity"] or "").strip()
+        if value and not value.startswith(("time.", "select.")):
+            raise ValueError("ready_entity must be a time or select entity")
+        out["ready_entity"] = value
+    if "daily_limit_h" in raw:
+        value = raw["daily_limit_h"]
+        if value in (None, ""):
+            out["daily_limit_h"] = None
+        else:
+            try:
+                hours = float(value)
+            except (TypeError, ValueError):
+                raise ValueError("daily_limit_h must be a number of hours") from None
+            if not 0 <= hours <= 24 or hours * 2 != int(hours * 2):
+                raise ValueError("The daily limit must be 0 to 24 hours, in half hours (0: no limit)")
+            out["daily_limit_h"] = hours
+    for key in ("ready_from", "ready_to"):
+        if key in raw:
+            value = str(raw[key] or "").strip()
+            if value and value not in ALL_DAY_TIMES:
+                raise ValueError(f"{key} must be a time on the hour or half hour, e.g. 04:00")
+            out[key] = value
+    if out.get("ready_from") and out.get("ready_to") and out["ready_from"] > out["ready_to"]:
+        raise ValueError("Ready times: the first time must be before the last")
     return out
 
 
@@ -85,7 +116,14 @@ def default_settings() -> dict:
         "power_entity": "", "soc_entity": "", "plug_entity": "",
         "auto_plug": False, "auto_plug_entity": "", "auto_plug_soc": DEFAULT_AUTO_PLUG_SOC,
         "auto_plug_ready": False, "auto_plug_hours": DEFAULT_AUTO_PLUG_HOURS,
+        # Your supplier: empty / None = found automatically
+        "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
     }
+
+
+# Smart charging hours a day each supplier schedules at most (minutes), unless
+# set on the Settings tab
+DEFAULT_DAILY_LIMITS = {"Octopus Energy": 360}
 
 
 def _number(state: Optional[dict]) -> Optional[float]:
@@ -198,7 +236,13 @@ class HaLink:
 
     async def update_settings(self, raw: dict) -> dict:
         new = validate_settings(raw, self.settings)
+        supplier_keys = ("supplier_entity", "ready_entity", "ready_from", "ready_to")
+        supplier_changed = any(new.get(k) != self.settings.get(k) for k in supplier_keys)
         self.settings = new
+        if supplier_changed:
+            self._dispatch_searched = 0.0  # look again straight away, with these
+            if self.ready_entity:
+                self.ready_times = self._allowed_times(self.states.get(self.ready_entity))
         self.configured = True
         self._save()
         self._reset_logic()
@@ -540,16 +584,19 @@ class HaLink:
         except Exception as err:
             logger.debug("Couldn't list states for smart charging: %s", err)
             return False
-        found = find_dispatch_sensors(states)
-        ids = [st["entity_id"] for st in found]
-        if found:  # until the subscription brings it
-            first = found[0]
+        by_id = {st.get("entity_id"): st for st in states}
+        ids = [st["entity_id"] for st in find_dispatch_sensors(states)]
+        chosen = self.settings.get("supplier_entity")  # picked on the Settings tab
+        if chosen:
+            ids = [chosen] + [i for i in ids if i != chosen]
+        first = by_id.get(ids[0]) if ids else None
+        if first:  # until the subscription brings it
             self.states[first["entity_id"]] = {"state": first.get("state"), "attributes": first.get("attributes") or {}}
-        ready = target_time_entity(states, ids[0]) if ids else None
-        ready_id = ready["entity_id"] if ready else None
+        ready_id = self._ready_entity_id(states, ids[0] if ids else None)
+        ready = by_id.get(ready_id) if ready_id else None
         ready_changed = ready_id != self.ready_entity
         self.ready_entity = ready_id
-        self.ready_times = allowed_times(ready) if ready else None
+        self.ready_times = self._allowed_times(ready) if ready_id else None
         if ready:  # until the subscription brings it
             self.states[ready_id] = {"state": ready.get("state"), "attributes": ready.get("attributes") or {}}
         if ids == self.dispatch_entities:
@@ -558,6 +605,31 @@ class HaLink:
             logger.info("Smart charging: %s", f"following {ids[0]}" if ids else "no supplier sensor found")
         self.dispatch_entities = ids
         return True
+
+    def _ready_entity_id(self, states: list, dispatch: Optional[str]) -> Optional[str]:
+        """The ready (target) time entity: picked on the Settings tab, else the
+        one next to the dispatching sensor."""
+        if self.settings.get("ready_entity"):
+            return self.settings["ready_entity"]
+        found = target_time_entity(states, dispatch) if dispatch else None
+        return found["entity_id"] if found else None
+
+    def _allowed_times(self, entity: Optional[dict]) -> list:
+        """The ready times your supplier accepts: set on the Settings tab, else
+        what the entity says (src/ready_time.py)."""
+        lo, hi = self.settings.get("ready_from"), self.settings.get("ready_to")
+        if lo or hi:
+            lo, hi = lo or ALL_DAY_TIMES[0], hi or ALL_DAY_TIMES[-1]
+            return [t for t in ALL_DAY_TIMES if lo <= t <= hi]
+        return allowed_times(entity)
+
+    def daily_limit_min(self, provider: Optional[str]) -> Optional[int]:
+        """Minutes of smart charging a day your supplier schedules at most
+        (None: no limit): set on the Settings tab, else Octopus's 6 hours."""
+        hours = self.settings.get("daily_limit_h")
+        if hours is None:
+            return DEFAULT_DAILY_LIMITS.get(provider or "")
+        return int(round(hours * 60)) or None
 
     def smart_charging(self) -> dict:
         """Your supplier's planned charge slots, if its integration is installed."""
@@ -570,6 +642,9 @@ class HaLink:
             info["others"] = self.dispatch_entities[1:]
             info["ready_time_entity"] = self.ready_entity
             info["ready_times"] = self.ready_times
+            info["limit_min"] = self.daily_limit_min(info.get("provider"))
+            info["chosen"] = {k: self.settings.get(k) for k in
+                              ("supplier_entity", "ready_entity", "daily_limit_h", "ready_from", "ready_to")}
         return info
 
     async def set_ready_time(self, unplug) -> dict:
@@ -586,11 +661,13 @@ class HaLink:
             states = await self._call({"type": "get_states"}, timeout=30) or []
         except Exception as err:
             return {**out, "error": f"Couldn't read Home Assistant's states: {err}"}
-        entity = target_time_entity(states, dispatch)
+        ready_id = self._ready_entity_id(states, dispatch)
+        entity = next((st for st in states if st.get("entity_id") == ready_id), None) if ready_id else None
         if entity is None:
-            return {**out, "error": f"{provider_name(dispatch)}'s integration has no ready time (target time) setting"}
+            return {**out, "error": f"{provider_name(dispatch)}'s integration has no ready time (target time) setting"
+                                    + (f" ({ready_id} wasn't found)" if ready_id else "")}
         out["entity_id"] = entity["entity_id"]
-        allowed = allowed_times(entity)
+        allowed = self._allowed_times(entity)
         ready = pick_ready_time(_dt.datetime.now(unplug.tzinfo), unplug, allowed)
         if ready is None:
             return {**out, "error": f"{provider_name(dispatch)} only accepts ready times from {allowed[0]} to {allowed[-1]}, "
@@ -651,7 +728,7 @@ class HaLink:
         for st in states:
             entity_id = st.get("entity_id", "")
             domain = entity_id.split(".", 1)[0]
-            if domain not in ("sensor", "binary_sensor"):
+            if domain not in ("sensor", "binary_sensor", "time", "select"):
                 continue
             attrs = st.get("attributes") or {}
             out.append({
@@ -660,6 +737,9 @@ class HaLink:
                 "device_class": attrs.get("device_class"),
                 "unit": attrs.get("unit_of_measurement"),
                 "state": st.get("state"),
+                # for the Your supplier pickers (Settings tab)
+                "dispatch": bool(find_dispatch_sensors([st])),
+                "ready": domain in ("time", "select") and "target_time" in entity_id,
             })
         out.sort(key=lambda e: (e["name"] or "").lower())
         return out

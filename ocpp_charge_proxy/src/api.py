@@ -418,8 +418,8 @@ async def handle_schedule(request: web.Request) -> web.Response:
         request, lambda a, b: a.set_schedule(
             enabled=b.get("enabled"), entries=b.get("entries"), ready_time=b.get("ready_time"),
             ready_times=sc.get("ready_times"), provider=sc.get("provider") or "your supplier",
-            # Octopus schedules at most 6 hours of smart charging a day
-            daily_cap_min=360 if sc.get("provider") == "Octopus Energy" else None,
+            # e.g. Octopus schedules at most 6 hours of smart charging a day
+            daily_cap_min=sc.get("limit_min"),
             unplug_wait_s=b.get("unplug_wait_s"),
             override_guards=b.get("override_guards"),
         ),
@@ -436,8 +436,8 @@ async def handle_skip(request: web.Request) -> web.Response:
         request, lambda a, b: a.set_skips(
             b.get("times") if "times" in b else [{"entry_id": b.get("entry_id"), "date": b.get("date")}],
             bool(b.get("skip", True)),
-            # Octopus schedules at most 6 hours of smart charging a day
-            daily_cap_min=360 if sc.get("provider") == "Octopus Energy" else None,
+            # e.g. Octopus schedules at most 6 hours of smart charging a day
+            daily_cap_min=sc.get("limit_min"),
             provider=sc.get("provider") or "your supplier",
         ),
     )

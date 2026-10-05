@@ -241,10 +241,10 @@ async def run() -> None:
             automation, hours,
             set_ready_time=ha_link.set_ready_time if sc.get("found") else None,
             ready_times=ha_link.ready_times,
-            # Octopus schedules at most 6 hours of smart charging a day: kept
-            # to only while Force schedule on supplier is on, as for the schedule
-            cap_min=(360 if sc.get("provider") == "Octopus Energy" and automation.ready_time
-                     and not automation.override_guards else None),
+            # Your supplier's daily limit (Octopus: 6 hours, or as set on the
+            # Settings tab): kept to only while Force schedule on supplier is
+            # on, as for the schedule
+            cap_min=(sc.get("limit_min") if automation.ready_time and not automation.override_guards else None),
             provider=sc.get("provider") or "your supplier",
             source=source,
             dry_run=dry_run,

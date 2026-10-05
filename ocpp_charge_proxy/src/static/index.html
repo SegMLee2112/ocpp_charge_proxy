@@ -382,6 +382,13 @@
   <!-- ============ Automations (tab id "automation") ============ -->
   <section id="tab-automation" class="stack" hidden>
     <div class="card">
+      <h2>Charge now</h2>
+      <div class="note" style="margin:0 0 10px">Plug in now for this long. <details class="more"><summary>More</summary><div>The schedule is adjusted the same way as for auto plug-in: the charge is added as a one-off slot (shown in the schedule below, where you can change it) that unplugs at the first ready time <span class="supn" data-f="your supplier">your supplier</span> accepts after these hours, and the ready time is set to it. If it meets a scheduled slot they become one; with a daily limit (Octopus: 6 hours) and Force schedule on <span class="supn" data-f="supplier">supplier</span> on, if it takes any 24 hours over your supplier's daily limit (Octopus: 6 hours), you're asked first, and the next scheduled slot then starts just late enough to stay within it.</div></details></div>
+      <div class="row" style="margin-top:0"><div class="seg" id="c-charge" role="group" aria-label="Charge now for"></div></div>
+      <div class="note" id="c-charge-cap" hidden style="margin:4px 0 0"></div>
+      <div class="sub" id="c-charge-note"></div>
+    </div>
+    <div class="card">
       <h2>Schedule<span class="spacer"></span>
         <span class="muted" style="font-size:12px;font-weight:400;margin-right:10px" id="w-note"></span>
         <span class="muted" style="font-size:13px;font-weight:400">On</span>
@@ -423,13 +430,6 @@
     </div>
     <div class="grid">
       <div class="card">
-        <h2>Charge now</h2>
-        <div class="note" style="margin:0 0 10px">Plug in now for this long. <details class="more"><summary>More</summary><div>The schedule is adjusted the same way as for auto plug-in: the charge is added as a one-off slot (shown in the schedule above, where you can change it) that unplugs at the first ready time <span class="supn" data-f="your supplier">your supplier</span> accepts after these hours, and the ready time is set to it. If it meets a scheduled slot they become one; with Octopus and Force schedule on <span class="supn" data-f="supplier">supplier</span> on, if it takes any 24 hours over 6, you're asked first, and the next scheduled slot then starts just late enough to stay within 6.</div></details></div>
-        <div class="row" style="margin-top:0"><div class="seg" id="c-charge" role="group" aria-label="Charge now for"></div></div>
-        <div class="note" id="c-charge-cap" hidden style="margin:4px 0 0">Up to 6 hours: Octopus's daily smart charging limit, while Force schedule on <span class="supn" data-f="supplier">supplier</span> is on.</div>
-        <div class="sub" id="c-charge-note"></div>
-      </div>
-      <div class="card">
         <h2>Auto plug-in<span class="spacer"></span>
           <label class="switch"><input type="checkbox" id="sim-auto" aria-label="Auto plug-in"><span></span></label>
         </h2>
@@ -442,7 +442,7 @@
           <div class="grow">Automatically adjust schedule to fit auto plug-in
             <div class="note" style="margin:0">Adds the charge to the schedule and sets <span class="supn" data-f="your supplier">your supplier</span>'s ready time. <details class="more"><summary>More</summary><div>As a one-off that unplugs when it's done; the ready time is set to that unplug. If it meets a scheduled slot they become one.
               <br><b>Octopus Energy:</b> unplugs after the hours below (rounded up to the half hour); with Force schedule on <span class="supn" data-f="supplier">supplier</span> on,
-              if that takes any 24 hours over 6 (the previous 24 included), the next scheduled slot starts just late enough to stay within 6, for that day only.
+              if that takes any 24 hours over its daily limit (6 hours unless changed on the Settings tab; the previous 24 hours included), the next scheduled slot starts just late enough to stay within it, for that day only.
               <br><b>EDF Energy:</b> ready times can only be 04:00–11:00, so it unplugs at the first of those after the hours below
               (e.g. plugging in at 18:00 for 3 hours unplugs at 04:00 the next morning).
               <br><b>E.ON Next:</b> unplugs after the hours below (rounded up to the half hour); its integration has no ready time, so none is set.</div></details></div></div>
@@ -452,7 +452,7 @@
           <div class="grow">Charge for<div class="note" style="margin:0">Hours from plugging in (30-minute steps)</div></div>
           <span class="ctl"><input type="number" id="sim-auto-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours"> hours</span>
         </div>
-        <div class="note" id="sim-auto-cap" hidden style="margin:0">Up to 6 hours: Octopus's daily smart charging limit, while Force schedule on <span class="supn" data-f="supplier">supplier</span> is on.</div>
+        <div class="note" id="sim-auto-cap" hidden style="margin:0"></div>
         <div id="sim-auto-last" class="sub" style="margin-top:8px"></div>
         <dl class="kv" id="sim-monitor" style="margin-top:14px"></dl>
       </div>
@@ -523,6 +523,33 @@
         <dl class="kv" id="sim-plug" style="margin-top:14px"></dl>
       </div>
     </div>
+    <div class="section-title">Your supplier</div>
+    <div class="grid">
+      <div class="card">
+        <h2>Smart charging sensor</h2>
+        <div class="note" style="margin:0 0 10px">Found automatically: pick one only if it isn't, or the wrong one is. <details class="more"><summary>More</summary><div>Octopus Energy and EDF Energy: the intelligent dispatching binary sensor; E.ON Next: its smart charging schedule sensor. It has your supplier's planned slots.</div></details></div>
+        <div class="row" style="margin-top:0"><span class="picker" data-key="supplier_entity" data-domain="binary_sensor,sensor" data-fit="dispatch" data-none="Found automatically"></span></div>
+        <dl class="kv" id="sup-found" style="margin-top:14px"></dl>
+      </div>
+      <div class="card">
+        <h2>Ready time</h2>
+        <div class="note" style="margin:0 0 10px">The setting Force schedule on <span class="supn" data-f="supplier">supplier</span> changes. <details class="more"><summary>More</summary><div>Octopus Energy and EDF Energy: the intelligent target time (a time or select entity), found next to the smart charging sensor. E.ON Next has none.</div></details></div>
+        <div class="row" style="margin-top:0"><span class="picker" data-key="ready_entity" data-domain="time,select" data-fit="ready" data-none="Found automatically"></span></div>
+        <div class="row">
+          <div class="grow">Ready times<div class="note" style="margin:0">The times <span class="supn" data-f="your supplier">your supplier</span> accepts. <details class="more"><summary>More</summary><div>Automatic: what the entity offers, or any half hour for Octopus Energy and 04:00–11:00 for the others. Set both to change it if your supplier's times change.</div></details></div></div>
+          <span class="ctl"><select id="sup-from" aria-label="Ready times from"></select> to <select id="sup-to" aria-label="Ready times to"></select></span>
+        </div>
+        <dl class="kv" id="sup-ready" style="margin-top:14px"></dl>
+      </div>
+      <div class="card">
+        <h2>Daily limit</h2>
+        <div class="note" style="margin:0 0 10px">Most smart charging hours <span class="supn" data-f="your supplier">your supplier</span> schedules in a day. <details class="more"><summary>More</summary><div>Octopus Energy: 6 hours; none for the others. While Force schedule on supplier is on, the schedule, auto plug-in and Charge now are kept within it. Empty: automatic; 0: no limit.</div></details></div>
+        <div class="row" style="margin-top:0">
+          <div class="grow">Hours a day<div class="note" style="margin:0" id="sup-limit-note"></div></div>
+          <span class="ctl"><input type="number" id="sup-limit" min="0" max="24" step="0.5" placeholder="Auto" aria-label="Daily limit in hours"> h</span>
+        </div>
+      </div>
+    </div>
     <label class="live" style="cursor:pointer"><input type="checkbox" id="sim-all"> Show all sensors in the lists (here and on the Automations tab)</label>
   </section>
 
@@ -572,7 +599,7 @@
         <span class="muted" style="font-size:13px;font-weight:400">Override</span>
         <label class="switch"><input type="checkbox" id="d-guards" aria-label="Override scheduling guards"><span></span></label>
       </h2>
-      <div class="note" style="margin:0">Off by default. On: the schedule, auto plug-in and Charge now can plug in for more than 6 hours a day with Octopus Energy while Force schedule on supplier is on. <details class="more"><summary>More</summary><div>Octopus schedules at most 6 hours of smart charging in a day, so it may not charge for the rest. Turning the guards back on needs the schedule to be within 6 hours a day again.</div></details></div>
+      <div class="note" style="margin:0">Off by default. On: the schedule, auto plug-in and Charge now can plug in for longer than your supplier's daily limit (Octopus: 6 hours) while Force schedule on supplier is on. <details class="more"><summary>More</summary><div>Your supplier may not charge for the rest. Turning the guards back on needs the schedule to be within the limit again.</div></details></div>
     </div>
     <div class="card">
       <h2>Logs</h2>
@@ -1258,7 +1285,7 @@ async function refreshSmart(force) {
   applySupName();
   drawSmart(); drawStateSub(); drawChart();
   if (auto.data) drawWeek();
-  applyOctopusCap();
+  applyDailyLimit();
 }
 // Each supplier's slots in its own colour on the chart
 function providerColor(name) {
@@ -1670,15 +1697,15 @@ async function saveSensors(patch, msg) {
 function drawPickers() {
   const all = $('sim-all').checked;
   document.querySelectorAll('main .picker').forEach((span) => {
-    const key = span.dataset.key, domain = span.dataset.domain;
+    const key = span.dataset.key, domains = span.dataset.domain.split(','), fit = span.dataset.fit;
     const classes = (span.dataset.class || '').split(',').filter(Boolean);
     const units = (span.dataset.units || '').split(',').filter(Boolean);
     const value = sim.edit[key] || '';
-    const fits = (e) => classes.includes(e.device_class) || units.includes(e.unit || '');
-    let list = sim.entities.filter((e) => e.entity_id.startsWith(domain + '.'));
+    const fits = (e) => fit ? !!e[fit] : classes.includes(e.device_class) || units.includes(e.unit || '');
+    let list = sim.entities.filter((e) => domains.some((d) => e.entity_id.startsWith(d + '.')));
     if (!all) list = list.filter(fits);
     if (!sim.entities.length) {
-      span.innerHTML = `<input type="text" data-key="${key}" value="${esc(value)}" placeholder="${domain}.example" aria-label="${key}">`;
+      span.innerHTML = `<input type="text" data-key="${key}" value="${esc(value)}" placeholder="${domains[0]}.example" aria-label="${key}">`;
       return;
     }
     if (value && !list.some((e) => e.entity_id === value)) {
@@ -1735,7 +1762,11 @@ function setupCombo(box, key, opts) {
     setActive(shown.length ? Math.max(0, shown.findIndex((o) => o.value === sel)) : -1);
   };
   const choose = (o) => {
-    if ((sim.edit[key] || '') !== o.value) { sim.edit[key] = o.value; saveSensors({[key]: o.value}, o.value ? 'Sensor saved' : 'Sensor removed'); }
+    if ((sim.edit[key] || '') !== o.value) {
+      sim.edit[key] = o.value;
+      const supplier = key === 'supplier_entity' || key === 'ready_entity';
+      (supplier ? saveSupplier : saveSensors)({[key]: o.value}, o.value ? 'Sensor saved' : supplier ? 'Found automatically' : 'Sensor removed');
+    }
     close(); showValue(); input.blur();
   };
   input.addEventListener('focus', () => { input.value = ''; draw(''); });
@@ -1768,6 +1799,7 @@ function entityState(ent) {
 }
 function drawSimulation() {
   const d = sim.data; if (!d) return;
+  drawSupplierSettings();
   const e = d.ha_entities || {};
   const sensorList = (e.sensors || []).map((id) => `<code>${esc(id)}</code>`).join('<br>');
   $('sim-entities').innerHTML = (e.integration_conflict && e.integration_conflict.length
@@ -1809,7 +1841,7 @@ $('sim-auto-ready').addEventListener('change', (e) => {
   saveSensors({auto_plug_ready: e.target.checked}, e.target.checked ? 'The schedule is adjusted for auto plug-in' : 'The schedule is left alone for auto plug-in');
 });
 $('sim-auto-hours').addEventListener('change', (e) => {
-  const h = parseFloat(e.target.value), max = octopusCapped() ? 6 : 12;
+  const h = parseFloat(e.target.value), max = limitApplies() ? Math.min(12, capMin() / 60) : 12;
   if (!(h >= 0.5 && h <= max) || h * 2 !== Math.round(h * 2)) { toast(`Charge for: 0.5–${max} hours, in half hours`); refreshSimulation(true); return; }
   saveSensors({auto_plug_hours: h}, `Charge for ${h} hours`);
 });
@@ -1858,7 +1890,7 @@ async function refreshAutomation(force) {
   if (document.activeElement !== $('a-rp-tries')) $('a-rp-tries').value = d.replug.attempts;
   $('a-rp-on').checked = d.replug.enabled;
   drawReplugStatus(d.replug);
-  applyOctopusCap();
+  applyDailyLimit();
   drawForceErr();
   drawAutoPlugLast(d);
   drawWeek();
@@ -1918,7 +1950,7 @@ $('a-ready-on').addEventListener('change', async (e) => {
 function forceProblems() {
   const out = [], d = smart.data;
   if (!d || !d.found) return out;
-  if (weekPlan(auto.entries, null, true).over) out.push(`The schedule plugs in for more than ${esc(d.provider)}'s 6 hours of smart charging in a day: shorten or delete the slots marked in red below.`);
+  if (weekPlan(auto.entries, null, true).over) out.push(`The schedule plugs in for more than ${limitText()} of smart charging in a day: shorten or delete the slots marked in red below.`);
   if (d.ready_times) {
     const past = (e) => e.date && new Date(`${e.date}T${e.time}`) < new Date();
     const bad = [...new Set((auto.entries || []).filter((e) => e.enabled && e.action === 'unplug' && !past(e) && !d.ready_times.includes(e.time)).map((e) => e.time))];
@@ -1947,7 +1979,6 @@ function drawReplugStatus(r) {
   }[r.status] || '';
   $('a-rp-status').innerHTML = html + (r.last_replug ? `<div class="sub">Last re-plug ${dateTime(r.last_replug)}</div>` : '');
 }
-const OCTOPUS_CAP_MIN = 360;
 const DAY_MIN = 1440, WEEK_MIN = 7 * 1440;
 const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 const tmin = (t) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
@@ -1968,8 +1999,8 @@ function readyRules() {
 }
 
 // The schedule as the add-on plays it (plugged in from a plug-in time to the
-// next unplug), minutes from today 00:00, and with Octopus (while the schedule
-// sets its ready time) where it goes over 6 hours of smart charging in 24
+// next unplug), minutes from today 00:00, and (while the schedule sets the
+// supplier's ready time) where it goes over the supplier's daily limit in 24 hours
 function weekPlan(entries = auto.entries, skipList = null, forceCap = false) {
   const today = today0();
   const skips = new Set((skipList || (auto.data && auto.data.schedule.skips) || []).map((k) => k.entry_id + '|' + k.date));
@@ -1994,7 +2025,7 @@ function weekPlan(entries = auto.entries, skipList = null, forceCap = false) {
   const nowMin = (Date.now() - today.getTime()) / 60000;
   let worst = null;
   const bad = [];
-  const capped = smart.data && smart.data.found && smart.data.provider === 'Octopus Energy'
+  const capped = !!capMin()
     && ((auto.data && auto.data.schedule.ready_time) || forceCap)
     && !(auto.data && auto.data.schedule.override_guards);  // Diagnostics › Debug
   segs.forEach(([a]) => {
@@ -2003,7 +2034,7 @@ function weekPlan(entries = auto.entries, skipList = null, forceCap = false) {
     const hit = [];
     segs.forEach(([x, y]) => { const o = Math.max(0, Math.min(y, a + DAY_MIN) - Math.max(x, a)); if (o) { total += o; hit.push([x, y]); } });
     if (!worst || total > worst.total) worst = {start: a, total};
-    if (capped && total > OCTOPUS_CAP_MIN) bad.push(...hit);
+    if (capped && total > capMin()) bad.push(...hit);
   });
   return {segs, worst, bad, over: bad.length > 0};
 }
@@ -2119,7 +2150,7 @@ function drawWeek() {
       const who = s.source === 'charge_now' ? ' (Charge now)' : s.source === 'auto_plug' ? ' (Auto plug-in)' : s.kind === 'once' ? ' (One-off)' : '';
       const got = ses.filter((z) => z.a < o.b && z.b > o.a);
       const title = `${dayLabel(d)} ${hhmm(Math.max(o.a, lo) - lo)}–${hhmm(Math.min(o.b, hi) - lo)}${who}`
-        + (o.skipped ? ' (skipped)' : !s.enabled ? ' (off)' : red ? ' (over Octopus\'s 6 hours a day)' : '')
+        + (o.skipped ? ' (skipped)' : !s.enabled ? ' (off)' : red ? ` (over ${limitText()} a day)` : '')
         + (got.length ? '\n' + got.map((z) => sesText(z.x)).join('\n') : '');
       const ty = typeOf(s);
       return `<div class="seg ${o.skipped ? 'skip' : ''} ${!on || !s.enabled ? 'off' : ''} ${linked ? 'linked' : ''} ${picked ? 'picked' : ''}"
@@ -2151,8 +2182,8 @@ function drawWeek() {
   $('w-warn').hidden = !plan.over;
   if (plan.over) {
     const w = plan.worst;
-    $('w-warn').innerHTML = `<span class="chip err">Over 6 hours</span> Plugged in for ${dur(w.total * 60)} in the 24 hours from ${dayLabel(Math.floor(w.start / DAY_MIN))} ${hhmm(((w.start % DAY_MIN) + DAY_MIN) % DAY_MIN)}. `
-      + 'Octopus schedules at most 6 hours of smart charging in a day: shorten the slots marked in red.';
+    $('w-warn').innerHTML = `<span class="chip err">Over ${capMin() / 60} hours</span> Plugged in for ${dur(w.total * 60)} in the 24 hours from ${dayLabel(Math.floor(w.start / DAY_MIN))} ${hhmm(((w.start % DAY_MIN) + DAY_MIN) % DAY_MIN)}. `
+      + `${sup('Your supplier')} schedules at most ${capMin() / 60} hours of smart charging in a day: shorten the slots marked in red.`;
   }
 }
 
@@ -2272,9 +2303,9 @@ async function saveEditor(del) {
     else if (U) { U.days = U.days.filter((d) => !o.days.includes(d)); if (!U.days.length) { entries.splice(entries.indexOf(U), 1); ids.unplug = U.id; } }
   }
   if (!del) entries.push(...newEntries(f, ids, source, ed.mode));
-  // A change can't take a day further over Octopus's 6 hours (shortening one that's over is fine)
+  // A change can't take a day further over the supplier's daily limit (shortening one that's over is fine)
   const forced = !!week.forceErr, before = weekPlan(auto.entries, null, forced), after = weekPlan(entries, null, forced);
-  if (!del && after.over && (!before.over || after.worst.total > before.worst.total)) return fail('That takes a day over Octopus\'s 6 hours of smart charging: make it shorter');
+  if (!del && after.over && (!before.over || after.worst.total > before.worst.total)) return fail(`That takes a day over ${limitText()} of smart charging: make it shorter`);
   const btn = $(del ? 'w-del' : 'w-save'); if (btn) btn.disabled = true;
   if (await post('automation/schedule', {entries})) {
     toast(del ? 'Deleted' : 'Schedule saved');
@@ -2292,11 +2323,11 @@ $('w-grid').addEventListener('click', async (ev) => {
     const times = [{entry_id: s.plug.id, date: o.date}];
     if (s.unplug && o.udate) times.push({entry_id: s.unplug.id, date: o.udate});
     if (o.skipped) {
-      // Putting it back mustn't take a day over Octopus's 6 hours
+      // Putting it back mustn't take a day over the supplier's daily limit
       const keys = new Set(times.map((x) => x.entry_id + '|' + x.date));
       const left = ((auto.data && auto.data.schedule.skips) || []).filter((x) => !keys.has(x.entry_id + '|' + x.date));
       if (weekPlan(auto.entries, left).over && !weekPlan().over) {
-        const e = $('w-err'); if (e) e.textContent = 'Putting it back would take a day over Octopus\'s 6 hours of smart charging: shorten or delete another slot first';
+        const e = $('w-err'); if (e) e.textContent = `Putting it back would take a day over ${limitText()} of smart charging: shorten or delete another slot first`;
         return;
       }
     }
@@ -2436,11 +2467,14 @@ async function refreshHealth() {
     : '<div class="empty">None. Transaction messages are held here if the connection drops, and sent when it\'s back.</div>';
 }
 
-// Octopus schedules at most 6 hours of smart charging a day: while the
-// schedule sets its ready time, charges can't be longer
-function octopusCapped() {
-  return !!(smart.data && smart.data.found && smart.data.provider === 'Octopus Energy' && auto.data && auto.data.schedule.ready_time
-    && !auto.data.schedule.override_guards);
+// Your supplier's daily smart charging limit (Octopus: 6 hours, or as set on
+// the Settings tab), in minutes; null: none
+const capMin = () => (smart.data && smart.data.found && smart.data.limit_min) || null;
+const limitText = () => `${sup('your supplier')}'s ${capMin() / 60} hours`;
+// It applies while the schedule sets the supplier's ready time, unless the
+// scheduling guards are overridden (Diagnostics › Debug)
+function limitApplies() {
+  return !!(capMin() && auto.data && auto.data.schedule.ready_time && !auto.data.schedule.override_guards);
 }
 // ---------- Debug (Diagnostics › Debug) ----------
 async function refreshDebug() {
@@ -2501,7 +2535,7 @@ $('d-guards').addEventListener('change', async (e) => {
   const on = e.target.checked;
   try {
     auto.data = await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({override_guards: on})});
-    applyOctopusCap();
+    applyDailyLimit();
     toast(on ? 'Scheduling guards overridden: no 6-hour limit' : 'Scheduling guards back on');
   } catch (err) { e.target.checked = !on; toast('Failed: ' + err.message); }
 });
@@ -2523,15 +2557,17 @@ $('d-bundle').addEventListener('click', async () => {
   toast('Diagnostics bundle downloaded');
 });
 
-function applyOctopusCap() {
-  const capped = octopusCapped();
-  document.querySelectorAll('#c-charge button').forEach((b) => { b.hidden = capped && Number(b.dataset.hours) > 6; });
-  $('sim-auto-hours').max = capped ? 6 : 12;
-  $('c-charge-cap').hidden = !capped; $('sim-auto-cap').hidden = !capped;
+function applyDailyLimit() {
+  const on = limitApplies(), h = on ? capMin() / 60 : 12;
+  document.querySelectorAll('#c-charge button').forEach((b) => { b.hidden = on && Number(b.dataset.hours) > h; });
+  $('sim-auto-hours').max = Math.min(12, h);
+  const text = on ? `Up to ${h} hours: ${sup('your supplier')}'s daily smart charging limit, while Force schedule on ${sup('supplier')} is on.` : '';
+  $('c-charge-cap').innerHTML = text; $('sim-auto-cap').innerHTML = text;
+  $('c-charge-cap').hidden = !on; $('sim-auto-cap').hidden = !on;
 }
 // ---------- Charge now (Automations tab): plug in for a set time ----------
-// Added to the schedule as a one-off, so it can be changed in the schedule above.
-// Over Octopus's 6 hours a day (Force schedule on supplier on), it asks first.
+// Added to the schedule as a one-off, so it can be changed in the schedule below.
+// Over the supplier's daily limit (Force schedule on supplier on), it asks first.
 const CHARGE_HOURS = [1, 2, 3, 4, 6, 8];
 CHARGE_HOURS.forEach((h) => { const b = document.createElement('button'); b.textContent = h + ' h'; b.dataset.hours = h; $('c-charge').appendChild(b); });
 async function chargeNow(h, confirm) {
@@ -2544,7 +2580,7 @@ async function chargeNow(h, confirm) {
       const until = r.plan && r.plan.end ? new Date(r.plan.end).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) : null;
       toast(until ? `Plugged in until ${until}` : 'Plugged in');
       $('c-charge-note').innerHTML = until ? `Plugged in until <b>${until}</b>${r.plan.notes && r.plan.notes.length ? ' (' + esc(r.plan.notes.join('; ')) + ')' : ''}. `
-        + 'Shown in the schedule above.' : '';
+        + 'Shown in the schedule below.' : '';
       pollState(); refreshAutomation(true);
     }
   } catch (err) { toast('Failed: ' + err.message); }
@@ -2564,6 +2600,41 @@ function drawChargeConfirm(h, p) {
   $('c-charge-no').onclick = () => { $('c-charge-note').innerHTML = ''; };
 }
 $('c-charge').addEventListener('click', (e) => { const h = Number(e.target.dataset.hours); if (h) chargeNow(h, false); });
+
+// ---------- Settings › Your supplier: override what's found automatically ----------
+const HALF_HOURS = Array.from({length: 48}, (_, k) => `${String(Math.floor(k / 2)).padStart(2, '0')}:${k % 2 ? '30' : '00'}`);
+['sup-from', 'sup-to'].forEach((id) => { $(id).innerHTML = '<option value="">Auto</option>' + HALF_HOURS.map((t) => `<option>${t}</option>`).join(''); });
+function drawSupplierSettings() {
+  const e = sim.edit || {}, d = smart.data || {};
+  if (document.activeElement !== $('sup-from')) $('sup-from').value = e.ready_from || '';
+  if (document.activeElement !== $('sup-to')) $('sup-to').value = e.ready_to || '';
+  if (document.activeElement !== $('sup-limit')) $('sup-limit').value = e.daily_limit_h ?? '';
+  const ent = (id) => id ? `<code>${esc(id)}</code>` : '<span class="muted">None found</span>';
+  const times = d.ready_times || [];
+  $('sup-found').innerHTML = kv([
+    ['Using', d.found ? `${ent(d.entity_id)}${e.supplier_entity ? ' <span class="chip">Picked</span>' : ' <span class="chip ok">Found</span>'}` : ent(e.supplier_entity)],
+    ['Supplier', d.found ? esc(d.provider) : '—'],
+  ]);
+  $('sup-ready').innerHTML = kv([
+    ['Using', d.found ? `${ent(d.ready_time_entity)}${d.ready_time_entity ? (e.ready_entity ? ' <span class="chip">Picked</span>' : ' <span class="chip ok">Found</span>') : ''}` : '—'],
+    ['Accepts', times.length ? (times.length === 48 ? 'Any half hour' : `${times[0]}–${times[times.length - 1]}`) + (e.ready_from || e.ready_to ? ' <span class="chip">Set</span>' : '') : '—'],
+  ]);
+  const lim = d.found ? d.limit_min : null;
+  $('sup-limit-note').innerHTML = (e.daily_limit_h == null ? 'Automatic: ' : 'Set: ') + (lim ? `${lim / 60} hours` : 'no limit');
+}
+async function saveSupplier(patch, msg) {
+  await saveSensors(patch, msg);
+  setTimeout(async () => { await refreshSmart(true); drawSupplierSettings(); applyDailyLimit(); }, 1500);  // found again with it
+}
+$('sup-from').addEventListener('change', (e) => saveSupplier({ready_from: e.target.value, ready_to: e.target.value ? ($('sup-to').value || '23:30') : ''},
+  e.target.value ? 'Ready times saved' : 'Ready times: automatic'));
+$('sup-to').addEventListener('change', (e) => saveSupplier({ready_to: e.target.value, ready_from: e.target.value ? ($('sup-from').value || '00:00') : ''},
+  e.target.value ? 'Ready times saved' : 'Ready times: automatic'));
+$('sup-limit').addEventListener('change', (e) => {
+  const v = e.target.value.trim(), h = Number(v);
+  if (v !== '' && (!(h >= 0 && h <= 24) || h * 2 !== Math.round(h * 2))) { toast('Daily limit: 0–24 hours, in half hours (empty: automatic)'); drawSupplierSettings(); return; }
+  saveSupplier({daily_limit_h: v === '' ? null : h}, v === '' ? 'Daily limit: automatic' : h ? `Daily limit: ${h} hours` : 'Daily limit: none');
+});
 
 // ---------- refresh loop ----------
 function refreshTab(full) {
