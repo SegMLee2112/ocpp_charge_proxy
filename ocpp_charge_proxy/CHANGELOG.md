@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.29.0 — No-charging times in the schedule
+
+- **Change:** no-charging times are part of the schedule now, not a
+  separate card: add one as you would a slot (click or drag across a day,
+  or **+ Add a slot**) and choose **No-charging time**, and click one to
+  change or delete it. They're shown hatched in their own colour
+- **Improvement:** when a slot or no-charging time can't be saved, the
+  reason shows in the editor rather than only in a pop-up
+
 ## 2.28.0 — No-charging times and the car plugged in charge
 
 - **Feature:** **No-charging times** (Automations tab), on the days you

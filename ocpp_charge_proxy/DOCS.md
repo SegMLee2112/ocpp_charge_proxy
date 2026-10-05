@@ -113,12 +113,14 @@ schedule off. A slot that was trimmed keeps its own colour.
 
 ### No-charging times
 
-On the Automations tab, **No-charging times** are times nothing is
-scheduled in, on the days you pick, e.g. your off-peak hours (23:30–05:30)
-when the car may well charge anyway. Slots can't be added in them (and one
+**No-charging times** are times nothing is scheduled in, on the days you
+pick, e.g. your off-peak hours (23:30–05:30) when the car may well charge
+anyway. They're part of the schedule on the Automations tab: add one as you
+would a slot (click or drag across a day, or **+ Add a slot**) and choose
+**No-charging time**; click one to change its times or days, or delete it. Slots can't be added in them (and one
 can't be added over existing slots), and auto plug-in, the car plugged in
 sensor and Charge now are planned around them (above). They're shown
-hatched on the schedule.
+hatched in blue-grey.
 
 ### Schedule, auto re-plug and start-up
 

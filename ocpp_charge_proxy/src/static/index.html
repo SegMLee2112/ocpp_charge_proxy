@@ -210,10 +210,10 @@
   tr.srow.flash > td { animation: flash 2s ease-out; }
   @keyframes flash { from { background: color-mix(in srgb, var(--ok) 25%, transparent); } to { background: transparent; } }
   #w-types { display: contents; }
-  .week .blk { position: absolute; top: 0; bottom: 0; pointer-events: none;
-    background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--text2) 30%, transparent) 0 3px, transparent 3px 7px); }
-  .blk-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .blk-row + .blk-row { margin-top: 10px; }
+  .week .blk { position: absolute; top: 0; bottom: 0; cursor: pointer; border-radius: 4px;
+    background: repeating-linear-gradient(45deg, rgba(84,110,122,.6) 0 4px, rgba(84,110,122,.22) 4px 8px); }
+  .week .blk.picked { box-shadow: 0 0 0 2px var(--text); }
+
   .week .sep { grid-column: 1 / -1; border-top: 1px dashed var(--divider); margin: 2px 0; }
   .week .tick { position: absolute; top: -3px; bottom: -3px; width: 12px; margin-left: -6px; cursor: pointer;
     background: linear-gradient(var(--text2), var(--text2)) center / 3px 100% no-repeat; }
@@ -399,22 +399,17 @@
         <span class="muted" style="font-size:13px;font-weight:400">On</span>
         <label class="switch"><input type="checkbox" id="a-sched-on" aria-label="Schedule on"><span></span></label>
       </h2>
-      <div class="note" style="margin:0 0 10px">Plugs in and unplugs at set times, so <span class="supn" data-f="your supplier">your supplier</span> can charge then. <details class="more"><summary>More</summary><div>Each slot runs from a plug-in to its unplug, every week on the days you pick, or once on a date. Times are in your Home Assistant time zone. A time missed while the add-on is stopped isn't run later; if it starts inside a slot, it plugs in straight away. Unplugging during a session ends it. Skip a slot to stop it running once.</div></details></div>
+      <div class="note" style="margin:0 0 10px">Plugs in and unplugs at set times, so <span class="supn" data-f="your supplier">your supplier</span> can charge then. <details class="more"><summary>More</summary><div>Each slot runs from a plug-in to its unplug, every week on the days you pick, or once on a date. Times are in your Home Assistant time zone. A time missed while the add-on is stopped isn't run later; if it starts inside a slot, it plugs in straight away. Unplugging during a session ends it. Skip a slot to stop it running once. A <b>no-charging time</b> (add one the same way, choosing No-charging time) keeps the schedule out of, for example, your off-peak hours: slots can't go in it, and auto plug-in, the car plugged in sensor and Charge now unplug for it and plug back in after, still ending when they would have.</div></details></div>
       <div class="sub" id="a-next" style="margin-bottom:6px"></div>
       <div class="row" style="margin:0 0 12px">
-        <div class="note grow" style="margin:0">The last 3 days as they happened, then the next 7. Click a slot to change, delete or skip it, or click or drag across a day to add one.</div>
+        <div class="note grow" style="margin:0">The last 3 days as they happened, then the next 7. Click a slot to change, delete or skip it, or click or drag across a day to add one, or a no-charging time.</div>
         <button class="btn small primary" id="w-add">+ Add a slot</button>
       </div>
       <div class="week" id="w-grid"></div>
       <div class="empty" id="w-empty" hidden>No times yet: click or drag across a day above to add a slot, e.g. 23:30 to 07:00.</div>
       <div class="sub" id="w-warn" hidden style="margin-top:10px"></div>
-      <div class="legend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span id="w-types"></span><span><b class="band" style="background:var(--ok);height:4px;opacity:1"></b>Charged</span><span id="w-sup-legend" hidden><b class="band" id="w-sup-swatch" style="background:transparent;border:2px solid;box-sizing:border-box"></b><span id="w-sup-label"></span></span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px)"></b>Skipped</span><span><b class="band" style="background:linear-gradient(var(--text2),var(--text2)) center/3px 100% no-repeat"></b>Unplug only</span><span><b class="band" style="opacity:1;background:repeating-linear-gradient(45deg, color-mix(in srgb, var(--text2) 45%, transparent) 0 2px, transparent 2px 4px)"></b>No charging</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span></div>
+      <div class="legend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span id="w-types"></span><span><b class="band" style="background:var(--ok);height:4px;opacity:1"></b>Charged</span><span id="w-sup-legend" hidden><b class="band" id="w-sup-swatch" style="background:transparent;border:2px solid;box-sizing:border-box"></b><span id="w-sup-label"></span></span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px)"></b>Skipped</span><span><b class="band" style="background:linear-gradient(var(--text2),var(--text2)) center/3px 100% no-repeat"></b>Unplug only</span><span><b class="band" style="opacity:1;background:repeating-linear-gradient(45deg, rgba(84,110,122,.7) 0 2px, rgba(84,110,122,.25) 2px 4px)"></b>No-charging time</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span></div>
       <div class="note" id="a-tz"></div>
-    </div>
-    <div class="card">
-      <h2>No-charging times<span class="spacer"></span><button class="btn small" id="b-add">+ Add</button></h2>
-      <div class="note" style="margin:0 0 10px">Times nothing is scheduled in, e.g. your off-peak hours. <details class="more"><summary>More</summary><div>Slots can't be added in them. Auto plug-in, the car plugged in sensor and Charge now are planned around them: the add-on unplugs at the start and plugs back in at the end, and the charge still ends when it would have (the car may well charge anyway then, off peak). If one of them happens during a no-charging time, it plugs in at its end, if there's still time left. Shown hatched on the schedule.</div></details></div>
-      <div id="b-list"></div>
     </div>
     <div class="card">
       <h2><span class="supn" data-f="Your supplier">Your supplier</span></h2>
@@ -1920,7 +1915,6 @@ async function refreshAutomation(force) {
   if (document.activeElement !== $('a-rp-tries')) $('a-rp-tries').value = d.replug.attempts;
   $('a-rp-on').checked = d.replug.enabled;
   drawReplugStatus(d.replug);
-  drawBlocks();
   applyDailyLimit();
   drawForceErr();
   drawAutoPlugLast(d);
@@ -2189,12 +2183,13 @@ function drawWeek() {
       return `<div class="seg" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="background:${PAST_COLOUR[ty]};left:${x0}%;width:${x1 - x0}%" title="${esc(title)}"></div>`;
     }).join('');
     // No-charging times, hatched (today and the coming days)
-    const blk = d < 0 ? '' : ((auto.data && auto.data.schedule.blocks) || []).flatMap((b) => {
+    const blk = d < 0 ? '' : ((auto.data && auto.data.schedule.blocks) || []).flatMap((b, bi) => {
       const out = [], a0 = tmin(b.start), b0 = tmin(b.end), night = b0 <= a0;
+      const picked = ed && ed.mode === 'block' && ed.bi === bi;
       [d - 1, d].forEach((day) => {
         if (!b.days.includes(wdOf(isoAt(day)))) return;
         const a = day * DAY_MIN + a0, e = day * DAY_MIN + (night ? DAY_MIN + b0 : b0);
-        if (e > lo && a < hi) { const {x0, x1} = span(a, e); out.push(`<div class="blk" style="left:${x0}%;width:${x1 - x0}%" title="No-charging time ${b.start}–${b.end}"></div>`); }
+        if (e > lo && a < hi) { const {x0, x1} = span(a, e); out.push(`<div class="blk ${picked ? 'picked' : ''}" data-blk="${bi}" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%" title="No-charging time ${b.start}–${b.end}: nothing is scheduled then · click to change"></div>`); }
       });
       return out;
     }).join('');
@@ -2257,7 +2252,10 @@ function timeOptions(val, only, none) {
 function openEditor(mode, row, extra) {
   const iso = isoAt(row);
   if (mode === 'new') {
-    week.edit = {mode, row, form: {start: extra.start, end: extra.end, repeat: 'weekly', days: [wdOf(iso)], date: iso, enabled: true}};
+    week.edit = {mode, row, form: {kind: 'slot', start: extra.start, end: extra.end, repeat: 'weekly', days: [wdOf(iso)], date: iso, enabled: true}};
+  } else if (mode === 'block') {
+    const b = auto.data.schedule.blocks[extra.bi];
+    week.edit = {mode, row, bi: extra.bi, form: {kind: 'block', start: b.start, end: b.end, repeat: 'weekly', days: [...b.days], enabled: true}};
   } else if (mode === 'slot') {
     const o = week.occ[extra.k], s = week.model.slots[o.i];
     week.edit = {mode, row, k: extra.k, form: {start: s.start, end: s.end || '', repeat: s.kind === 'once' ? 'once' : 'weekly',
@@ -2276,23 +2274,31 @@ function drawEditor() {
   const s = ed.mode === 'slot' ? week.model.slots[week.occ[ed.k].i] : null;
   const o = ed.mode === 'slot' ? week.occ[ed.k] : null;
   const nextDay = f.start && f.end && tmin(f.end) <= tmin(f.start);
-  const title = ed.mode === 'new' ? 'New slot' : ed.mode === 'orphan' ? 'Unplug only' : s.source === 'charge_now' ? 'Charge now slot'
-    : s.source === 'auto_plug' ? 'Auto plug-in slot' : 'Slot';
+  const block = f.kind === 'block';
+  const title = ed.mode === 'block' ? 'No-charging time' : ed.mode === 'new' ? 'New' : ed.mode === 'orphan' ? 'Unplug only'
+    : s.source === 'charge_now' ? 'Charge now slot' : s.source === 'auto_plug' ? 'Auto plug-in slot'
+    : s.source === 'car_plugged' ? 'Car plugged in slot' : 'Slot';
+  const kind = ed.mode !== 'new' ? '' : `<div class="seg" role="group" aria-label="Kind">
+      <button data-kind="slot" aria-pressed="${!block}">Charging slot</button><button data-kind="block" aria-pressed="${block}" title="Nothing is scheduled then, e.g. your off-peak hours">No-charging time</button></div>`;
   const tip = rules ? `title="${esc(rules.provider)} ready times: unplug times are ${esc(rules.text)}"` : '';
-  const times = ed.mode === 'orphan'
+  const times = block
+    ? `<label>From <select data-f="start">${timeOptions(f.start)}</select></label>
+       <label>to <select data-f="end">${timeOptions(f.end)}</select></label>${nextDay ? '<span class="muted">next day</span>' : ''}`
+    : ed.mode === 'orphan'
     ? `<label ${tip}>Unplug at <select data-f="end">${timeOptions(f.end, rules && rules.times)}</select></label>`
     : `<label>Plug in <select data-f="start">${timeOptions(f.start)}</select></label>
        <label ${tip}>Unplug <select data-f="end">${timeOptions(f.end, rules && rules.times, 'No unplug')}</select></label>
        ${nextDay ? '<span class="muted">next day</span>' : ''}`;
-  const repeat = `<div class="seg" role="group" aria-label="Repeat">
+  const repeat = block ? `<div class="seg days" role="group" aria-label="Days">${DAYS.map((d, n) => `<button data-day="${n}" aria-pressed="${f.days.includes(n)}" title="${d}">${d.slice(0, 2)}</button>`).join('')}</div>`
+    : `<div class="seg" role="group" aria-label="Repeat">
       <button data-rep="weekly" aria-pressed="${f.repeat === 'weekly'}">Every week</button><button data-rep="once" aria-pressed="${f.repeat === 'once'}">Once</button></div>
     ${f.repeat === 'weekly'
       ? `<div class="seg days" role="group" aria-label="Days">${DAYS.map((d, n) => `<button data-day="${n}" aria-pressed="${f.days.includes(n)}" title="${d}">${d.slice(0, 2)}</button>`).join('')}</div>`
       : `<input type="date" data-f="date" value="${esc(f.date)}" aria-label="Date">`}`;
-  const canSkip = s && o && new Date(`${o.date}T${s.start}`) > new Date();
+  const canSkip = !block && s && o && new Date(`${o.date}T${s.start}`) > new Date();
   pop.innerHTML = `<div class="ed">
-    <b>${title}${ed.top ? (ed.row ? ' · tomorrow' : ' · today') : ''}</b>${times}${repeat}
-    <label class="switch" title="On"><input type="checkbox" data-f="enabled" ${f.enabled ? 'checked' : ''} aria-label="On"><span></span></label>
+    <b>${title}${ed.top ? (ed.row ? ' · tomorrow' : ' · today') : ''}</b>${kind}${times}${repeat}
+    ${block ? '' : `<label class="switch" title="On"><input type="checkbox" data-f="enabled" ${f.enabled ? 'checked' : ''} aria-label="On"><span></span></label>`}
     <span class="acts"><button class="btn small primary" id="w-save">Save</button>
       ${ed.mode !== 'new' ? '<button class="btn small" id="w-del">Delete</button>' : ''}
       ${canSkip ? `<button class="btn small" id="w-skip">${o.skipped ? 'Undo skip' : 'Skip this one'}</button>` : ''}
@@ -2343,6 +2349,21 @@ async function saveEditor(del) {
   const ed = week.edit; if (!ed) return;
   const f = ed.form, rules = readyRules();
   const fail = (m) => { const e = $('w-err'); if (e) e.textContent = m; };
+  if (f.kind === 'block') {
+    if (!del && !f.days.length) return fail('Pick at least one day');
+    if (!del && f.start === f.end) return fail('It must start and end at different times');
+    const blocks = clone((auto.data && auto.data.schedule.blocks) || []);
+    if (ed.mode === 'block') {
+      if (del) blocks.splice(ed.bi, 1);
+      else blocks[ed.bi] = {...blocks[ed.bi], start: f.start, end: f.end, days: [...f.days].sort()};
+    } else blocks.push({start: f.start, end: f.end, days: [...f.days].sort()});
+    try {
+      auto.data = await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({blocks})});
+      toast(del ? 'No-charging time deleted' : 'No-charging time saved');
+      week.edit = null; await refreshAutomation(true);
+    } catch (e) { fail(e.message); }
+    return;
+  }
   if (!del) {
     if (f.repeat === 'weekly' && !f.days.length) return fail('Pick at least one day');
     if (f.repeat === 'once' && !/^\d{4}-\d{2}-\d{2}$/.test(f.date || '')) return fail('Pick a date');
@@ -2367,11 +2388,12 @@ async function saveEditor(del) {
   const forced = !!week.forceErr, before = weekPlan(auto.entries, null, forced), after = weekPlan(entries, null, forced);
   if (!del && after.over && (!before.over || after.worst.total > before.worst.total)) return fail(`That takes a day over ${limitText()} of smart charging: make it shorter`);
   const btn = $(del ? 'w-del' : 'w-save'); if (btn) btn.disabled = true;
-  if (await post('automation/schedule', {entries})) {
+  try {
+    await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({entries})});
     toast(del ? 'Deleted' : 'Schedule saved');
     week.edit = null;
     await refreshAutomation(true);
-  } else if (btn) btn.disabled = false;
+  } catch (e) { fail(e.message); if (btn) btn.disabled = false; }
 }
 $('w-grid').addEventListener('click', async (ev) => {
   const t = ev.target, ed = week.edit;
@@ -2398,6 +2420,7 @@ $('w-grid').addEventListener('click', async (ev) => {
     return;
   }
   if (ed && t.dataset.rep) { ed.form.repeat = t.dataset.rep; drawEditor(); return; }
+  if (ed && t.dataset.kind) { ed.form.kind = t.dataset.kind; if (t.dataset.kind === 'block') ed.form.repeat = 'weekly'; drawEditor(); return; }
   if (ed && t.dataset.day !== undefined && t.closest('#w-pop')) {
     const d = Number(t.dataset.day);
     ed.form.days = ed.form.days.includes(d) ? ed.form.days.filter((x) => x !== d) : [...ed.form.days, d];
@@ -2407,6 +2430,12 @@ $('w-grid').addEventListener('click', async (ev) => {
   const sesEl = t.closest('.ses[data-ses]') || (t.closest('.track.past') && t.closest('.seg[data-ses]'));
   if (sesEl) { openSession(week.sessions[Number(sesEl.dataset.ses)]); return; }
   if (t.closest('.track.past')) return;  // the last 3 days: history only
+  const blkEl = t.closest('.blk[data-blk]');
+  if (blkEl) {
+    const bi = Number(blkEl.dataset.blk), row = Number(blkEl.dataset.row);
+    if (ed && ed.mode === 'block' && ed.bi === bi) { week.edit = null; drawWeek(); } else openEditor('block', row, {bi});
+    return;
+  }
   const seg = t.closest('.seg[data-occ]');
   if (seg) {
     const k = Number(seg.dataset.occ), row = Number(seg.dataset.row);
@@ -2435,7 +2464,7 @@ $('w-add').addEventListener('click', () => {
 const wdrag = {on: false};
 $('w-grid').addEventListener('pointerdown', (ev) => {
   const track = ev.target.closest('.track');
-  if (!track || track.classList.contains('past') || ev.target.closest('.seg, .tick, .ses') || ev.button !== 0) return;
+  if (!track || track.classList.contains('past') || ev.target.closest('.seg, .tick, .ses, .blk') || ev.button !== 0) return;
   const rect = track.getBoundingClientRect();
   Object.assign(wdrag, {on: true, track, rect, x0: ev.clientX, x1: ev.clientX, row: Number(track.dataset.row)});
   track.setPointerCapture(ev.pointerId);
@@ -2695,43 +2724,6 @@ $('sup-limit').addEventListener('change', (e) => {
   const v = e.target.value.trim(), h = Number(v);
   if (v !== '' && (!(h >= 0 && h <= 24) || h * 2 !== Math.round(h * 2))) { toast('Daily limit: 0–24 hours, in half hours (empty: automatic)'); drawSupplierSettings(); return; }
   saveSupplier({daily_limit_h: v === '' ? null : h}, v === '' ? 'Daily limit: automatic' : h ? `Daily limit: ${h} hours` : 'Daily limit: none');
-});
-
-// ---------- No-charging times (Automations tab) ----------
-function drawBlocks() {
-  const blocks = (auto.data && auto.data.schedule.blocks) || [];
-  if ($('b-list').contains(document.activeElement) && document.activeElement.tagName === 'SELECT') return;  // not while choosing
-  const opts = (v) => HALF_HOURS.map((t) => `<option ${t === v ? 'selected' : ''}>${t}</option>`).join('');
-  $('b-list').innerHTML = blocks.length ? blocks.map((b, i) => `<div class="blk-row" data-i="${i}">
-      <select data-f="start" aria-label="From">${opts(b.start)}</select> to <select data-f="end" aria-label="To">${opts(b.end)}</select>
-      <div class="seg days" role="group" aria-label="Days">${DAYS.map((d, n) => `<button data-day="${n}" aria-pressed="${b.days.includes(n)}" title="${d}">${d.slice(0, 2)}</button>`).join('')}</div>
-      <button class="btn small" data-del>Delete</button></div>`).join('')
-    : '<div class="muted">None. Add one to keep the schedule out of, for example, 23:30–05:30.</div>';
-}
-async function saveBlocks(blocks, msg) {
-  try {
-    auto.data = await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({blocks})});
-    toast(msg); drawWeek();
-  } catch (e) { toast('Failed: ' + e.message); }
-  drawBlocks();
-}
-const blocksNow = () => JSON.parse(JSON.stringify((auto.data && auto.data.schedule.blocks) || []));
-$('b-add').addEventListener('click', () => saveBlocks([...blocksNow(), {start: '23:30', end: '05:30', days: [0, 1, 2, 3, 4, 5, 6]}], 'No-charging time added'));
-$('b-list').addEventListener('change', (e) => {
-  const row = e.target.closest('.blk-row'); if (!row || !e.target.dataset.f) return;
-  const bl = blocksNow(); bl[row.dataset.i][e.target.dataset.f] = e.target.value;
-  e.target.blur(); saveBlocks(bl, 'No-charging time saved');
-});
-$('b-list').addEventListener('click', (e) => {
-  const row = e.target.closest('.blk-row'); if (!row) return;
-  const bl = blocksNow(), b = bl[row.dataset.i];
-  if (e.target.dataset.del !== undefined) { bl.splice(row.dataset.i, 1); saveBlocks(bl, 'No-charging time deleted'); return; }
-  if (e.target.dataset.day !== undefined) {
-    const n = Number(e.target.dataset.day);
-    b.days = b.days.includes(n) ? b.days.filter((d) => d !== n) : [...b.days, n].sort();
-    if (!b.days.length) { toast('Pick at least one day'); return; }
-    saveBlocks(bl, 'No-charging time saved');
-  }
 });
 
 // ---------- refresh loop ----------
