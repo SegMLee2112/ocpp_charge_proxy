@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.33.0 — Car plugged in on Automations
+
+- **Change:** the Car plugged in card (its sensor, Add a charge to the
+  schedule and Charge for) is on the Automations tab now, next to Auto
+  plug-in, instead of Settings.
+- **Docs:** where it is.
+
 ## 2.32.0 — Reset frequency
 
 - **Feature:** Settings › Your supplier › Daily limit has a **Reset

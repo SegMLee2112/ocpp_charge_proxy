@@ -462,6 +462,21 @@
         <dl class="kv" id="sim-monitor" style="margin-top:14px"></dl>
       </div>
       <div class="card">
+        <h2>Car plugged in</h2>
+        <div class="row"><div class="grow">Car plugged in sensor<div class="note" style="margin:0">Turns Plugged In on when your car's cable is connected. <details class="more"><summary>More</summary><div>A binary sensor such as your car's "charging cable connected". It never switches Plugged In off.</div></details></div></div></div>
+        <div class="row" style="margin-top:6px"><span class="picker" data-key="plug_entity" data-domain="binary_sensor" data-class="plug,connectivity,battery_charging,power"></span></div>
+        <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
+          <div class="grow">Add a charge to the schedule<div class="note" style="margin:0">When it plugs in, for the hours below, as auto plug-in does. <details class="more"><summary>More</summary><div>A one-off slot from plugging in, shown on the Automations tab, with the ready time set to its end. With a daily limit (Octopus: 6 hours) only that many hours are scheduled; not plugged in during a no-charging time.</div></details></div></div>
+          <label class="switch"><input type="checkbox" id="plug-ready" aria-label="Add a charge to the schedule when the car is plugged in"><span></span></label>
+        </div>
+        <div class="row" id="plug-hours-row">
+          <div class="grow">Charge for<div class="note" style="margin:0">Hours from plugging in (30-minute steps)</div></div>
+          <span class="ctl"><input type="number" id="plug-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours when plugged in"> hours</span>
+        </div>
+        <div class="note" id="plug-cap" hidden style="margin:0"></div>
+        <dl class="kv" id="sim-plug" style="margin-top:14px"></dl>
+      </div>
+      <div class="card">
         <h2>Auto re-plug<span class="spacer"></span>
           <label class="switch"><input type="checkbox" id="a-rp-on" aria-label="Auto re-plug on"><span></span></label>
         </h2>
@@ -520,21 +535,6 @@
         <div class="row"><div class="grow">SoC sensor<div class="note" style="margin:0">Your car's charge, reported to <span class="supn" data-f="your supplier">your supplier</span>. <details class="more"><summary>More</summary><div>Sent while plugged in. At 100% the car reports full, and power tapers above 90%.</div></details></div></div></div>
         <div class="row" style="margin-top:6px"><span class="picker" data-key="soc_entity" data-domain="sensor" data-class="battery" data-units="%"></span></div>
         <dl class="kv" id="sim-soc" style="margin-top:14px"></dl>
-      </div>
-      <div class="card">
-        <h2>Car plugged in</h2>
-        <div class="row"><div class="grow">Car plugged in sensor<div class="note" style="margin:0">Turns Plugged In on when your car's cable is connected. <details class="more"><summary>More</summary><div>A binary sensor such as your car's "charging cable connected". It never switches Plugged In off.</div></details></div></div></div>
-        <div class="row" style="margin-top:6px"><span class="picker" data-key="plug_entity" data-domain="binary_sensor" data-class="plug,connectivity,battery_charging,power"></span></div>
-        <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
-          <div class="grow">Add a charge to the schedule<div class="note" style="margin:0">When it plugs in, for the hours below, as auto plug-in does. <details class="more"><summary>More</summary><div>A one-off slot from plugging in, shown on the Automations tab, with the ready time set to its end. With a daily limit (Octopus: 6 hours) only that many hours are scheduled; not plugged in during a no-charging time.</div></details></div></div>
-          <label class="switch"><input type="checkbox" id="plug-ready" aria-label="Add a charge to the schedule when the car is plugged in"><span></span></label>
-        </div>
-        <div class="row" id="plug-hours-row">
-          <div class="grow">Charge for<div class="note" style="margin:0">Hours from plugging in (30-minute steps)</div></div>
-          <span class="ctl"><input type="number" id="plug-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours when plugged in"> hours</span>
-        </div>
-        <div class="note" id="plug-cap" hidden style="margin:0"></div>
-        <dl class="kv" id="sim-plug" style="margin-top:14px"></dl>
       </div>
     </div>
     <div class="section-title">Your supplier</div>

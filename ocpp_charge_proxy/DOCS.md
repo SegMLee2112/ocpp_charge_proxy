@@ -78,7 +78,7 @@ comes back.
 drops below the level you set. With **Automatically adjust schedule to fit
 auto plug-in** on, it also adds the charge to the schedule as a one-off,
 for the hours you choose (**Charge for**, 0.5 to 12). The **Car plugged in**
-sensor (Settings tab) can do the same when it plugs in: turn on **Add a
+sensor (Automations tab) can do the same when it plugs in: turn on **Add a
 charge to the schedule** and set its own **Charge for**. **Charge now**
 works the same way. In each case:
 
@@ -296,8 +296,8 @@ The add-on creates its own entities (no integration needed):
   add-on leaves the sensors alone until you remove it (Settings > Devices &
   services). `sensor.ocpp_charge_proxy_energy` keeps its entity ID, so its
   Energy dashboard history carries on.
-- Your power, SoC and car plugged in sensors are set up on the web page's
-  **Settings** tab, and auto plug-in on the **Automations** tab; the add-on
+- Your power and SoC sensors are set up on the web page's **Settings**
+  tab, and auto plug-in and the car plugged in sensor on the **Automations** tab; the add-on
   reads them through Home Assistant's API.
 
 ## Web page
@@ -339,10 +339,10 @@ follows your Home Assistant theme. Settings save as soon as you change them.
     anyway** then goes ahead.
   - The plug-in schedule (see below), with the last 3 days and the next 7
     of when it has the car plugged in; Force schedule on supplier; auto
-    plug-in and auto re-plug.
+    plug-in, the car plugged in sensor and auto re-plug.
 - **Settings:** controls for Plugged In, max current and **Continue session
   after a restart**; the simulated car's start delay and ramp-up; your
-  power, SoC and car plugged in sensors, with their live values; and **Your
+  power and SoC sensors, with their live values; and **Your
   supplier**, for when what's found automatically isn't right, or your
   supplier's rules change:
   - **Smart charging sensor:** the dispatching sensor with its planned
