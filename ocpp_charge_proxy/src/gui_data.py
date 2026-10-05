@@ -174,6 +174,9 @@ class MessageLog:
 # --- Charging sessions -------------------------------------------------------
 
 
+PLUGGED_KEEP_DAYS = 8  # plugged-in stretches kept for the Automations tab's past days
+
+
 class SessionLog:
     """The current session and recent finished ones, saved in sessions.json.
 
@@ -184,6 +187,11 @@ class SessionLog:
     Plugged In turning on until it's turned off again with no session having
     started, with who plugged in / unplugged. The last `size` of each kind are
     kept.
+
+    Every plugged-in stretch of the last PLUGGED_KEEP_DAYS days is kept too
+    ("plugged": start, end, who plugged in and unplugged), for the
+    Automations tab's past days: what actually happened, not the schedule as
+    it is now.
     """
 
     def __init__(self, data_dir: Optional[str], size: int = SESSION_HISTORY_SIZE) -> None:
@@ -192,7 +200,12 @@ class SessionLog:
         self.current: Optional[dict] = None
         self.history: list[dict] = []  # newest first, sessions and no-session plug-ins
         self.plug: Optional[dict] = None  # plugged in, waiting for a session: {plugged_at, plugged_by}
+        self.plugged_spans: list[dict] = []  # [{start, end, by, unplugged_by}], newest first
+        self.plugged_open: Optional[dict] = None  # plugged in now: {start, by}
+        self.plugged_since: Optional[str] = None  # when recording started
         self._load()
+        if self.plugged_since is None:
+            self.plugged_since = _now_iso()
 
     def _load(self) -> None:
         if not self._path:
@@ -206,6 +219,10 @@ class SessionLog:
                 plug = data.get("plug")
                 self.plug = plug if isinstance(plug, dict) else None
                 self.history = [s for s in data.get("history") or [] if isinstance(s, dict)]
+                self.plugged_spans = [s for s in data.get("plugged") or [] if isinstance(s, dict)]
+                opened = data.get("plugged_open")
+                self.plugged_open = opened if isinstance(opened, dict) else None
+                self.plugged_since = data.get("plugged_since") if isinstance(data.get("plugged_since"), str) else None
                 self._trim()
                 return
             except FileNotFoundError:
@@ -219,7 +236,9 @@ class SessionLog:
         try:
             tmp = self._path + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({"current": self.current, "plug": self.plug, "history": self.history}, f)
+                json.dump({"current": self.current, "plug": self.plug, "history": self.history,
+                           "plugged": self.plugged_spans, "plugged_open": self.plugged_open,
+                           "plugged_since": self.plugged_since}, f)
                 f.flush()
                 os.fsync(f.fileno())
             if os.path.exists(self._path):
@@ -238,16 +257,26 @@ class SessionLog:
             if counts[kind] <= self._size:
                 kept.append(entry)
         self.history = kept
+        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=PLUGGED_KEEP_DAYS)
+        self.plugged_spans = [s for s in self.plugged_spans if (_parse_iso(s.get("end")) or cutoff) >= cutoff]
 
     def plugged(self, plugged_in: bool, source: Optional[str] = None, timestamp: Optional[str] = None) -> None:
         """Plugged In changed. Unplugged with no session since plugging in: a
         no-session entry with who unplugged (and why, for a re-plug)."""
         ts = timestamp or _now_iso()
         if plugged_in:
+            if self.plugged_open is None:
+                self.plugged_open = {"start": ts, "by": source}
             if self.plug is None and self.current is None:
                 self.plug = {"plugged_at": ts, "plugged_by": source}
-                self._save()
+            self._save()
             return
+        if self.plugged_open is not None:
+            opened, self.plugged_open = self.plugged_open, None
+            self.plugged_spans.insert(0, {"start": opened.get("start"), "end": ts, "by": opened.get("by"),
+                                          "unplugged_by": source})
+            self._trim()
+            self._save()
         if self.plug is None:
             return
         plug, self.plug = self.plug, None
@@ -364,7 +393,11 @@ class SessionLog:
                 waiting["duration_s"] = int(
                     (datetime.datetime.now(datetime.timezone.utc) - start).total_seconds()
                 )
-        return {"current": current, "waiting": waiting, "history": list(self.history)}
+        plugged = list(self.plugged_spans)
+        if self.plugged_open is not None:
+            plugged.insert(0, {**self.plugged_open, "end": None})
+        return {"current": current, "waiting": waiting, "history": list(self.history),
+                "plugged": plugged, "plugged_since": self.plugged_since}
 
 
 # --- Power history for the chart ---------------------------------------------

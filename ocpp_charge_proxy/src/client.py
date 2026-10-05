@@ -254,6 +254,9 @@ class ChargePoint(BaseChargePoint):
         # Plugged In survives a restart, like a cable left in a real charger:
         # it boots as Preparing so the server can start a new session.
         self._plugged_in = persistence.load_plugged_in() is True
+        if self._plugged_in and self.sessions.plugged_open is None:
+            # plugged in from before plugged-in stretches were recorded
+            self.sessions.plugged_open = {"start": _now_iso(), "by": None}
         self._shared_state.plugged_in = self._plugged_in
         if self._plugged_in:
             self.state = ChargePointStatus.preparing

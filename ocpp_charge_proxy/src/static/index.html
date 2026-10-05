@@ -209,6 +209,7 @@
   .week .ses:hover { height: 9px; }
   tr.srow.flash > td { animation: flash 2s ease-out; }
   @keyframes flash { from { background: color-mix(in srgb, var(--ok) 25%, transparent); } to { background: transparent; } }
+  #w-types { display: contents; }
   .week .sep { grid-column: 1 / -1; border-top: 1px dashed var(--divider); margin: 2px 0; }
   .week .tick { position: absolute; top: -3px; bottom: -3px; width: 12px; margin-left: -6px; cursor: pointer;
     background: linear-gradient(var(--text2), var(--text2)) center / 3px 100% no-repeat; }
@@ -397,7 +398,7 @@
       <div class="note" style="margin:0 0 10px">Plugs in and unplugs at set times, so <span class="supn" data-f="your supplier">your supplier</span> can charge then. <details class="more"><summary>More</summary><div>Each slot runs from a plug-in to its unplug, every week on the days you pick, or once on a date. Times are in your Home Assistant time zone. A time missed while the add-on is stopped isn't run later; if it starts inside a slot, it plugs in straight away. Unplugging during a session ends it. Skip a slot to stop it running once.</div></details></div>
       <div class="sub" id="a-next" style="margin-bottom:6px"></div>
       <div class="row" style="margin:0 0 12px">
-        <div class="note grow" style="margin:0">The last 3 days, then the next 7. Click a slot to change, delete or skip it, or click or drag across a day to add one.</div>
+        <div class="note grow" style="margin:0">The last 3 days as they happened, then the next 7. Click a slot to change, delete or skip it, or click or drag across a day to add one.</div>
         <button class="btn small primary" id="w-add">+ Add a slot</button>
       </div>
       <div class="week" id="w-grid"></div>
@@ -1871,6 +1872,7 @@ async function refreshAutomation(force) {
     try {
       const sd = await api('sessions');
       week.sessions = [...(sd.current ? [sd.current] : []), ...(sd.history || []).filter((x) => x.type !== 'no_session')];
+      week.plugged = sd.plugged || []; week.pluggedSince = sd.plugged_since;
       week.sessionsAt = Date.now();
     } catch (e) { /* history line only */ }
   }
@@ -2132,6 +2134,10 @@ function drawWeek() {
   const TYPE = {once: ['#00897b', 'One-off'], auto_plug: ['#f57c00', 'Auto plug-in'], charge_now: ['#d81b60', 'Charge now']};
   const typeOf = (s) => s.source && TYPE[s.source] ? s.source : s.kind === 'once' ? 'once' : null;
   const seen = new Set(model.slots.map(typeOf).filter(Boolean));
+  // Past days' colours, by what plugged in
+  const PAST = (by) => !by ? 'other' : by === 'schedule' ? 'schedule' : by.startsWith('auto plug-in') ? 'auto_plug' : by === 'charge now' ? 'charge_now' : 'other';
+  const PAST_COLOUR = {schedule: 'var(--primary)', auto_plug: TYPE.auto_plug[0], charge_now: TYPE.charge_now[0], other: '#9e9e9e'};
+  const seenPast = new Set();
   $('w-types').innerHTML = Object.entries(TYPE).filter(([k]) => seen.has(k))
     .map(([, [c, label]]) => `<span><b class="band" style="background:${c};opacity:.8"></b>${label}</span>`).join('');
   // What actually charged (sessions), for the last 3 days and today
@@ -2142,7 +2148,18 @@ function drawWeek() {
   for (let d = -3; d < 7; d++) {
     const lo = d * DAY_MIN, hi = lo + DAY_MIN;
     const span = (a, b) => ({x0: (Math.max(a, lo) - lo) / 14.4, x1: (Math.min(b, hi) - lo) / 14.4});
-    const bars = occ.map((o, k) => [o, k]).filter(([o]) => o.b > lo && o.a < hi).map(([o, k]) => {
+    // Past days: when the car was actually plugged in (and by what), not the schedule as it is now
+    const pastBars = d >= 0 ? '' : (week.plugged || []).map((p) => ({a: (new Date(p.start) - day0) / 60000,
+      b: ((p.end ? new Date(p.end) : now) - day0) / 60000, p})).filter((z) => z.b > lo && z.a < hi).map((z) => {
+      const {x0, x1} = span(z.a, z.b), ty = PAST(z.p.by);
+      const got = ses.filter((y) => y.a < z.b && y.b > z.a);
+      const title = `${dayLabel(d)} ${hhmm(Math.max(z.a, lo) - lo)}–${hhmm(Math.min(z.b, hi) - lo)}: plugged in by ${z.p.by || 'unknown'}`
+        + (z.p.unplugged_by ? `, unplugged by ${z.p.unplugged_by}` : '') + (got.length ? '\n' + got.map((y) => sesText(y.x)).join('\n') : '');
+      seenPast.add(ty);
+      return `<div class="seg" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="background:${PAST_COLOUR[ty]};left:${x0}%;width:${x1 - x0}%" title="${esc(title)}"></div>`;
+    }).join('');
+    const before = d < 0 && week.pluggedSince && new Date(week.pluggedSince) > new Date(day0.getTime() + hi * 60000);
+    const bars = d < 0 ? pastBars : occ.map((o, k) => [o, k]).filter(([o]) => o.b > lo && o.a < hi).map(([o, k]) => {
       const s = model.slots[o.i];
       const {x0, x1} = span(o.a, o.b);
       const red = !o.skipped && plan.bad.some(([x, y]) => x < o.b && y > o.a);
@@ -2156,7 +2173,7 @@ function drawWeek() {
       return `<div class="seg ${o.skipped ? 'skip' : ''} ${!on || !s.enabled ? 'off' : ''} ${linked ? 'linked' : ''} ${picked ? 'picked' : ''}"
         data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${red ? 'background:var(--err);' : ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}"></div>`;
     }).join('');
-    const ticks = model.orphans.map((o, j) => [o, j]).filter(([o]) => o.date ? dayIndex(o.date) === d : o.days.includes(wdOf(isoAt(d))))
+    const ticks = d < 0 ? '' : model.orphans.map((o, j) => [o, j]).filter(([o]) => o.date ? dayIndex(o.date) === d : o.days.includes(wdOf(isoAt(d))))
       .map(([o, j]) => `<div class="tick ${!on || !o.u.enabled ? 'off' : ''}" data-orphan="${j}" data-row="${d}" style="left:${tmin(o.u.time) / 14.4}%"
         title="${dayLabel(d)} ${o.u.time}: unplug${o.date ? ' (One-off)' : ''}"></div>`).join('');
     const planned = (sc ? sc.periods || [] : []).map((p) => [(new Date(p.start) - day0) / 60000, (new Date(p.end) - day0) / 60000])
@@ -2170,10 +2187,13 @@ function drawWeek() {
     }).join('');
     if (d === -3 && ed && ed.top) html += '<div class="slot-pop top" id="w-pop"></div>';
     if (d === 0) html += '<div class="sep"></div>';
-    html += `<div class="dl ${d === 0 ? 'today' : d < 0 ? 'past' : ''}">${d === 0 ? 'Today' : dayLabel(d)}</div><div class="track ${d < 0 ? 'past' : ''}" data-row="${d}">${bars}${ticks}${planned}${charged}${d === 0 ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
+    html += `<div class="dl ${d === 0 ? 'today' : d < 0 ? 'past' : ''}">${d === 0 ? 'Today' : dayLabel(d)}</div><div class="track ${d < 0 ? 'past' : ''}" data-row="${d}"${before ? ' title="Not recorded: the add-on keeps when the car was plugged in from 2.27.0 on"' : ''}>${bars}${ticks}${planned}${charged}${d === 0 ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
     if (ed && !ed.top && ed.row === d) html += '<div class="slot-pop" id="w-pop"></div>';
   }
   html += '<div></div><div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';
+  // past days can show types the schedule has no slots of now
+  ['auto_plug', 'charge_now'].forEach((k) => { if (seenPast.has(k) && !seen.has(k)) $('w-types').innerHTML += `<span><b class="band" style="background:${TYPE[k][0]};opacity:.8"></b>${TYPE[k][1]}</span>`; });
+  if (seenPast.has('other')) $('w-types').innerHTML += '<span><b class="band" style="background:#9e9e9e;opacity:.8"></b>Plugged in another way</span>';
   $('w-grid').innerHTML = html;
   drawEditor();
   const empty = !model.slots.length && !model.orphans.length;

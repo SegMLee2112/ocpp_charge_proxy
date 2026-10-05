@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.27.0 — Past days as they happened
+
+- **Fix:** the Automations tab's last 3 days showed the schedule as it is
+  now, so changing a slot also changed how earlier days looked. They now
+  show when the car was actually plugged in, coloured by what plugged it in
+  (the schedule, auto plug-in, Charge now, or another way such as by hand),
+  with who unplugged it on hover. The add-on starts keeping this with this
+  version, so days before it show only the charging lines
+
 ## 2.26.0 — Your supplier's settings
 
 - **Feature:** Settings › **Your supplier**: pick the smart charging sensor

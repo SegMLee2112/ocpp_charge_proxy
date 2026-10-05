@@ -197,3 +197,15 @@ def test_session_marked_against_supplier_slots(tmp_path):
     assert not log.mark_supplier([{"start": iso(-70), "end": iso(-60)}], "Octopus Energy")
     again = SessionLog(str(tmp_path))
     assert again.history[1]["supplier_s"] == 3600
+
+
+def test_plugged_in_stretches_are_kept(tmp_path):
+    log = SessionLog(str(tmp_path))
+    log.plugged(True, "schedule", timestamp="2026-10-04T15:30:00+00:00")
+    log.plugged(False, "schedule", timestamp="2026-10-04T21:30:00+00:00")
+    log.plugged(True, "charge now", timestamp="2026-10-05T06:03:00+00:00")
+    snap = SessionLog(str(tmp_path)).snapshot()  # kept across restarts
+    assert snap["plugged"][0] == {"start": "2026-10-05T06:03:00+00:00", "by": "charge now", "end": None}
+    assert snap["plugged"][1] == {"start": "2026-10-04T15:30:00+00:00", "end": "2026-10-04T21:30:00+00:00",
+                                  "by": "schedule", "unplugged_by": "schedule"}
+    assert snap["plugged_since"]

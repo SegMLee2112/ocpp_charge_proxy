@@ -105,7 +105,10 @@ run even with the schedule off.
   shown as slots, each running from a plug-in to its unplug, coloured by
   type: weekly (blue), one-off (teal), auto plug-in (orange) and Charge now
   (pink). **+ Add a slot** starts a new one from the next half hour. The
-  last 3 days are for looking back: a green line shows when the car
+  last 3 days are for looking back: they show when the car was actually
+  plugged in (coloured by what plugged it in: the schedule, auto plug-in,
+  Charge now, or grey for another way such as by hand; hover for who
+  unplugged it), not the schedule as it is now. A green line shows when it
   actually charged (hover for the session's energy, length and what ended
   it; click to open it on the Sessions tab), and your supplier's slots are
   outlined. Click or drag across a day to add a slot; click a slot to change its times, the days it repeats on
