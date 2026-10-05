@@ -628,24 +628,92 @@ def test_auto_plug_joins_an_overlapping_slot():
     assert a.next_unplug(clock.now()).strftime("%H:%M") == "22:00"  # the ready time is set for 22:00
 
 
-def test_auto_plug_over_the_cap_moves_the_next_slot():
-    a, clock = _sched_18_22(_at(12))
-    out = a.plan_auto_plug(180, cap_min=360)  # 12-15 + 18-22 = 7 h: the slot's first 3 h move
-    assert not out["combined"] and "21:00" in out["moved"]
-    assert _today_windows(a, clock) == [("12:00", "15:00"), ("21:00", "22:00")]
+def _sat_slots(*pairs, start=None):
+    """Saturday-only slots (so the previous day has none), now 12:00 Saturday."""
+    a, clock = _automation(start=start or _at(12))
+    entries = []
+    for p, u in pairs:
+        entries += [{"time": p, "action": "plug", "days": [5]}, {"time": u, "action": "unplug", "days": [5]}]
+    a.set_schedule(enabled=True, entries=entries)
+    return a, clock
+
+
+def test_auto_plug_over_the_cap_trims_just_enough():
+    a, clock = _sat_slots(("18:00", "22:00"))
+    out = a.plan_auto_plug(180, cap_min=360)  # 12-15 + 18-22 = 7 h: the slot loses 1 h
+    assert not out["combined"] and "19:00" in out["moved"]
+    assert out["over"] == {"before": 420, "after": 360, "added": 60, "left": 0}
+    assert _today_windows(a, clock) == [("12:00", "15:00"), ("19:00", "22:00")]
     # Without a cap (EDF, E.ON) nothing moves
-    b, clock_b = _sched_18_22(_at(12))
-    b.plan_auto_plug(180)
+    b, clock_b = _sat_slots(("18:00", "22:00"))
+    assert b.plan_auto_plug(180)["over"] is None
     assert _today_windows(b, clock_b) == [("12:00", "15:00"), ("18:00", "22:00")]
 
 
-def test_auto_plug_over_the_cap_can_skip_the_next_slot():
+def test_auto_plug_over_the_cap_trims_a_daily_slot():
     a, clock = _sched_18_22(_at(12))
-    out = a.plan_auto_plug(240, cap_min=360)  # 4 h would move the start to 22:00: nothing left
+    out = a.plan_auto_plug(180, cap_min=360)  # tonight's slot loses 1 h
+    assert "19:00" in out["moved"]
+    assert _today_windows(a, clock) == [("12:00", "15:00"), ("19:00", "22:00")]
+    # yesterday's 18-22 and this charge are 7 h in the 24 hours from yesterday 18:00: nothing to trim for that
+    assert out["over"] == {"before": 420, "after": 420, "added": 60, "left": 60}
+
+
+def test_auto_plug_over_the_cap_can_skip_the_next_slot():
+    a, clock = _sat_slots(("18:00", "22:00"))
+    out = a.plan_auto_plug(360, cap_min=360)  # 12-18 and 18-22: the slot has to go
+    assert "skipped" in out["moved"] and out["over"]["after"] == 360
+    assert _today_windows(a, clock) == [("12:00", "18:00")]
+    nxt = clock.now().date() + datetime.timedelta(days=7)
+    assert any(x.date() == nxt for x, _ in a.windows())  # only this week's is skipped
+
+
+def test_auto_plug_counts_the_previous_24_hours():
+    a, clock = _sat_slots(("02:00", "06:00"), ("20:00", "22:00"))
+    out = a.plan_auto_plug(180, cap_min=360)  # 02-06 + 12-15 + 20-22 = 9 h in the 24 from 02:00
+    assert out["over"] == {"before": 540, "after": 420, "added": 180, "left": 60}  # skipping 20-22 helps, but 7 h is left
     assert "skipped" in out["moved"]
-    assert _today_windows(a, clock) == [("12:00", "16:00")]
-    tomorrow = clock.now().date() + datetime.timedelta(days=1)
-    assert any(x.date() == tomorrow for x, _ in a.windows())  # only today's is skipped
+
+
+def test_charge_isnt_blamed_for_the_schedules_own_hours():
+    # 23:30-07:00 is already 7.5 h: a charge that doesn't add to any 24 hours with it trims nothing
+    a, clock = _automation(start=datetime.datetime(2026, 10, 5, 8, 0, tzinfo=TZ))  # Monday 08:00
+    a.set_schedule(enabled=True, entries=[{"time": "23:30", "action": "plug", "days": [0, 1, 2, 3, 4]},
+                                          {"time": "07:00", "action": "unplug", "days": list(range(7))}])
+    out = a.plan_auto_plug(60, cap_min=360, dry_run=True)  # 08:00-09:00: 8.5 h in the 24 from 08:00
+    assert out["over"] == {"before": 510, "after": 450, "added": 60, "left": 0}
+    assert "00:30" in out["moved"]  # only the hour the charge adds comes off, not the schedule's own extra 1.5
+
+
+def test_a_daily_unplug_doesnt_cut_the_charge_short():
+    a, clock = _automation(start=datetime.datetime(2026, 10, 5, 5, 30, tzinfo=TZ))  # Monday 05:30
+    a.set_schedule(enabled=True, entries=[{"time": "07:00", "action": "unplug", "days": list(range(7))}])
+    a.plan_auto_plug(180)
+    day = clock.now().date()
+    assert [(x.strftime("%H:%M"), y.strftime("%H:%M")) for x, y in a.windows() if x.date() == day] == [("05:30", "08:30")]
+
+
+def test_auto_plug_dry_run_changes_nothing():
+    a, clock = _sat_slots(("18:00", "22:00"))
+    entries, skips = list(a.entries), list(a.skips)
+    out = a.plan_auto_plug(180, cap_min=360, dry_run=True)
+    assert "19:00" in out["moved"] and a.entries == entries and a.skips == skips and a.auto_plug_last is None
+
+
+def test_an_already_over_schedule_can_still_be_changed():
+    a, clock = _sat_slots(("18:00", "22:00"))
+    a.set_schedule(ready_time=True, daily_cap_min=360)
+    a.plan_auto_plug(360, cap_min=None)  # e.g. before the cap applied: 12-18 + 18-22 = 10 h
+    weekly = [e for e in a.entries if not e.get("date")]
+    shorter = [dict(e, time="21:00") if e["action"] == "plug" and not e.get("date") else e for e in a.entries]
+    a.set_schedule(entries=shorter, daily_cap_min=360)  # still over, but no worse: saved
+    longer = [dict(e, time="23:00") if e["action"] == "unplug" and not e.get("date") else e for e in a.entries]
+    try:
+        a.set_schedule(entries=longer, daily_cap_min=360)
+        raise AssertionError("should have refused")
+    except ValueError as err:
+        assert "6 hours" in str(err)
+    assert weekly
 
 
 def test_auto_plug_ready_time_rounds_to_what_the_supplier_accepts():

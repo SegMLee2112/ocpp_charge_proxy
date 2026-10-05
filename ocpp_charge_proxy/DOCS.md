@@ -74,7 +74,7 @@ comes back.
 
 ### Auto plug-in
 
-**Auto plug-in** (Schedule tab) switches Plugged In on once when the SoC
+**Auto plug-in** (Automations tab) switches Plugged In on once when the SoC
 drops below the level you set. With **Automatically adjust schedule to fit
 auto plug-in** on, it also adds the charge to the schedule as a one-off,
 for the hours you choose (**Charge for**, 0.5 to 12):
@@ -85,20 +85,23 @@ for the hours you choose (**Charge for**, 0.5 to 12):
   supplier stops the session or the unplug wait (60 s by default).
 - Octopus Energy, with Force schedule on supplier on: the charge is at
   most 6 hours (longer is shortened, and the 8 h Charge now button is
-  hidden), and if it puts more than 6 hours in 24, the next scheduled slot
-  starts that many hours later (or is skipped, if nothing is left). With it off there's no 6-hour limit,
-  for auto plug-in or the schedule.
+  hidden). If it puts more than 6 hours in any 24 (counting the previous
+  24 hours too), the next scheduled slot starts later, by whole half hours,
+  just enough to get back to 6 (or is skipped, if that's not enough), for
+  that day only. For example, 4 hours scheduled 23:30–03:30 and a 3-hour
+  auto plug-in at 18:00: that night's slot starts at 00:30. With it off
+  there's no 6-hour limit, for auto plug-in, Charge now or the schedule.
 - If it meets or overlaps the next scheduled slot, they become one slot,
   ending at the schedule's unplug.
 - The supplier's ready time is set to the end of the slot (E.ON Next has
   none to set).
 
-The entries show on the Schedule tab as orange **Auto plug-in** slots, and
+The entries show on the Automations tab as orange **Auto plug-in** slots, and
 run even with the schedule off.
 
 ### Schedule, auto re-plug and start-up
 
-- **Schedule** (**Schedule** tab): the last 3 days and the next 7 are
+- **Schedule** (**Automations** tab): the last 3 days and the next 7 are
   shown as slots, each running from a plug-in to its unplug, coloured by
   type: weekly (blue), one-off (teal), auto plug-in (orange) and Charge now
   (pink). **+ Add a slot** starts a new one from the next half hour. The
@@ -123,7 +126,7 @@ run even with the schedule off.
   plug in 23:30 and unplug 07:00, and Plugged In is off, it plugs in
   straight away (and with Force schedule on supplier, sets the ready time
   once Home Assistant is connected). It never unplugs at start-up.
-- **Force schedule on supplier** (**Schedule** tab, off by default):
+- **Force schedule on supplier** (**Automations** tab, off by default):
   when the schedule plugs in, the add-on sets your supplier's smart
   charging ready-by time to the schedule's next unplug, for example plug in
   02:00 and unplug 04:00 sets 04:00; plug in 06:00 and unplug 08:00 sets
@@ -131,11 +134,14 @@ run even with the schedule off.
   Octopus Energy accepts any time of day, EDF Energy 04:00 to 11:00. While
   it's on, unplug times in the schedule are limited to those (the slot
   editor only offers those). E.ON Next's integration
-  has no ready time setting. While it's on, the Schedule tab outlines
+  has no ready time setting. While it's on, the Automations tab outlines
   the schedule's slots in grey, and with Octopus Energy the schedule can't plug in for more than
   6 hours in any 24 (Octopus's daily smart charging cap): slots that go
   over are marked in red, and a change that goes over isn't saved (nor is
-  putting a skipped slot back if that would go over). If Force schedule on
+  putting a skipped slot back if that would go over). Any 24 hours from the
+  previous day on count, so a charge earlier in the day counts too; if
+  that's already over (e.g. after **Charge anyway**), slots can still be
+  changed as long as it doesn't get worse. If Force schedule on
   supplier can't be turned on because of this (or an unplug time your
   supplier doesn't accept), the reason stays in red under the switch, with
   the slots to change marked in red, until it's fixed. With Force schedule
@@ -156,10 +162,10 @@ run even with the schedule off.
   from the one the schedule set. The check starts 5 minutes after the
   plug-in, to give the supplier time to plan, and follows the plan as it
   changes. The result shows on the Overview's Smart charging card and the
-  Schedule tab; a mismatch also as a red chip on the Overview, and in the
+  Automations tab; a mismatch also as a red chip on the Overview, and in the
   log. The supplier's planned slots are outlined in its colour on the
-  Schedule tab (whether or not this is on).
-- **Auto re-plug** (**Schedule** tab): Octopus sometimes doesn't start a session after you plug
+  Automations tab (whether or not this is on).
+- **Auto re-plug** (**Automations** tab): Octopus sometimes doesn't start a session after you plug
   in. When Plugged In has been on for the set minutes (default 10) with no
   session and the add-on is connected, it unplugs, waits 30 seconds and
   plugs back in, up to the set number of tries (default 3). It then gives up
@@ -265,7 +271,7 @@ The add-on creates its own entities (no integration needed):
   services). `sensor.ocpp_charge_proxy_energy` keeps its entity ID, so its
   Energy dashboard history carries on.
 - Your power, SoC and car plugged in sensors are set up on the web page's
-  **Settings** tab, and auto plug-in on the **Schedule** tab; the add-on
+  **Settings** tab, and auto plug-in on the **Automations** tab; the add-on
   reads them through Home Assistant's API.
 
 ## Web page
@@ -296,18 +302,20 @@ follows your Home Assistant theme. Settings save as soon as you change them.
   and the last 20 plug-ins that never got a session: when, for how long, who
   plugged in, and whether auto re-plug gave up on it or it was unplugged
   first.
-- **Schedule:** the plug-in schedule (see below), with the last 3 days and
-  the next 7 of when it has the car plugged in; Force schedule on supplier;
-  auto plug-in and auto re-plug.
-- **Settings:**
-  - **Charge now** (its own card): click how long to plug in for (1, 2, 3,
-    4, 6 or 8 hours). It plugs in straight away and adjusts the schedule
-    the same way auto plug-in does (see [Auto plug-in](#auto-plug-in)): a
-    one-off slot you can change on the Schedule tab, the ready time set to
-    its end, and it unplugs then.
-  - Controls for Plugged In, max current and **Continue session after a
-    restart**; the simulated car's start delay and ramp-up; and your power,
-    SoC and car plugged in sensors, with their live values.
+- **Automations:**
+  - The plug-in schedule (see below), with the last 3 days and the next 7
+    of when it has the car plugged in; Force schedule on supplier; auto
+    plug-in and auto re-plug.
+  - **Charge now**: click how long to plug in for (1, 2, 3, 4, 6 or 8
+    hours). It plugs in straight away and adjusts the schedule the same way
+    auto plug-in does (see [Auto plug-in](#auto-plug-in)): a one-off slot
+    in the schedule above, the ready time set to its end, and it unplugs
+    then. With Octopus and Force schedule on supplier on, if it would take
+    any 24 hours (the previous 24 included) over 6 hours, it asks first,
+    saying what would change; **Charge anyway** then goes ahead.
+- **Settings:** controls for Plugged In, max current and **Continue session
+  after a restart**; the simulated car's start delay and ramp-up; and your
+  power, SoC and car plugged in sensors, with their live values.
 - **Diagnostics**, in two parts:
   - **Health:** version, uptime, reconnects and the last drop's reason,
     heartbeat and clock offset, the Home Assistant link and the add-on's

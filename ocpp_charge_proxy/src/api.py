@@ -27,7 +27,7 @@ def create_api_app(
     automation=None,
     on_set_ramp: Callable[[float, float], None] | None = None,
     ha_link=None,
-    on_charge_now: Callable[[float], Awaitable[dict]] | None = None,
+    on_charge_now: Callable[[float, bool], Awaitable[dict]] | None = None,
     debug=None,
     app_settings=None,
 ) -> web.Application:
@@ -130,8 +130,11 @@ async def handle_unplug(request: web.Request) -> web.Response:
 
 
 async def handle_charge_now(request: web.Request) -> web.Response:
-    """{"hours": 0.5..12 in half hours}: plug in now and add the charge to the
-    schedule as a one-off, as auto plug-in does (see src/automation.py)."""
+    """{"hours": 0.5..12 in half hours, "confirm": bool}: plug in now and add
+    the charge to the schedule as a one-off, as auto plug-in does (see
+    src/automation.py). If it would go over Octopus's 6 hours a day, the
+    answer is {"needs_confirm": true, "plan": ...} and nothing is done until
+    it's sent again with "confirm": true."""
     on_charge_now = request.app["on_charge_now"]
     if on_charge_now is None:
         return web.json_response({"status": "error", "message": "Not available"}, status=503)
@@ -143,10 +146,10 @@ async def handle_charge_now(request: web.Request) -> web.Response:
     except (ValueError, KeyError, TypeError, json.JSONDecodeError):
         return web.json_response({"status": "error", "message": "hours must be 0.5 to 12, in half hours"}, status=400)
     try:
-        plan = await on_charge_now(hours)
+        out = await on_charge_now(hours, bool(body.get("confirm")))
     except ValueError as err:
         return web.json_response({"status": "error", "message": str(err)}, status=400)
-    return web.json_response({"status": "ok", "plan": plan}, dumps=_dumps)
+    return web.json_response({"status": "ok", **out}, dumps=_dumps)
 
 
 async def handle_current(request: web.Request) -> web.Response:

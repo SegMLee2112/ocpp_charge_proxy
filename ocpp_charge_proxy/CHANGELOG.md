@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.25.0 — Automations tab and the 6-hour limit
+
+- **Change:** the Schedule tab is now **Automations**, and **Charge now**
+  moved there from Settings, next to auto plug-in
+- **Feature:** Charge now asks first if it would take any 24 hours over
+  Octopus's 6 hours (with Force schedule on supplier on), saying what would
+  change; **Charge anyway** goes ahead
+- **Improvement:** auto plug-in and Charge now take only as much off the
+  next scheduled slot as gets back to 6 hours, in half hours (it used to
+  take off the whole charge's length). The previous 24 hours count too, and
+  only the extra hours the charge adds are trimmed, not hours the schedule
+  already had
+- **Fix:** Charge now could go over 6 hours with Force schedule on supplier
+  on: it's now checked the same way as auto plug-in
+- **Fix:** a scheduled unplug during an auto plug-in or Charge now charge
+  (e.g. "unplug at 07:00 every day") ended it early: it's skipped that once
+- **Improvement:** a schedule that's already over 6 hours (e.g. after
+  **Charge anyway**) can still be changed, as long as the change doesn't
+  make it worse
+
 ## 2.24.0 — Tidy-up
 
 - **Change:** settings on the Schedule and Settings tabs save as soon as you

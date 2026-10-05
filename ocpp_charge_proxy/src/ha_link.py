@@ -1,7 +1,7 @@
 """Reads your Home Assistant sensors directly and acts on them.
 
 Set up on the web page: the sensors on the Settings tab, auto plug-in on
-the Schedule tab (saved in /data/sensors.json):
+the Automations tab (saved in /data/sensors.json):
 
 - power_entity:  real power (W or kW) reported instead of the simulation
 - soc_entity:    the car's SoC, reported to the supplier (and car full / taper)

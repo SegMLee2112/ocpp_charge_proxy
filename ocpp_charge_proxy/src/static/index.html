@@ -278,7 +278,7 @@
   <nav role="tablist" id="tabs">
     <button role="tab" data-tab="overview"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg><span>Overview</span></button>
     <button role="tab" data-tab="sessions"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg><span>Sessions</span></button>
-    <button role="tab" data-tab="automation"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg><span>Schedule</span></button>
+    <button role="tab" data-tab="automation"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg><span>Automations</span></button>
     <button role="tab" data-tab="settings"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg><span>Settings</span></button>
     <button role="tab" data-tab="diagnostics"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span>Diagnostics</span></button>
   </nav>
@@ -379,7 +379,7 @@
     </div>
   </section>
 
-  <!-- ============ Schedule (tab id "automation") ============ -->
+  <!-- ============ Automations (tab id "automation") ============ -->
   <section id="tab-automation" class="stack" hidden>
     <div class="card">
       <h2>Schedule<span class="spacer"></span>
@@ -423,6 +423,13 @@
     </div>
     <div class="grid">
       <div class="card">
+        <h2>Charge now</h2>
+        <div class="note" style="margin:0 0 10px">Plug in now for this long. <details class="more"><summary>More</summary><div>The schedule is adjusted the same way as for auto plug-in: the charge is added as a one-off slot (shown in the schedule above, where you can change it) that unplugs at the first ready time <span class="supn" data-f="your supplier">your supplier</span> accepts after these hours, and the ready time is set to it. If it meets a scheduled slot they become one; with Octopus and Force schedule on <span class="supn" data-f="supplier">supplier</span> on, if it takes any 24 hours over 6, you're asked first, and the next scheduled slot then starts just late enough to stay within 6.</div></details></div>
+        <div class="row" style="margin-top:0"><div class="seg" id="c-charge" role="group" aria-label="Charge now for"></div></div>
+        <div class="note" id="c-charge-cap" hidden style="margin:4px 0 0">Up to 6 hours: Octopus's daily smart charging limit, while Force schedule on <span class="supn" data-f="supplier">supplier</span> is on.</div>
+        <div class="sub" id="c-charge-note"></div>
+      </div>
+      <div class="card">
         <h2>Auto plug-in<span class="spacer"></span>
           <label class="switch"><input type="checkbox" id="sim-auto" aria-label="Auto plug-in"><span></span></label>
         </h2>
@@ -435,7 +442,7 @@
           <div class="grow">Automatically adjust schedule to fit auto plug-in
             <div class="note" style="margin:0">Adds the charge to the schedule and sets <span class="supn" data-f="your supplier">your supplier</span>'s ready time. <details class="more"><summary>More</summary><div>As a one-off that unplugs when it's done; the ready time is set to that unplug. If it meets a scheduled slot they become one.
               <br><b>Octopus Energy:</b> unplugs after the hours below (rounded up to the half hour); with Force schedule on <span class="supn" data-f="supplier">supplier</span> on,
-              if that takes the day over 6 hours, the next scheduled slot starts that much later.
+              if that takes any 24 hours over 6 (the previous 24 included), the next scheduled slot starts just late enough to stay within 6, for that day only.
               <br><b>EDF Energy:</b> ready times can only be 04:00–11:00, so it unplugs at the first of those after the hours below
               (e.g. plugging in at 18:00 for 3 hours unplugs at 04:00 the next morning).
               <br><b>E.ON Next:</b> unplugs after the hours below (rounded up to the half hour); its integration has no ready time, so none is set.</div></details></div></div>
@@ -470,13 +477,6 @@
   <!-- ============ Settings ============ -->
   <section id="tab-settings" class="stack" hidden>
     <div class="grid">
-      <div class="card">
-        <h2>Charge now</h2>
-        <div class="note" style="margin:0 0 10px">Plug in now for this long. <details class="more"><summary>More</summary><div>The schedule is adjusted the same way as for auto plug-in: the charge is added as a one-off slot (which you can change on the Schedule tab) that unplugs at the first ready time <span class="supn" data-f="your supplier">your supplier</span> accepts after these hours, and the ready time is set to it. If it meets a scheduled slot they become one; with Octopus and Force schedule on <span class="supn" data-f="supplier">supplier</span> on, if it takes the day over 6 hours, the next scheduled slot starts that much later.</div></details></div>
-        <div class="row" style="margin-top:0"><div class="seg" id="c-charge" role="group" aria-label="Charge now for"></div></div>
-        <div class="note" id="c-charge-cap" hidden style="margin:4px 0 0">Up to 6 hours: Octopus's daily smart charging limit, while Force schedule on <span class="supn" data-f="supplier">supplier</span> is on.</div>
-        <div class="sub" id="c-charge-note"></div>
-      </div>
       <div class="card">
         <h2>Controls</h2>
         <div class="row">
@@ -523,7 +523,7 @@
         <dl class="kv" id="sim-plug" style="margin-top:14px"></dl>
       </div>
     </div>
-    <label class="live" style="cursor:pointer"><input type="checkbox" id="sim-all"> Show all sensors in the lists (here and on the Schedule tab)</label>
+    <label class="live" style="cursor:pointer"><input type="checkbox" id="sim-all"> Show all sensors in the lists (here and on the Automations tab)</label>
   </section>
 
 
@@ -767,7 +767,7 @@ async function post(path, body) {
 const DIAG = ['health', 'debug'];  // the Diagnostics tab's sections (Supplier is at the bottom of Health)
 function showTab(name) {
   if (name === 'simulation') name = 'settings';
-  if (name === 'schedule') name = 'automation';  // the Schedule tab
+  if (name === 'schedule' || name === 'automations') name = 'automation';  // the Automations tab
   if (name === 'diagnostics' || name === 'provider') name = 'health';
   if (name === 'messages') name = 'debug';  // the messages are under Debug › Logs
   if (!document.getElementById('tab-' + name)) name = 'overview';
@@ -778,7 +778,7 @@ function showTab(name) {
   $('diag-nav').hidden = !diag;
   $('diag-nav').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.sub === name));
   document.querySelectorAll('main > section').forEach((s) => s.hidden = s.id !== 'tab-' + name);
-  try { history.replaceState(null, '', '#' + (name === 'automation' ? 'schedule' : name)); } catch (e) {}
+  try { history.replaceState(null, '', '#' + (name === 'automation' ? 'automations' : name)); } catch (e) {}
   refreshTab(true);
 }
 $('tabs').addEventListener('click', (e) => { if (e.target.dataset.tab) showTab(e.target.dataset.tab); });
@@ -1276,7 +1276,7 @@ function drawSmartCheck(pc) {
     error: `<span class="chip err">Doesn't match your schedule</span> <span class="muted">Plugged in ${span}</span>`,
   }[pc.status] || '';
   const problems = (pc.problems || []).map((p) => `<div class="sub" style="color:var(--err)">${esc(p)}</div>`).join('');
-  el.innerHTML = `<div style="margin-top:12px"><span class="label">Schedule check</span> <a class="muted" style="font-size:12px" href="#schedule">Schedule tab</a></div>
+  el.innerHTML = `<div style="margin-top:12px"><span class="label">Schedule check</span> <a class="muted" style="font-size:12px" href="#automations">Automations tab</a></div>
     <div style="margin-top:4px">${line}</div>${problems}`;
 }
 function drawStateSub() {
@@ -2529,24 +2529,41 @@ function applyOctopusCap() {
   $('sim-auto-hours').max = capped ? 6 : 12;
   $('c-charge-cap').hidden = !capped; $('sim-auto-cap').hidden = !capped;
 }
-// ---------- Charge now (Settings tab): plug in for a set time ----------
-// Added to the schedule as a one-off, so it can be changed on the Schedule tab
+// ---------- Charge now (Automations tab): plug in for a set time ----------
+// Added to the schedule as a one-off, so it can be changed in the schedule above.
+// Over Octopus's 6 hours a day (Force schedule on supplier on), it asks first.
 const CHARGE_HOURS = [1, 2, 3, 4, 6, 8];
 CHARGE_HOURS.forEach((h) => { const b = document.createElement('button'); b.textContent = h + ' h'; b.dataset.hours = h; $('c-charge').appendChild(b); });
-$('c-charge').addEventListener('click', async (e) => {
-  const h = Number(e.target.dataset.hours); if (!h) return;
+async function chargeNow(h, confirm) {
   const buttons = $('c-charge').querySelectorAll('button');
   buttons.forEach((b) => { b.disabled = true; });
   try {
-    const r = await api('charge_now', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({hours: h})});
-    const until = r.plan && r.plan.end ? new Date(r.plan.end).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) : null;
-    toast(until ? `Plugged in until ${until}` : 'Plugged in');
-    $('c-charge-note').innerHTML = until ? `Plugged in until <b>${until}</b>${r.plan.notes && r.plan.notes.length ? ' (' + esc(r.plan.notes.join('; ')) + ')' : ''}. `
-      + '<a href="#schedule">Change it on the Schedule tab</a>' : '';
-    pollState(); refreshAutomation(true);
+    const r = await api('charge_now', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({hours: h, confirm: !!confirm})});
+    if (r.needs_confirm) drawChargeConfirm(h, r.plan);
+    else {
+      const until = r.plan && r.plan.end ? new Date(r.plan.end).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) : null;
+      toast(until ? `Plugged in until ${until}` : 'Plugged in');
+      $('c-charge-note').innerHTML = until ? `Plugged in until <b>${until}</b>${r.plan.notes && r.plan.notes.length ? ' (' + esc(r.plan.notes.join('; ')) + ')' : ''}. `
+        + 'Shown in the schedule above.' : '';
+      pollState(); refreshAutomation(true);
+    }
   } catch (err) { toast('Failed: ' + err.message); }
   buttons.forEach((b) => { b.disabled = false; });
-});
+}
+function drawChargeConfirm(h, p) {
+  const o = p.over, cap = p.cap_min;
+  let msg = `Charging for ${hmDur(p.minutes * 60)} now takes you to ${hmDur(o.before * 60)} in 24 hours, over ${sup('your supplier')}'s ${cap / 60} hours of smart charging.`;
+  if (p.moved) msg += ` If you go ahead, ${esc(p.moved.replace('now starts', 'will start').replace('is skipped', 'will be skipped'))}`
+    + (o.left > 0 ? `, but with what's already been charged it's still ${hmDur(o.left * 60)} over in one 24 hours.`
+      : o.after > cap ? `, back to the schedule's own ${hmDur(o.after * 60)}.` : ` to stay within ${cap / 60} hours.`);
+  else msg += ` There's no scheduled slot after it that shortening would help: it'd be ${hmDur(o.added * 60)} over.`;
+  $('c-charge-note').innerHTML = `<div style="margin-top:8px"><span class="chip warn">Over ${cap / 60} hours</span> ${msg}`
+    + '<div class="row" style="margin-top:8px"><button class="btn small primary" id="c-charge-yes">Charge anyway</button>'
+    + '<button class="btn small" id="c-charge-no">Cancel</button></div></div>';
+  $('c-charge-yes').onclick = () => chargeNow(h, true);
+  $('c-charge-no').onclick = () => { $('c-charge-note').innerHTML = ''; };
+}
+$('c-charge').addEventListener('click', (e) => { const h = Number(e.target.dataset.hours); if (h) chargeNow(h, false); });
 
 // ---------- refresh loop ----------
 function refreshTab(full) {

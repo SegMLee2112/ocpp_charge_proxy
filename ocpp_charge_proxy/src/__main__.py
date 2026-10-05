@@ -203,10 +203,10 @@ async def run() -> None:
     health = Health()
     history = PowerHistory()  # the chart's last hour; older comes from HA's history
     remove_old_history_files(data_dir)
-    automation = Automation(data_dir)  # the schedule and auto re-plug: Schedule tab
+    automation = Automation(data_dir)  # the schedule and auto re-plug: Automations tab
     automation.publish(shared_state)
     # Your HA sensors (power, SoC, car plugged in: Settings tab; auto
-    # plug-in: Schedule tab) and the add-on's own HA entities (Plugged In helper, Power, Energy,
+    # plug-in: Automations tab) and the add-on's own HA entities (Plugged In helper, Power, Energy,
     # Current)
     ha_link = HaLink(
         data_dir, shared_state,
@@ -235,7 +235,7 @@ async def run() -> None:
         provider=cp.provider_info,
         health=_health_info,
     )
-    async def plan_charge(hours: float, source: str = AUTO_SOURCE) -> dict:
+    async def plan_charge(hours: float, source: str = AUTO_SOURCE, dry_run: bool = False) -> dict:
         sc = ha_link.smart_charging()
         plan = await auto_plug_charge(
             automation, hours,
@@ -247,17 +247,26 @@ async def run() -> None:
                      and not automation.override_guards else None),
             provider=sc.get("provider") or "your supplier",
             source=source,
+            dry_run=dry_run,
         )
-        automation.publish(shared_state)
+        if not dry_run:
+            automation.publish(shared_state)
         return plan
 
     async def on_auto_plug(hours: float) -> None:
         await plan_charge(hours)
 
-    async def charge_now(hours: float) -> dict:
-        """The Charge now button: plug in, and plan the charge as auto plug-in does."""
+    async def charge_now(hours: float, confirm: bool = False) -> dict:
+        """The Charge now button: plug in, and plan the charge as auto plug-in
+        does. If it would take any 24 hours over Octopus's 6 (Force schedule
+        on supplier on), nothing is done until it's confirmed: the page shows
+        what would happen first."""
+        preview = await plan_charge(hours, CHARGE_NOW_SOURCE, dry_run=True)
+        over = preview.get("over")
+        if over and over["added"] > 0 and not confirm:
+            return {"needs_confirm": True, "plan": preview}
         await do_plug(source="charge now")
-        return await plan_charge(hours, CHARGE_NOW_SOURCE)
+        return {"plan": await plan_charge(hours, CHARGE_NOW_SOURCE)}
 
     ha_link.on_auto_plug = on_auto_plug
 

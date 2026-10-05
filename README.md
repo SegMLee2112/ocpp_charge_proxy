@@ -86,7 +86,7 @@ In, Power, Energy, Current, Status and Current limit). No integration or HACS ne
 ### Works with your car in Home Assistant
 
 Set the sensors up on the add-on's **Settings** tab, and auto plug-in on the
-**Schedule** tab. The add-on follows your sensors live through Home
+**Automations** tab. The add-on follows your sensors live through Home
 Assistant's API.
 
 - **Power sensor (optional).** Report real power (e.g. from a smart plug or
@@ -108,11 +108,11 @@ Assistant's API.
   **Current**, **Status** and **Current limit** sensors up to date. The sensors show as unavailable while the
   add-on is stopped.
 - **Plug-in schedule.** Switch Plugged In on or off at set times and days,
-  as many times a day as you like, from the add-on's web page (Schedule
+  as many times a day as you like, from the add-on's web page (Automations
   tab).
 - **Auto re-plug.** If your supplier hasn't started a session 10 minutes
   after plugging in, the add-on unplugs for 30 seconds and plugs back in, up
-  to 3 times. On/off, minutes and tries are on the Schedule tab.
+  to 3 times. On/off, minutes and tries are on the Automations tab.
 
 ### Web page
 
@@ -131,11 +131,11 @@ Assistant's API.
     power, what ended them, with details, IDs and the power curve on click),
     and plug-ins that never got a session with the reason, kept across
     restarts.
-  - **Schedule:** the plug-in schedule (below), with one-off times and a
+  - **Automations:** **Charge now**; the plug-in schedule (below), with one-off times and a
     view of the last 3 days and the next 7 where you click or drag to add a
     slot and click one to change, delete or skip it; Force schedule on
     supplier; auto plug-in and auto re-plug.
-  - **Settings:** **Charge now**; controls for Plugged In, max current and
+  - **Settings:** controls for Plugged In, max current and
     **Continue session after a restart**; the
     simulated car's start delay and ramp-up; and your power, SoC and car
     plugged in sensors, with live values.
@@ -176,7 +176,7 @@ page.
 ## Step 2: Pick your sensors (optional)
 
 On the add-on's web page (sidebar), open the **Settings** tab to pick your
-power, SoC and car plugged in sensors and, on the **Schedule** tab, set up
+power, SoC and car plugged in sensors and, on the **Automations** tab, set up
 auto plug-in.
 
 ### Upgrading from 1.x (with the integration)
@@ -195,7 +195,7 @@ Until the integration is removed, the add-on leaves the sensors alone
 
 ### Sensor and auto plug-in options
 
-Sensors are on the **Settings** tab, auto plug-in on the **Schedule** tab.
+Sensors are on the **Settings** tab, auto plug-in on the **Automations** tab.
 
 All optional. Choose "None" to stop using a sensor.
 
