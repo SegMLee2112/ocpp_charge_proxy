@@ -242,8 +242,8 @@ plug-in and your sensors in `/data/sensors.json`.
 8. The proxy reports `Finishing`, sends `StopTransaction`, then returns to
    `Preparing`
 
-If the connection drops, the add-on reconnects automatically, retrying with
-increasing delays.
+If the connection drops, the add-on reconnects automatically, retrying after 5, 10
+and 30 seconds, then every minute.
 
 ### While offline
 

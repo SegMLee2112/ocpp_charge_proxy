@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.39.1 — Reconnecting sooner
+
+- **Fix:** after losing the OCPP connection, it now retries every 60 s at
+  most (5, 10, 30, then 60 s); it used to wait 5 minutes between tries,
+  so it could stay offline for up to 5 minutes after the server or your
+  internet was back.
+- **Fix:** "Connection lost ()" now says what went wrong (e.g. TimeoutError)
+  when there's no message.
+- **Change:** a heartbeat with no reply logs one line instead of a traceback.
+
 ## 2.39.0 — Supplier defaults in a file
 
 - **Change:** each supplier's defaults (daily limit, when it resets, the

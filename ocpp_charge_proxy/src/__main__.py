@@ -25,7 +25,7 @@ from src.shared_state import SharedState
 
 logger = logging.getLogger("ocpp_charge_proxy")
 
-BACKOFF_STEPS = [5, 10, 30, 60, 300]
+BACKOFF_STEPS = [5, 10, 30, 60]  # then every 60 s: back soon after an outage
 # The simulated car: wait after StartTransaction, then ramp up (Settings tab)
 DEFAULT_START_DELAY_S = 3.0
 DEFAULT_RAMP_UP_S = 5.0
@@ -417,7 +417,7 @@ async def run() -> None:
             backoff = BACKOFF_STEPS[min(attempt, len(BACKOFF_STEPS) - 1)]
             backoff = max(backoff, round(offline_hold["until"] - loop.time()))  # Debug: drop for N s
             logger.warning(
-                "Connection lost (%s), reconnecting in %ds...", e, backoff,
+                "Connection lost (%s), reconnecting in %ds...", str(e) or type(e).__name__, backoff,
             )
             attempt += 1
             # Sleep for the backoff, but wake immediately on shutdown

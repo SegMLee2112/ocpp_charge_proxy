@@ -819,6 +819,9 @@ class ChargePoint(BaseChargePoint):
                 # leaving a zombie loop spamming a dead connection.
                 logger.info("Heartbeat loop stopping: connection closed")
                 raise
+            except asyncio.TimeoutError:
+                # One line: the connection's own keepalive notices if it's really gone
+                logger.warning("Heartbeat: no reply from the OCPP server in time")
             except Exception:
                 logger.warning("Heartbeat cycle failed", exc_info=True)
 
