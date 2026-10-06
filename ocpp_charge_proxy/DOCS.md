@@ -381,6 +381,13 @@ follows your Home Assistant theme. Settings save as soon as you change them.
     that time, and a charge across it can be longer: 08:00 for 12 hours is
     08:00–18:00 (4 hours before 12:00, then 6 after).
   Each shows what's in use, and whether it was found or picked.
+  The automatic values come from `src/suppliers.json` in the repository:
+  for each supplier, its daily limit (`daily_limit_h`, null for none), when
+  it resets (`limit_reset`: a time, or `"rolling"`), the ready times its
+  app accepts (`ready_times` from / to) and how its smart charging sensor is
+  found. Edit that file and rebuild the add-on if a supplier changes its
+  rules; anything set on this tab still wins. If the file can't be read,
+  the built-in values are used and the log says why.
 - **Diagnostics**, in two parts:
   - **Health:** version, uptime, reconnects and the last drop's reason,
     heartbeat and clock offset, the Home Assistant link and the add-on's

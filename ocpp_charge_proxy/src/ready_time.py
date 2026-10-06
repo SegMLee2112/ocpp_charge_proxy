@@ -25,8 +25,12 @@ from __future__ import annotations
 import datetime
 from typing import Optional
 
-ALL_DAY_TIMES = [f"{h:02}:{m:02}" for h in range(24) for m in (0, 30)]  # Octopus
-DEFAULT_TIMES = [t for t in ALL_DAY_TIMES if "04:00" <= t <= "11:00"]  # EDF and others
+from src import suppliers
+
+ALL_DAY_TIMES = list(suppliers.ALL_DAY)  # every half hour (Octopus)
+# A supplier's ready times come from src/suppliers.json; these are for one
+# that isn't listed there (04:00-11:00 unless changed)
+DEFAULT_TIMES = suppliers.ready_times(suppliers.DATA["other"]) or list(ALL_DAY_TIMES)
 
 
 def target_time_entity(states: list[dict], dispatch_entity: Optional[str]) -> Optional[dict]:
@@ -44,16 +48,14 @@ def target_time_entity(states: list[dict], dispatch_entity: Optional[str]) -> Op
 
 
 def allowed_times(entity: Optional[dict]) -> list[str]:
-    """"HH:MM" the entity accepts: a select's options, else any half hour for
-    Octopus and 04:00-11:00 for the others."""
+    """"HH:MM" the entity accepts: a select's options, else its supplier's
+    ready times in src/suppliers.json (Octopus: any half hour; EDF: 04:00-11:00)."""
     options = ((entity or {}).get("attributes") or {}).get("options")
     if isinstance(options, list):
         valid = [o for o in options if isinstance(o, str) and len(o) == 5 and o[2] == ":"]
         if valid:
             return valid
-    if str((entity or {}).get("entity_id", "")).split(".", 1)[-1].startswith("octopus_energy_"):
-        return list(ALL_DAY_TIMES)
-    return list(DEFAULT_TIMES)
+    return suppliers.ready_times(suppliers.for_entity((entity or {}).get("entity_id"))) or list(DEFAULT_TIMES)
 
 
 def describe_times(allowed: list[str]) -> str:

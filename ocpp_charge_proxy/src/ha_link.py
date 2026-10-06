@@ -25,6 +25,7 @@ import time
 from typing import Awaitable, Callable, Optional
 
 from src.autoplug import DEFAULT_AUTO_PLUG_SOC, AutoPlug, CarConnected
+from src import suppliers
 from src.ready_time import ALL_DAY_TIMES, allowed_times, pick_ready_time, service_call, target_time_entity
 from src.smart_charging import find_dispatch_sensors, provider_name, smart_charging
 from src.ha_entities import (
@@ -142,7 +143,8 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
                 raise ValueError("The reset frequency must be 1 to 168 whole hours")
             out["limit_hours"] = int(hours)
     limit_h = out.get("daily_limit_h")
-    limit_h = 6 if limit_h is None else limit_h  # automatic: Octopus's 6 (none for the others)
+    if limit_h is None:  # automatic: the longest in src/suppliers.json (Octopus: 6)
+        limit_h = max((s["daily_limit_h"] for s in suppliers.all_suppliers() if s["daily_limit_h"]), default=None)
     if out.get("limit_hours") and limit_h and out["limit_hours"] < limit_h:
         raise ValueError(f"The reset frequency ({out['limit_hours']} hours) can't be shorter than the daily "
                          f"limit ({limit_h:g} hours): nothing would ever be over it")
@@ -171,13 +173,8 @@ def default_settings() -> dict:
     }
 
 
-# Smart charging hours a day each supplier schedules at most (minutes), unless
-# set on the Settings tab
-DEFAULT_DAILY_LIMITS = {"Octopus Energy": 360}
-
-# When each supplier's daily limit resets (local time), unless set on the
-# Settings tab; not listed: any 24 hours (rolling)
-DEFAULT_LIMIT_RESETS = {"Octopus Energy": "12:00"}
+# Each supplier's daily limit and when it resets, unless set on the Settings
+# tab: src/suppliers.json (edit it and rebuild the add-on to change them)
 
 
 def _number(state: Optional[dict]) -> Optional[float]:
@@ -703,21 +700,22 @@ class HaLink:
 
     def daily_limit_min(self, provider: Optional[str]) -> Optional[int]:
         """Minutes of smart charging a day your supplier schedules at most
-        (None: no limit): set on the Settings tab, else Octopus's 6 hours."""
+        (None: no limit): set on the Settings tab, else src/suppliers.json
+        (Octopus: 6 hours)."""
         hours = self.settings.get("daily_limit_h")
         if hours is None:
-            return DEFAULT_DAILY_LIMITS.get(provider or "")
+            return suppliers.daily_limit_min(provider)
         return int(round(hours * 60)) or None
 
     def limit_reset(self, provider: Optional[str]) -> Optional[str]:
         """When your supplier's daily limit resets: "HH:MM" every day, None for
         any 24 hours (rolling), or "Nh" for any N hours (the reset frequency).
-        Set on the Settings tab, else Octopus's 12:00 (rolling for the others)."""
+        Set on the Settings tab, else src/suppliers.json (Octopus: 12:00)."""
         value = self.settings.get("limit_reset") or ""
         if value == "48h":  # saved by 2.31.0
             value = "rolling"
         if not value:
-            value = DEFAULT_LIMIT_RESETS.get(provider or "") or "rolling"
+            value = suppliers.limit_reset(provider)
         if value != "rolling":
             return value
         hours = self.settings.get("limit_hours") or (48 if self.settings.get("limit_reset") == "48h" else 24)

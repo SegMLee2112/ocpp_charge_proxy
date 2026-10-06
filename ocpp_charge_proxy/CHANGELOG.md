@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.39.0 — Supplier defaults in a file
+
+- **Change:** each supplier's defaults (daily limit, when it resets, the
+  ready times its app accepts, and how its smart charging sensor is found)
+  are in `src/suppliers.json` instead of the code. Edit it and rebuild the
+  add-on if a supplier changes its rules; the Settings tab still wins. A
+  missing or broken file falls back to the built-in values, with a warning
+  in the log.
+- **Docs:** the supplier defaults file.
+
 ## 2.38.0 — Long slots split at the reset time
 
 - **Feature:** with Force schedule on supplier on and a daily limit that

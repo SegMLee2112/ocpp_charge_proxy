@@ -35,11 +35,13 @@ from __future__ import annotations
 import datetime
 from typing import Optional
 
-PROVIDERS = (  # entity ID prefix -> name shown on the page
-    ("binary_sensor.octopus_energy_", "Octopus Energy"),
-    ("binary_sensor.edf_energy_", "EDF Energy"),
-)
-EON_SUFFIX = "smart_charging_schedule"  # sensor.<serial>_smart_charging_schedule
+from src import suppliers
+
+# From src/suppliers.json: dispatching sensor entity ID prefix -> name shown on
+# the page, and schedule sensor suffix (E.ON Next) -> name
+PROVIDERS = tuple((s["dispatch_prefix"], s["name"]) for s in suppliers.all_suppliers() if s.get("dispatch_prefix"))
+SCHEDULE_SENSORS = tuple((s["schedule_sensor_suffix"], s["name"]) for s in suppliers.all_suppliers()
+                         if s.get("schedule_sensor_suffix"))
 
 
 def _ts(value) -> Optional[float]:
@@ -97,7 +99,8 @@ def _merge(slots: list[dict]) -> list[dict]:
 
 
 def _is_eon(st: dict) -> bool:
-    return (str(st.get("entity_id", "")).startswith("sensor.") and EON_SUFFIX in st["entity_id"]
+    entity_id = str(st.get("entity_id", ""))
+    return (entity_id.startswith("sensor.") and any(sfx in entity_id for sfx, _ in SCHEDULE_SENSORS)
             and isinstance((st.get("attributes") or {}).get("schedule"), list))
 
 
@@ -105,9 +108,10 @@ def provider_name(entity_id: str) -> str:
     for prefix, name in PROVIDERS:
         if entity_id.startswith(prefix):
             return name
-    if entity_id.startswith("sensor.") and EON_SUFFIX in entity_id:
-        return "E.ON Next"
-    return "Your supplier"
+    for suffix, name in SCHEDULE_SENSORS:
+        if entity_id.startswith("sensor.") and suffix in entity_id:
+            return name
+    return suppliers.DATA["other"]["name"]
 
 
 def find_dispatch_sensors(states: list[dict]) -> list[dict]:
